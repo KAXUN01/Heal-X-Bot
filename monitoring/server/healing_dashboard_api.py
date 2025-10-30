@@ -1129,23 +1129,17 @@ async def get_blocked_ips_list(include_unblocked: bool = False):
         logger.error(f"Error getting blocked IPs: {e}")
         return {"success": False, "error": str(e), "blocked_ips": []}
 
-@app.get("/api/blocked-ips/{ip_address}")
-async def get_ip_details(ip_address: str):
-    """Get detailed information about a specific IP"""
+# IMPORTANT: Specific routes MUST come before the generic /{ip_address} route
+# Otherwise FastAPI will match "statistics" as an ip_address parameter
+
+@app.get("/api/blocked-ips/statistics")
+async def get_blocked_ips_statistics():
+    """Get statistics about blocked IPs"""
     try:
-        ip_info = blocked_ips_db.get_ip_info(ip_address)
-        ip_history = blocked_ips_db.get_ip_history(ip_address)
-        
-        if ip_info:
-            return {
-                "success": True,
-                "ip_info": ip_info,
-                "history": ip_history
-            }
-        else:
-            return {"success": False, "error": "IP not found"}
+        stats = blocked_ips_db.get_statistics()
+        return {"success": True, "statistics": stats}
     except Exception as e:
-        logger.error(f"Error getting IP details: {e}")
+        logger.error(f"Error getting blocked IPs statistics: {e}")
         return {"success": False, "error": str(e)}
 
 @app.post("/api/blocked-ips/unblock")
@@ -1178,16 +1172,6 @@ async def unblock_ip_endpoint(data: dict):
         logger.error(f"Error in unblock endpoint: {e}")
         return {"success": False, "error": str(e)}
 
-@app.get("/api/blocked-ips/statistics")
-async def get_blocked_ips_statistics():
-    """Get statistics about blocked IPs"""
-    try:
-        stats = blocked_ips_db.get_statistics()
-        return {"success": True, "statistics": stats}
-    except Exception as e:
-        logger.error(f"Error getting blocked IPs statistics: {e}")
-        return {"success": False, "error": str(e)}
-
 @app.post("/api/blocked-ips/cleanup")
 async def cleanup_old_blocked_ips(days: int = 90):
     """Clean up old unblocked IP records"""
@@ -1217,6 +1201,27 @@ async def export_blocked_ips(filepath: str = "blocked_ips_export.csv"):
             return {"success": False, "message": "Export failed"}
     except Exception as e:
         logger.error(f"Error exporting blocked IPs: {e}")
+        return {"success": False, "error": str(e)}
+
+# Generic route with path parameter MUST come LAST
+# This catches any IP address like /api/blocked-ips/192.168.1.1
+@app.get("/api/blocked-ips/{ip_address}")
+async def get_ip_details(ip_address: str):
+    """Get detailed information about a specific IP"""
+    try:
+        ip_info = blocked_ips_db.get_ip_info(ip_address)
+        ip_history = blocked_ips_db.get_ip_history(ip_address)
+        
+        if ip_info:
+            return {
+                "success": True,
+                "ip_info": ip_info,
+                "history": ip_history
+            }
+        else:
+            return {"success": False, "error": "IP not found"}
+    except Exception as e:
+        logger.error(f"Error getting IP details: {e}")
         return {"success": False, "error": str(e)}
 
 if __name__ == "__main__":

@@ -23,9 +23,13 @@ import requests
 from pathlib import Path
 import signal
 import random
+from blocked_ips_db import BlockedIPsDatabase
 
 # Initialize FastAPI app
 app = FastAPI(title="Healing Bot Dashboard API")
+
+# Initialize blocked IPs database
+blocked_ips_db = BlockedIPsDatabase("monitoring/server/data/blocked_ips.db")
 
 # Add CORS middleware
 app.add_middleware(
@@ -301,38 +305,106 @@ def parse_ssh_logs() -> List[Dict[str, Any]]:
     
     return ssh_events
 
-def block_ip(ip: str):
-    """Block an IP address using iptables"""
-    if ip in blocked_ips:
-        return
-    
+def block_ip(ip: str, attack_count: int = 1, threat_level: str = "Medium", 
+             attack_type: str = None, reason: str = None, blocked_by: str = "system") -> bool:
+    """Block an IP address using iptables and store in database"""
     try:
-        subprocess.run(
-            ["sudo", "iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"],
-            capture_output=True,
-            timeout=5
+        # Check if already blocked in database
+        if blocked_ips_db.is_blocked(ip):
+            logger.info(f"IP {ip} is already blocked, updating attack count")
+            blocked_ips_db.update_attack_count(ip, attack_count)
+            return True
+        
+        # Try to block using iptables (may fail without sudo permissions)
+        iptables_success = False
+        try:
+            # Try without sudo first (if user has capabilities)
+            result = subprocess.run(
+                ["iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"],
+                capture_output=True,
+                timeout=5
+            )
+            
+            if result.returncode != 0:
+                # Try with sudo
+                result = subprocess.run(
+                    ["sudo", "-n", "iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"],
+                    capture_output=True,
+                    timeout=5
+                )
+            
+            if result.returncode == 0:
+                iptables_success = True
+                logger.info(f"Successfully added iptables rule for {ip}")
+            elif "already exists" in result.stderr.decode().lower() or "duplicate" in result.stderr.decode().lower():
+                iptables_success = True
+                logger.info(f"iptables rule already exists for {ip}")
+            else:
+                logger.warning(f"Could not add iptables rule for {ip}: {result.stderr.decode()}")
+                # Continue anyway - we'll store in database for tracking
+        except subprocess.TimeoutExpired:
+            logger.warning(f"iptables command timed out for {ip}")
+        except Exception as e:
+            logger.warning(f"Could not execute iptables for {ip}: {e}")
+        
+        # Always store in database regardless of iptables success
+        # This allows tracking and manual iptables configuration
+        success = blocked_ips_db.block_ip(
+            ip_address=ip,
+            attack_count=attack_count,
+            threat_level=threat_level,
+            attack_type=attack_type,
+            reason=reason or f"Blocked due to {attack_count} attacks",
+            blocked_by=blocked_by
         )
-        blocked_ips.add(ip)
-        logger.warning(f"Blocked IP: {ip}")
-        send_discord_alert(f"🚫 Blocked Suspicious IP: {ip}")
+        
+        if success:
+            # Also add to in-memory set for backwards compatibility
+            blocked_ips.add(ip)
+            
+            logger.warning(f"Blocked IP in database: {ip} (Threat: {threat_level}, Attacks: {attack_count})")
+            if iptables_success:
+                send_discord_alert(f"🚫 Blocked IP: {ip}\nThreat Level: {threat_level}\nAttacks: {attack_count}\nFirewall: Active")
+            else:
+                send_discord_alert(f"🚫 Blocked IP (Database Only): {ip}\nThreat Level: {threat_level}\nAttacks: {attack_count}\nNote: Manual iptables configuration needed")
+            return True
+        else:
+            logger.error(f"Failed to store IP {ip} in database")
+            return False
+            
     except Exception as e:
         logger.error(f"Error blocking IP {ip}: {e}")
+        return False
 
-def unblock_ip(ip: str):
-    """Unblock an IP address"""
-    if ip not in blocked_ips:
-        return
-    
+def unblock_ip(ip: str, unblocked_by: str = "admin", reason: str = None) -> bool:
+    """Unblock an IP address from iptables and update database"""
     try:
-        subprocess.run(
+        # Check if blocked in database
+        if not blocked_ips_db.is_blocked(ip):
+            logger.warning(f"IP {ip} is not blocked in database")
+            return False
+        
+        # Remove from iptables
+        result = subprocess.run(
             ["sudo", "iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"],
             capture_output=True,
             timeout=5
         )
-        blocked_ips.remove(ip)
-        logger.info(f"Unblocked IP: {ip}")
+        
+        # Update database even if iptables command fails (in case rule doesn't exist)
+        blocked_ips_db.unblock_ip(ip, unblocked_by=unblocked_by, reason=reason)
+        
+        # Remove from in-memory set
+        if ip in blocked_ips:
+            blocked_ips.remove(ip)
+        
+        logger.info(f"Unblocked IP: {ip} by {unblocked_by}")
+        send_discord_alert(f"✅ Unblocked IP: {ip}\nUnblocked by: {unblocked_by}")
+        return True
+        
     except Exception as e:
         logger.error(f"Error unblocking IP {ip}: {e}")
+        return False
 
 # ============================================================================
 # Disk Cleanup
@@ -999,10 +1071,27 @@ async def block_ip_ddos(data: dict):
     if not ip:
         raise HTTPException(status_code=400, detail="IP is required")
     
+    attack_count = data.get("attack_count", 1)
+    threat_level = data.get("threat_level", "Medium")
+    attack_type = data.get("attack_type")
+    reason = data.get("reason", f"Manual block via dashboard")
+    blocked_by = data.get("blocked_by", "dashboard")
+    
     try:
-        block_ip(ip)
-        log_event("warning", f"Blocked malicious IP: {ip}")
-        return {"success": True, "ip": ip, "message": "IP blocked successfully"}
+        success = block_ip(
+            ip=ip,
+            attack_count=attack_count,
+            threat_level=threat_level,
+            attack_type=attack_type,
+            reason=reason,
+            blocked_by=blocked_by
+        )
+        
+        if success:
+            log_event("warning", f"Blocked malicious IP: {ip} ({threat_level})")
+            return {"success": True, "ip": ip, "message": "IP blocked successfully"}
+        else:
+            return {"success": False, "ip": ip, "message": "Failed to block IP"}
     except Exception as e:
         logger.error(f"Error blocking IP {ip}: {e}")
         return {"success": False, "ip": ip, "error": str(e)}
@@ -1024,6 +1113,110 @@ async def report_ddos_detection(data: dict):
         return {"success": True, "message": "Detection reported successfully"}
     except Exception as e:
         logger.error(f"Error reporting DDoS detection: {e}")
+        return {"success": False, "error": str(e)}
+
+# ============================================================================
+# Blocked IPs Management Endpoints
+# ============================================================================
+
+@app.get("/api/blocked-ips")
+async def get_blocked_ips_list(include_unblocked: bool = False):
+    """Get list of all blocked IPs"""
+    try:
+        ips = blocked_ips_db.get_blocked_ips(include_unblocked=include_unblocked)
+        return {"success": True, "blocked_ips": ips, "count": len(ips)}
+    except Exception as e:
+        logger.error(f"Error getting blocked IPs: {e}")
+        return {"success": False, "error": str(e), "blocked_ips": []}
+
+@app.get("/api/blocked-ips/{ip_address}")
+async def get_ip_details(ip_address: str):
+    """Get detailed information about a specific IP"""
+    try:
+        ip_info = blocked_ips_db.get_ip_info(ip_address)
+        ip_history = blocked_ips_db.get_ip_history(ip_address)
+        
+        if ip_info:
+            return {
+                "success": True,
+                "ip_info": ip_info,
+                "history": ip_history
+            }
+        else:
+            return {"success": False, "error": "IP not found"}
+    except Exception as e:
+        logger.error(f"Error getting IP details: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/blocked-ips/unblock")
+async def unblock_ip_endpoint(data: dict):
+    """Unblock an IP address"""
+    ip = data.get("ip")
+    unblocked_by = data.get("unblocked_by", "admin")
+    reason = data.get("reason", "Manual unblock")
+    
+    if not ip:
+        raise HTTPException(status_code=400, detail="IP address is required")
+    
+    try:
+        success = unblock_ip(ip, unblocked_by=unblocked_by, reason=reason)
+        
+        if success:
+            log_event("info", f"IP {ip} unblocked by {unblocked_by}")
+            return {
+                "success": True,
+                "message": f"IP {ip} unblocked successfully",
+                "ip": ip
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Failed to unblock IP {ip}",
+                "ip": ip
+            }
+    except Exception as e:
+        logger.error(f"Error in unblock endpoint: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/blocked-ips/statistics")
+async def get_blocked_ips_statistics():
+    """Get statistics about blocked IPs"""
+    try:
+        stats = blocked_ips_db.get_statistics()
+        return {"success": True, "statistics": stats}
+    except Exception as e:
+        logger.error(f"Error getting blocked IPs statistics: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/blocked-ips/cleanup")
+async def cleanup_old_blocked_ips(days: int = 90):
+    """Clean up old unblocked IP records"""
+    try:
+        deleted = blocked_ips_db.cleanup_old_records(days=days)
+        return {
+            "success": True,
+            "message": f"Cleaned up {deleted} old records",
+            "deleted_count": deleted
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up old records: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/blocked-ips/export")
+async def export_blocked_ips(filepath: str = "blocked_ips_export.csv"):
+    """Export blocked IPs to CSV"""
+    try:
+        success = blocked_ips_db.export_to_csv(filepath)
+        if success:
+            return {
+                "success": True,
+                "message": f"Exported to {filepath}",
+                "filepath": filepath
+            }
+        else:
+            return {"success": False, "message": "Export failed"}
+    except Exception as e:
+        logger.error(f"Error exporting blocked IPs: {e}")
         return {"success": False, "error": str(e)}
 
 if __name__ == "__main__":

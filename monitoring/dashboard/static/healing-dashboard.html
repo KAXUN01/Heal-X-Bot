@@ -691,6 +691,63 @@
                     </table>
                 </div>
             </div>
+            
+            <!-- Blocked IPs List Table -->
+            <div class="card" style="margin-top: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">🚫 Blocked IPs List</h3>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button class="btn btn-sm" onclick="refreshBlockedIPsList()" style="background: #3b82f6; color: white; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer;">
+                            🔄 Refresh
+                        </button>
+                        <button class="btn btn-sm" onclick="exportBlockedIPs()" style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer;">
+                            📥 Export CSV
+                        </button>
+                    </div>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-color);">
+                                <th style="padding: 0.75rem; text-align: left;">IP Address</th>
+                                <th style="padding: 0.75rem; text-align: left;">Attack Count</th>
+                                <th style="padding: 0.75rem; text-align: left;">Threat Level</th>
+                                <th style="padding: 0.75rem; text-align: left;">Attack Type</th>
+                                <th style="padding: 0.75rem; text-align: left;">Blocked At</th>
+                                <th style="padding: 0.75rem; text-align: left;">Blocked By</th>
+                                <th style="padding: 0.75rem; text-align: left;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="blockedIpsTable" style="font-family: 'Courier New', monospace;">
+                            <tr>
+                                <td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                                    Loading blocked IPs...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="blockedIpsStats" style="margin-top: 1rem; padding: 1rem; background: rgba(59, 130, 246, 0.1); border-radius: 8px; display: none;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+                        <div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Total Blocked</div>
+                            <div style="font-size: 1.5rem; font-weight: bold; color: #ef4444;" id="statsTotal">0</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Total Attacks</div>
+                            <div style="font-size: 1.5rem; font-weight: bold; color: #f59e0b;" id="statsTotalAttacks">0</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">Critical Threats</div>
+                            <div style="font-size: 1.5rem; font-weight: bold; color: #ef4444;" id="statsCritical">0</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">High Threats</div>
+                            <div style="font-size: 1.5rem; font-weight: bold; color: #f59e0b;" id="statsHigh">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div id="services" class="tab-content">
@@ -1296,8 +1353,8 @@
             }
         }
         
-        // Update source IPs table
-        function updateSourceIpsTable(sourceIps) {
+        // Update source IPs table with block status
+        async function updateSourceIpsTable(sourceIps) {
             const tbody = document.getElementById('sourceIpsTable');
             if (!tbody) return;
             
@@ -1310,6 +1367,20 @@
                     </tr>
                 `;
                 return;
+            }
+            
+            // Fetch blocked IPs status from database
+            let blockedIpsData = {};
+            try {
+                const response = await fetch('/api/blocked-ips');
+                const data = await response.json();
+                if (data.success) {
+                    data.blocked_ips.forEach(ip => {
+                        blockedIpsData[ip.ip_address] = ip;
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching blocked IPs:', error);
             }
             
             // Sort by attack count (descending)
@@ -1332,24 +1403,47 @@
                     threatColor = '#10b981';
                 }
                 
+                // Check if IP is blocked
+                const ipInfo = blockedIpsData[ip];
+                const isBlocked = ipInfo && ipInfo.is_blocked === 1;
+                
+                // Create button based on block status
+                let actionButton;
+                if (isBlocked) {
+                    actionButton = `
+                        <button class="btn btn-sm" onclick="unblockIP('${ip}')" 
+                                style="background: #10b981; color: white; padding: 0.25rem 0.75rem; border: none; border-radius: 6px; cursor: pointer; margin-right: 0.25rem;">
+                            Unblock
+                        </button>
+                        <span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.7rem; font-weight: bold;">
+                            🚫 BLOCKED
+                        </span>
+                    `;
+                } else {
+                    actionButton = `
+                        <button class="btn btn-sm" onclick="blockIP('${ip}', ${count}, '${threatLevel}')" 
+                                style="background: #ef4444; color: white; padding: 0.25rem 0.75rem; border: none; border-radius: 6px; cursor: pointer;">
+                            Block
+                        </button>
+                    `;
+                }
+                
                 return `
-                    <tr style="border-bottom: 1px solid var(--border-color);">
+                    <tr style="border-bottom: 1px solid var(--border-color);" id="ip-row-${ip.replace(/\./g, '-')}">
                         <td style="padding: 0.75rem; font-family: 'Courier New', monospace;">${ip}</td>
                         <td style="padding: 0.75rem;">
                             <span style="background: ${threatColor}; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: bold;">
                                 ${count}
                             </span>
                         </td>
-                        <td style="padding: 0.75rem; color: var(--text-secondary);">Just now</td>
+                        <td style="padding: 0.75rem; color: var(--text-secondary);">${ipInfo ? new Date(ipInfo.last_seen).toLocaleString() : 'Just now'}</td>
                         <td style="padding: 0.75rem;">
                             <span style="color: ${threatColor}; font-weight: bold;">
                                 ${threatLevel}
                             </span>
                         </td>
                         <td style="padding: 0.75rem;">
-                            <button class="btn btn-sm" onclick="blockIP('${ip}')" style="background: #ef4444; color: white; padding: 0.25rem 0.75rem; border: none; border-radius: 6px; cursor: pointer;">
-                                Block
-                            </button>
+                            ${actionButton}
                         </td>
                     </tr>
                 `;
@@ -1357,21 +1451,138 @@
         }
         
         // Block IP function
-        async function blockIP(ip) {
-            if (!confirm(`Block IP address ${ip}?`)) return;
+        async function blockIP(ip, attackCount = 1, threatLevel = 'Medium') {
+            if (!confirm(`Block IP address ${ip}?\n\nThreat Level: ${threatLevel}\nAttack Count: ${attackCount}`)) return;
             
             try {
-                await fetch('/api/blocking/block', {
+                const response = await fetch('/api/blocking/block', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ip: ip })
+                    body: JSON.stringify({ 
+                        ip: ip,
+                        attack_count: attackCount,
+                        threat_level: threatLevel,
+                        reason: `Manual block - ${threatLevel} threat with ${attackCount} attacks`
+                    })
                 });
-                addActivity('network', `Blocked IP: ${ip}`, 'warning');
-                refreshDDoSData();
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    addActivity('network', `✅ Blocked IP: ${ip} (${threatLevel})`, 'warning');
+                    
+                    // Show success message
+                    showNotification(`✅ IP ${ip} blocked successfully and added to database`, 'success');
+                } else {
+                    addActivity('network', `❌ Failed to block IP: ${ip}`, 'error');
+                    showNotification(`❌ Failed to block IP ${ip}: ${result.message || 'Unknown error'}`, 'error');
+                }
+                
+                // Refresh both tables
+                await refreshDDoSData();
+                await refreshBlockedIPsList();
+                
             } catch (error) {
                 console.error('Error blocking IP:', error);
+                showNotification(`❌ Error blocking IP: ${error.message}`, 'error');
             }
         }
+        
+        // Unblock IP function
+        async function unblockIP(ip) {
+            if (!confirm(`Unblock IP address ${ip}?\n\nThis will remove the IP from the block list and restore network access.`)) return;
+            
+            try {
+                const response = await fetch('/api/blocked-ips/unblock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        ip: ip,
+                        unblocked_by: 'dashboard_user',
+                        reason: 'Manual unblock from dashboard'
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    addActivity('network', `✅ Unblocked IP: ${ip}`, 'success');
+                    
+                    // Show success message
+                    showNotification(`✅ IP ${ip} unblocked successfully`, 'success');
+                } else {
+                    addActivity('network', `❌ Failed to unblock IP: ${ip}`, 'error');
+                    showNotification(`❌ Failed to unblock IP ${ip}: ${result.message}`, 'error');
+                }
+                
+                // Refresh both tables
+                await refreshDDoSData();
+                await refreshBlockedIPsList();
+                
+            } catch (error) {
+                console.error('Error unblocking IP:', error);
+                showNotification(`❌ Error unblocking IP: ${error.message}`, 'error');
+            }
+        }
+        
+        // Show notification function
+        function showNotification(message, type = 'info') {
+            const colors = {
+                'success': '#10b981',
+                'error': '#ef4444',
+                'warning': '#f59e0b',
+                'info': '#3b82f6'
+            };
+            
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 20px;
+                background: ${colors[type]};
+                color: white;
+                padding: 1rem 1.5rem;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                z-index: 10000;
+                font-weight: 600;
+                animation: slideIn 0.3s ease-out;
+            `;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease-in';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
+        }
+        
+        // Add CSS animations for notifications
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+            @keyframes slideOut {
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+                to {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
         
         async function refreshProcesses() {
             const response = await fetch('/api/processes/top');
@@ -1455,6 +1666,182 @@
             alert(analysis.explanation);
         }
         
+        // Refresh blocked IPs list table
+        async function refreshBlockedIPsList() {
+            try {
+                const response = await fetch('/api/blocked-ips');
+                const data = await response.json();
+                
+                const tbody = document.getElementById('blockedIpsTable');
+                const statsDiv = document.getElementById('blockedIpsStats');
+                
+                if (!tbody) return;
+                
+                if (data.success && data.blocked_ips && data.blocked_ips.length > 0) {
+                    // Show stats
+                    statsDiv.style.display = 'block';
+                    
+                    // Update blocked IPs table
+                    tbody.innerHTML = data.blocked_ips.map(ip => {
+                        // Determine threat color
+                        let threatColor;
+                        switch(ip.threat_level) {
+                            case 'Critical':
+                                threatColor = '#ef4444';
+                                break;
+                            case 'High':
+                                threatColor = '#f59e0b';
+                                break;
+                            case 'Medium':
+                                threatColor = '#fbbf24';
+                                break;
+                            default:
+                                threatColor = '#10b981';
+                        }
+                        
+                        const blockedDate = new Date(ip.blocked_at).toLocaleString();
+                        
+                        return `
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <td style="padding: 0.75rem; font-family: 'Courier New', monospace;">
+                                    ${ip.ip_address}
+                                </td>
+                                <td style="padding: 0.75rem;">
+                                    <span style="background: ${threatColor}; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: bold;">
+                                        ${ip.attack_count}
+                                    </span>
+                                </td>
+                                <td style="padding: 0.75rem;">
+                                    <span style="color: ${threatColor}; font-weight: bold;">
+                                        ${ip.threat_level}
+                                    </span>
+                                </td>
+                                <td style="padding: 0.75rem; color: var(--text-secondary);">
+                                    ${ip.attack_type || 'Unknown'}
+                                </td>
+                                <td style="padding: 0.75rem; color: var(--text-secondary); font-size: 0.85rem;">
+                                    ${blockedDate}
+                                </td>
+                                <td style="padding: 0.75rem; color: var(--text-secondary);">
+                                    ${ip.blocked_by}
+                                </td>
+                                <td style="padding: 0.75rem;">
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button class="btn btn-sm" onclick="unblockIP('${ip.ip_address}')" 
+                                                style="background: #10b981; color: white; padding: 0.35rem 0.75rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">
+                                            Unblock
+                                        </button>
+                                        <button class="btn btn-sm" onclick="viewIPHistory('${ip.ip_address}')" 
+                                                style="background: #3b82f6; color: white; padding: 0.35rem 0.75rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">
+                                            History
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                    
+                    // Fetch and update statistics
+                    const statsResponse = await fetch('/api/blocked-ips/statistics');
+                    const statsData = await statsResponse.json();
+                    
+                    if (statsData.success) {
+                        const stats = statsData.statistics;
+                        document.getElementById('statsTotal').textContent = stats.total_blocked || 0;
+                        document.getElementById('statsTotalAttacks').textContent = stats.total_attacks || 0;
+                        document.getElementById('statsCritical').textContent = stats.by_threat_level?.Critical || 0;
+                        document.getElementById('statsHigh').textContent = stats.by_threat_level?.High || 0;
+                    }
+                } else {
+                    statsDiv.style.display = 'none';
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                                No blocked IPs found - System is secure ✅
+                            </td>
+                        </tr>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error refreshing blocked IPs list:', error);
+                const tbody = document.getElementById('blockedIpsTable');
+                if (tbody) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="padding: 2rem; text-align: center; color: var(--accent-red);">
+                                Error loading blocked IPs: ${error.message}
+                            </td>
+                        </tr>
+                    `;
+                }
+            }
+        }
+        
+        // View IP history
+        async function viewIPHistory(ip) {
+            try {
+                const response = await fetch(`/api/blocked-ips/${ip}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    let historyHTML = `<strong>History for ${ip}:</strong>\n\n`;
+                    historyHTML += `IP Info:\n`;
+                    historyHTML += `- Attack Count: ${data.ip_info.attack_count}\n`;
+                    historyHTML += `- Threat Level: ${data.ip_info.threat_level}\n`;
+                    historyHTML += `- First Seen: ${new Date(data.ip_info.first_seen).toLocaleString()}\n`;
+                    historyHTML += `- Last Seen: ${new Date(data.ip_info.last_seen).toLocaleString()}\n`;
+                    historyHTML += `- Blocked At: ${new Date(data.ip_info.blocked_at).toLocaleString()}\n`;
+                    historyHTML += `- Blocked By: ${data.ip_info.blocked_by}\n`;
+                    historyHTML += `- Reason: ${data.ip_info.reason}\n\n`;
+                    
+                    if (data.history && data.history.length > 0) {
+                        historyHTML += `Action History:\n`;
+                        data.history.forEach((entry, index) => {
+                            historyHTML += `${index + 1}. ${entry.action} - ${new Date(entry.timestamp).toLocaleString()}\n`;
+                            historyHTML += `   By: ${entry.performed_by}\n`;
+                            if (entry.reason) {
+                                historyHTML += `   Reason: ${entry.reason}\n`;
+                            }
+                        });
+                    }
+                    
+                    alert(historyHTML);
+                } else {
+                    showNotification(`Could not load history for ${ip}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error viewing IP history:', error);
+                showNotification(`Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Export blocked IPs to CSV
+        async function exportBlockedIPs() {
+            try {
+                showNotification('Exporting blocked IPs to CSV...', 'info');
+                
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const filename = `blocked_ips_${timestamp}.csv`;
+                
+                const response = await fetch('/api/blocked-ips/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filepath: filename })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showNotification(`Exported to ${filename}`, 'success');
+                } else {
+                    showNotification('Export failed', 'error');
+                }
+            } catch (error) {
+                console.error('Error exporting blocked IPs:', error);
+                showNotification(`Export error: ${error.message}`, 'error');
+            }
+        }
+        
         // Initialize on load
         window.addEventListener('load', function() {
             console.log('Dashboard loading...');
@@ -1466,9 +1853,13 @@
             initializeCharts();
             refreshProcesses();
             refreshDDoSData();
+            refreshBlockedIPsList();
             
             // Refresh DDoS data every 5 seconds
             setInterval(refreshDDoSData, 5000);
+            
+            // Refresh blocked IPs list every 10 seconds
+            setInterval(refreshBlockedIPsList, 10000);
             
             // Add initial activity logs
             setTimeout(() => {

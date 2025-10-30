@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🛡️ Healing Bot Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -30,6 +31,34 @@
             background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
             color: var(--text-primary);
             min-height: 100vh;
+        }
+        
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: var(--accent-blue) var(--bg-secondary);
+        }
+        
+        *::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        *::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+            border-radius: 4px;
+        }
+        
+        *::-webkit-scrollbar-thumb {
+            background: var(--accent-blue);
+            border-radius: 4px;
+        }
+        
+        *::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-purple);
         }
 
         .header {
@@ -1123,25 +1152,140 @@
         </div>
 
         <div id="logs" class="tab-content">
-            <h2 style="margin-bottom: 1.5rem;">Logs & AI Analysis</h2>
-            
-            <div class="filter-bar">
-                <input type="text" class="search-input" placeholder="Search logs or ask AI to explain..." id="logSearch">
-                <select class="search-input" style="flex: 0 0 150px;" id="logLevel">
-                    <option value="all">All Levels</option>
-                    <option value="info">Info</option>
-                    <option value="warning">Warning</option>
-                    <option value="error">Error</option>
-                </select>
-                <button class="btn btn-primary" onclick="analyzeLogsAI()">🤖 AI Analysis</button>
+            <div style="margin-bottom: 2rem;">
+                <h2 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-file-alt"></i> Centralized Logs & AI Analysis
+                </h2>
+                <p style="color: var(--text-secondary); margin: 0;">View all system logs and get AI-powered insights from Google Gemini</p>
             </div>
-            
-            <div class="chart-container" style="margin-bottom: 1.5rem;">
-                <h3>Log Keyword Frequency (TF-IDF)</h3>
-                <canvas id="tfidfChart" width="400" height="100"></canvas>
+
+            <!-- Log Viewer and AI Analysis -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Log Viewer -->
+                <div class="card" style="display: flex; flex-direction: column;">
+                    <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">
+                                <i class="fas fa-terminal"></i> Centralized Logs
+                            </h3>
+                            <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Real-time log aggregation from all services</p>
+                        </div>
+                        <button class="btn btn-primary" onclick="refreshLogs()" style="white-space: nowrap;">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+
+                    <!-- System Monitoring Info -->
+                    <div style="margin: 1.25rem 1.25rem 0 1.25rem; padding: 1rem; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 0.5rem; color: white; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <i class="fas fa-server" style="font-size: 2rem; opacity: 0.9;"></i>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; font-size: 1rem; margin-bottom: 0.25rem;">System Service Monitoring</div>
+                                <div style="font-size: 0.85rem; opacity: 0.95;">Monitoring Docker, systemd, syslog, auth, kernel for failures & crashes</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Service/Source Filter -->
+                    <div style="margin: 1.25rem; display: flex; gap: 0.75rem; align-items: center;">
+                        <i class="fas fa-filter" style="color: var(--text-secondary); font-size: 0.9rem;"></i>
+                        <select id="serviceFilter" class="search-input" onchange="filterLogsByService()" style="flex: 1; padding: 0.6rem;">
+                            <option value="">All Services</option>
+                        </select>
+                        <select id="logLevelFilter" class="search-input" onchange="filterLogsByService()" style="flex: 1; padding: 0.6rem;">
+                            <option value="">All Levels</option>
+                            <option value="ERROR">ERROR</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="INFO">INFO</option>
+                            <option value="DEBUG">DEBUG</option>
+                        </select>
+                    </div>
+
+                    <!-- Log List -->
+                    <div id="logsList" class="log-container scrollbar" style="flex: 1; max-height: 550px; min-height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.875rem; margin: 0 1.25rem; border: 1px solid var(--border-color); border-radius: 0.5rem; background: var(--bg-primary);">
+                        <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
+                            <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                            <div>Loading logs...</div>
+                        </div>
+                    </div>
+                    
+                    <!-- System Log Statistics -->
+                    <div id="systemLogStats" style="margin: 1.25rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 0.5rem; border: 1px solid var(--border-color);">
+                        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600;">
+                            <i class="fas fa-database"></i> Active System Log Sources:
+                        </div>
+                        <div id="systemLogSourcesList" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                            <span style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: var(--bg-primary); border-radius: 0.25rem; border: 1px solid var(--border-color); color: var(--text-secondary);">
+                                <i class="fas fa-spinner fa-pulse"></i> Loading...
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Analysis Panel -->
+                <div class="card" style="display: flex; flex-direction: column;">
+                    <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color);">
+                        <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">
+                            <i class="fas fa-brain" style="color: var(--accent-purple);"></i> Gemini AI Analysis
+                        </h3>
+                        <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">AI-powered log analysis and insights</p>
+                    </div>
+
+                    <div id="aiAnalysisPanel" style="flex: 1; padding: 2rem; display: flex; flex-direction: column; justify-content: center; min-height: 400px;">
+                        <div style="text-align: center; color: var(--text-secondary);">
+                            <div style="margin-bottom: 1.5rem;">
+                                <i class="fas fa-robot" style="font-size: 4rem; opacity: 0.2; color: var(--accent-purple);"></i>
+                            </div>
+                            <h4 style="margin: 0 0 0.5rem 0; color: var(--text-primary); font-weight: 600;">AI Analysis Ready</h4>
+                            <p style="margin: 0 0 1.5rem 0; font-size: 0.9rem;">Click "Analyze" on any error or warning log to get intelligent insights</p>
+                            <button class="btn btn-primary" onclick="quickAnalyzeErrors()" style="padding: 0.75rem 1.5rem;">
+                                <i class="fas fa-magic"></i> Quick Analyze Recent Errors
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            
-            <div class="log-container scrollbar" id="logViewer"></div>
+
+            <!-- Anomaly Detection -->
+            <div class="card">
+                <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color);">
+                    <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">
+                        <i class="fas fa-exclamation-triangle" style="color: var(--accent-yellow);"></i> Detected Anomalies & Errors
+                    </h3>
+                    <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">System issues detected through log analysis</p>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: var(--bg-tertiary); border-bottom: 2px solid var(--border-color);">
+                                <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); white-space: nowrap;">
+                                    <i class="fas fa-clock"></i> Time
+                                </th>
+                                <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); white-space: nowrap;">
+                                    <i class="fas fa-server"></i> Service
+                                </th>
+                                <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); white-space: nowrap;">
+                                    <i class="fas fa-shield-alt"></i> Severity
+                                </th>
+                                <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary);">
+                                    <i class="fas fa-comment-alt"></i> Message
+                                </th>
+                                <th style="padding: 1rem; text-align: center; font-weight: 600; color: var(--text-primary); white-space: nowrap;">
+                                    <i class="fas fa-cogs"></i> Actions
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="anomaliesTable">
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                                    <i class="fas fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+                                    Loading anomalies...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <div id="alerts" class="tab-content">
@@ -1192,7 +1336,7 @@
     <script>
         // WebSocket connection for real-time updates
         let ws = null;
-        let metricsChart, tfidfChart, mlPerformanceChart, attackTypesChart;
+        let metricsChart, mlPerformanceChart, attackTypesChart;
         
         // Recent Activity tracking
         let recentActivities = [];
@@ -1661,6 +1805,7 @@
                     }
                 });
             }
+            
         }
         
         // Fetch and update DDoS detection data
@@ -2128,15 +2273,572 @@
             alert(`Cleanup complete! Freed ${data.freed_space}MB`);
         }
         
-        async function analyzeLogsAI() {
-            const query = document.getElementById('logSearch').value;
-            const response = await fetch('/api/logs/analyze', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({query})
+        // Log monitoring variables
+        let currentLogs = [];
+        let aiAnalysisCount = 0;
+
+        // Helper functions
+        function getSeverityColor(severity) {
+            switch(severity) {
+                case 'CRITICAL': return 'danger';
+                case 'ERROR': return 'danger';
+                case 'WARNING': return 'warning';
+                default: return 'secondary';
+            }
+        }
+
+        function getSeverityBadge(severity) {
+            switch(severity) {
+                case 'CRITICAL': return 'danger';
+                case 'ERROR': return 'danger';
+                case 'WARNING': return 'warning';
+                default: return 'info';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadServices() {
+            try {
+                const response = await fetch('/api/central-logs/services');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const select = document.getElementById('serviceFilter');
+                    select.innerHTML = '<option value="">All Services</option>';
+                    data.services.forEach(service => {
+                        select.innerHTML += `<option value="${service}">${service}</option>`;
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading services:', error);
+            }
+        }
+
+        function filterLogsByService() {
+            const selectedService = document.getElementById('serviceFilter').value;
+            const levelFilter = document.getElementById('logLevelFilter').value;
+            
+            let filtered = currentLogs;
+            
+            if (selectedService) {
+                filtered = filtered.filter(log => log.service === selectedService);
+            }
+            
+            if (levelFilter) {
+                filtered = filtered.filter(log => log.level === levelFilter);
+            }
+            
+            displaySystemLogs(filtered);
+        }
+
+        function refreshLogs() {
+            loadSystemLogs();
+        }
+
+        async function loadSystemLogs() {
+            const logsList = document.getElementById('logsList');
+            
+            try {
+                // Show loading state
+                logsList.innerHTML = `
+                    <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--accent-blue); margin-bottom: 1rem; display: block;"></i>
+                        <div style="font-size: 1rem; margin-bottom: 0.5rem;">Loading system logs...</div>
+                        <div style="font-size: 0.85rem; opacity: 0.7;">Fetching logs from Docker, systemd, syslog, and more</div>
+                    </div>
+                `;
+                
+                const levelFilter = document.getElementById('logLevelFilter').value;
+                let url = '/api/system-logs/recent?limit=100';
+                
+                if (levelFilter) {
+                    url += `&level=${levelFilter}`;
+                }
+                
+                console.log('Fetching logs from:', url);
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                console.log('Log API response:', data);
+                
+                if (data.status === 'success' && data.logs) {
+                    currentLogs = data.logs;
+                    console.log('Received logs:', currentLogs.length);
+                    displaySystemLogs(currentLogs);
+                    updateSystemLogStats();
+                    loadServices();
+                    loadSystemLogSources();
+                    loadAnomalies();
+                    
+                    // Add activity notification
+                    if (currentLogs.length > 0) {
+                        addActivity('logs', `Loaded ${currentLogs.length} system logs`, 'info');
+                    }
+                } else {
+                    // Try centralized logs as fallback
+                    console.log('Trying centralized logs fallback...');
+                    await loadCentralizedLogs();
+                }
+            } catch (error) {
+                console.error('Error loading system logs:', error);
+                // Try centralized logs as fallback
+                try {
+                    await loadCentralizedLogs();
+                } catch (fallbackError) {
+                    console.error('Fallback also failed:', fallbackError);
+                    logsList.innerHTML = `
+                        <div style="padding: 3rem 2rem; text-align: center;">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 2.5rem; color: var(--accent-yellow); margin-bottom: 1rem; display: block;"></i>
+                            <div style="color: var(--text-primary); font-size: 1rem; margin-bottom: 0.5rem; font-weight: 600;">System Logs Not Available</div>
+                            <div style="color: var(--text-secondary); font-size: 0.875rem; line-height: 1.6; max-width: 400px; margin: 0 auto;">
+                                Error: ${error.message}<br><br>
+                                This may require access to /var/log/. Please run with sudo or add your user to the 'adm' group.
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }
+        
+        async function loadCentralizedLogs() {
+            const logsList = document.getElementById('logsList');
+            
+            console.log('Loading centralized logs...');
+            const response = await fetch('/api/central-logs/recent?limit=100');
+            const data = await response.json();
+            
+            console.log('Centralized logs response:', data);
+            
+            if ((data.status === 'success' || data.success) && data.logs) {
+                currentLogs = data.logs.map(log => ({
+                    timestamp: log.timestamp,
+                    level: log.level || 'INFO',
+                    message: log.message,
+                    service: log.service || 'unknown',
+                    source: log.source || 'centralized'
+                }));
+                
+                console.log('Centralized logs loaded:', currentLogs.length);
+                displaySystemLogs(currentLogs);
+                loadServices();
+                
+                if (currentLogs.length > 0) {
+                    addActivity('logs', `Loaded ${currentLogs.length} centralized logs`, 'info');
+                }
+            } else {
+                throw new Error('No logs available from centralized logging');
+            }
+        }
+
+        function displaySystemLogs(logs) {
+            const logsList = document.getElementById('logsList');
+            
+            if (!logs || logs.length === 0) {
+                logsList.innerHTML = `
+                    <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
+                        <i class="fas fa-inbox" style="font-size: 2.5rem; opacity: 0.3; margin-bottom: 1rem; display: block;"></i>
+                        <div style="font-size: 1rem; margin-bottom: 0.5rem;">No system logs collected yet</div>
+                        <div style="font-size: 0.85rem; opacity: 0.7;">Please wait while we gather logs from system services...</div>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            
+            logs.forEach((log, index) => {
+                const level = log.level || 'INFO';
+                const timeStr = new Date(log.timestamp).toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+                const source = log.source || 'unknown';
+                
+                // Get source icon
+                let sourceIcon = 'fa-file-alt';
+                if (source === 'docker') sourceIcon = 'fa-docker';
+                else if (source === 'systemd') sourceIcon = 'fa-cogs';
+                else if (source === 'syslog') sourceIcon = 'fa-list';
+                else if (source === 'kernel') sourceIcon = 'fa-microchip';
+                else if (source === 'apache') sourceIcon = 'fa-globe';
+                else if (source === 'nginx') sourceIcon = 'fa-server';
+                
+                // Determine badge color and style
+                let levelBadgeColor = 'var(--accent-blue)';
+                let levelBadgeText = level;
+                if (level === 'ERROR' || level === 'CRITICAL') {
+                    levelBadgeColor = 'var(--accent-red)';
+                } else if (level === 'WARNING' || level === 'WARN') {
+                    levelBadgeColor = 'var(--accent-yellow)';
+                } else if (level === 'DEBUG') {
+                    levelBadgeColor = 'var(--text-secondary)';
+                }
+                
+                html += `
+                    <div style="padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-color); transition: all 0.2s; cursor: default;" 
+                         onmouseover="this.style.background='rgba(59, 130, 246, 0.05)'; this.style.borderLeftColor='var(--accent-blue)'; this.style.borderLeftWidth='3px';" 
+                         onmouseout="this.style.background='transparent'; this.style.borderLeftColor='transparent'; this.style.borderLeftWidth='0px';">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem; gap: 0.75rem;">
+                            <div style="flex: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                                <span style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 500; font-family: 'Courier New', monospace;">
+                                    <i class="fas fa-clock" style="font-size: 0.7rem;"></i> ${timeStr}
+                                </span>
+                                <span style="font-size: 0.75rem; padding: 0.25rem 0.6rem; background: var(--bg-tertiary); border-radius: 0.25rem; color: var(--text-secondary); border: 1px solid var(--border-color); font-weight: 500;">
+                                    <i class="fab ${sourceIcon}"></i> ${log.service}
+                                </span>
+                                <span style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 0.25rem; background: ${levelBadgeColor}; color: white; font-weight: 600;">
+                                    ${levelBadgeText}
+                                </span>
+                            </div>
+                            ${level === 'ERROR' || level === 'WARNING' || level === 'CRITICAL' ? `
+                                <button class="btn btn-primary" onclick='analyzeLogWithAI(${JSON.stringify(log).replace(/'/g, "&#39;")})' 
+                                        style="font-size: 0.75rem; padding: 0.35rem 0.75rem; white-space: nowrap; flex-shrink: 0;">
+                                    <i class="fas fa-brain"></i> Analyze
+                                </button>
+                            ` : ''}
+                        </div>
+                        <div style="color: var(--text-primary); word-wrap: break-word; font-size: 0.875rem; line-height: 1.5; padding-left: 0.25rem;">
+                            ${escapeHtml(log.message)}
+                        </div>
+                    </div>
+                `;
             });
-            const analysis = await response.json();
-            alert(analysis.explanation);
+            
+            logsList.innerHTML = html;
+        }
+
+        async function updateSystemLogStats() {
+            try {
+                const response = await fetch('/api/system-logs/statistics');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Stats loaded successfully
+                    console.log('System log statistics loaded:', data.statistics);
+                }
+            } catch (error) {
+                console.error('Error loading system log stats:', error);
+            }
+        }
+
+        async function loadSystemLogSources() {
+            try {
+                const response = await fetch('/api/system-logs/sources');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const sources = data.sources;
+                    const sourcesList = document.getElementById('systemLogSourcesList');
+                    
+                    let html = '';
+                    sources.forEach(source => {
+                        const icon = source.enabled ? 'fa-check-circle' : 'fa-times-circle';
+                        const color = source.enabled ? 'var(--accent-green)' : 'var(--text-secondary)';
+                        html += `
+                            <span style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: var(--bg-primary); border-radius: 0.25rem; border: 1px solid var(--border-color);">
+                                <i class="fas ${icon}" style="color: ${color};"></i> ${source.name}
+                            </span>
+                        `;
+                    });
+                    
+                    sourcesList.innerHTML = html;
+                }
+            } catch (error) {
+                console.error('Error loading system log sources:', error);
+            }
+        }
+
+        async function analyzeLogWithAI(logEntry) {
+            const panel = document.getElementById('aiAnalysisPanel');
+            panel.innerHTML = `
+                <div style="text-align: center; padding: 3rem;">
+                    <div style="border: 3px solid var(--accent-blue); border-top-color: transparent; border-radius: 50%; width: 3rem; height: 3rem; margin: 0 auto 1rem; animation: spin 1s linear infinite;"></div>
+                    <p style="margin-top: 1rem;">Analyzing with Google Gemini AI...</p>
+                    <small style="color: var(--text-secondary);">This may take a few seconds</small>
+                </div>
+                <style>
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                </style>
+            `;
+
+            try {
+                const response = await fetch('/api/gemini/analyze-log', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(logEntry)
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    displayAIAnalysis(result);
+                    aiAnalysisCount++;
+                    addActivity('ai', 'AI analysis completed for log entry', 'success');
+                } else {
+                    panel.innerHTML = `
+                        <div style="padding: 2rem; text-align: center; color: var(--accent-yellow);">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                            <div><strong>Analysis Failed</strong></div>
+                            <div style="font-size: 0.875rem; margin-top: 0.5rem;">${result.message || 'Unable to analyze log'}</div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                panel.innerHTML = `
+                    <div style="padding: 2rem; text-align: center; color: var(--accent-red);">
+                        <i class="fas fa-times-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                        <div><strong>Error</strong></div>
+                        <div style="font-size: 0.875rem; margin-top: 0.5rem;">${error.message}</div>
+                    </div>
+                `;
+            }
+        }
+
+        function extractSection(text, startMarker, endMarker) {
+            if (!text) return null;
+            
+            const startIndex = text.indexOf(startMarker);
+            if (startIndex === -1) return null;
+            
+            const contentStart = startIndex + startMarker.length;
+            
+            if (endMarker) {
+                const endIndex = text.indexOf(endMarker, contentStart);
+                if (endIndex === -1) {
+                    return text.substring(contentStart).trim();
+                }
+                return text.substring(contentStart, endIndex).trim();
+            }
+            
+            return text.substring(contentStart).trim();
+        }
+
+        function formatAnalysisText(text) {
+            if (!text || text === 'Not found in analysis' || text === 'Error extracting information') {
+                return '<em style="color: var(--text-secondary);">No information available</em>';
+            }
+            return escapeHtml(text).replace(/\n/g, '<br>');
+        }
+
+        function displayAIAnalysis(result) {
+            const panel = document.getElementById('aiAnalysisPanel');
+            const analysis = result.analysis;
+
+            const fullText = analysis.full_analysis || '';
+            const whatHappened = extractSection(fullText, '🔍 WHAT HAPPENED:', '💡 QUICK FIX:') || analysis.why || analysis.root_cause || 'Analysis in progress...';
+            const quickFix = extractSection(fullText, '💡 QUICK FIX:', '🛡️ PREVENTION:') || analysis.solution || 'No immediate action required.';
+            const prevention = extractSection(fullText, '🛡️ PREVENTION:', null) || analysis.prevention || 'Monitor system regularly.';
+
+            panel.innerHTML = `
+                <div style="max-height: 800px; overflow-y: auto; padding: 1rem;">
+                    <!-- Header -->
+                    <div style="padding: 1rem; margin-bottom: 1rem; background: var(--accent-blue); border-radius: 0.5rem; color: white; border-left: 4px solid var(--accent-purple);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong><i class="fas fa-robot"></i> AI Analysis Complete</strong>
+                            </div>
+                            <span style="padding: 0.25rem 0.75rem; background: rgba(255,255,255,0.2); border-radius: 0.25rem; font-size: 0.85rem;">${analysis.severity || 'MEDIUM'}</span>
+                        </div>
+                    </div>
+
+                    <!-- Service & Log Info -->
+                    <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid var(--text-secondary);">
+                        <div style="margin-bottom: 0.5rem;"><strong><i class="fas fa-server"></i> Service:</strong> ${result.log_entry.service}</div>
+                        <div style="margin-bottom: 0.5rem;"><strong><i class="fas fa-clock"></i> Time:</strong> ${new Date(result.log_entry.timestamp).toLocaleString()}</div>
+                        <div style="font-family: 'Courier New', monospace; font-size: 0.875rem; margin-top: 0.75rem; padding: 0.75rem; background: var(--bg-primary); border-radius: 0.25rem; word-wrap: break-word; border-left: 3px solid var(--accent-red);">
+                            ${escapeHtml(result.log_entry.message)}
+                        </div>
+                    </div>
+
+                    <!-- What Happened -->
+                    <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05)); padding: 1.25rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid var(--accent-blue);">
+                        <h4 style="margin: 0 0 0.75rem 0; color: var(--accent-blue); font-size: 1rem;">
+                            <i class="fas fa-search"></i> What Happened
+                        </h4>
+                        <div style="color: var(--text-primary); line-height: 1.6;">${formatAnalysisText(whatHappened)}</div>
+                    </div>
+
+                    <!-- Quick Fix -->
+                    <div style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05)); padding: 1.25rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid var(--accent-green);">
+                        <h4 style="margin: 0 0 0.75rem 0; color: var(--accent-green); font-size: 1rem;">
+                            <i class="fas fa-wrench"></i> Quick Fix
+                        </h4>
+                        <div style="color: var(--text-primary); line-height: 1.6;">${formatAnalysisText(quickFix)}</div>
+                    </div>
+
+                    <!-- Prevention -->
+                    <div style="background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(245, 158, 11, 0.05)); padding: 1.25rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid var(--accent-yellow);">
+                        <h4 style="margin: 0 0 0.75rem 0; color: var(--accent-yellow); font-size: 1rem;">
+                            <i class="fas fa-shield-alt"></i> Prevention
+                        </h4>
+                        <div style="color: var(--text-primary); line-height: 1.6;">${formatAnalysisText(prevention)}</div>
+                    </div>
+
+                    <!-- Timestamp -->
+                    <div style="text-align: center; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <small style="color: var(--text-secondary);">
+                            <i class="fas fa-clock"></i> Analysis completed at ${new Date().toLocaleTimeString()}
+                        </small>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function quickAnalyzeErrors() {
+            const panel = document.getElementById('aiAnalysisPanel');
+            panel.innerHTML = `
+                <div style="text-align: center; padding: 3rem;">
+                    <div style="border: 3px solid var(--accent-blue); border-top-color: transparent; border-radius: 50%; width: 3rem; height: 3rem; margin: 0 auto 1rem; animation: spin 1s linear infinite;"></div>
+                    <p style="margin-top: 1rem;">Analyzing recent errors with Gemini AI...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('/api/gemini/quick-analyze');
+                const result = await response.json();
+
+                if (result.status === 'success' && result.pattern_analysis) {
+                    displayPatternAnalysis(result);
+                    aiAnalysisCount++;
+                    addActivity('ai', 'Quick error analysis completed', 'success');
+                } else {
+                    panel.innerHTML = `
+                        <div style="padding: 2rem; text-align: center;">
+                            <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--accent-green); margin-bottom: 1rem;"></i>
+                            <div><strong>Analysis Complete</strong></div>
+                            <div style="font-size: 0.875rem; margin-top: 0.5rem; color: var(--text-secondary);">${result.message || 'No recent errors to analyze'}</div>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                panel.innerHTML = `
+                    <div style="padding: 2rem; text-align: center; color: var(--accent-red);">
+                        <i class="fas fa-times-circle" style="font-size: 2rem; margin-bottom: 1rem;"></i>
+                        <div><strong>Error</strong></div>
+                        <div style="font-size: 0.875rem; margin-top: 0.5rem;">${error.message}</div>
+                    </div>
+                `;
+            }
+        }
+
+        function displayPatternAnalysis(result) {
+            const panel = document.getElementById('aiAnalysisPanel');
+            const analysis = result.pattern_analysis;
+
+            panel.innerHTML = `
+                <div style="max-height: 500px; overflow-y: auto; padding: 1rem;">
+                    <div style="padding: 1rem; background: var(--accent-blue); color: white; border-radius: 0.5rem; margin-bottom: 1rem;">
+                        <strong><i class="fas fa-brain"></i> Pattern Analysis Complete</strong><br>
+                        <small>Analyzed ${result.logs_analyzed} recent error logs</small>
+                    </div>
+
+                    <div style="background: var(--bg-tertiary); border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; border-left: 4px solid var(--accent-red);">
+                        <div style="color: var(--accent-red); font-weight: 600; margin-bottom: 0.5rem;">
+                            <i class="fas fa-bug"></i> Common Issues
+                        </div>
+                        <div style="color: var(--text-primary);">${formatAnalysisText(analysis.common_issues)}</div>
+                    </div>
+
+                    <div style="background: var(--bg-tertiary); border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; border-left: 4px solid var(--accent-blue);">
+                        <div style="color: var(--accent-blue); font-weight: 600; margin-bottom: 0.5rem;">
+                            <i class="fas fa-clock"></i> Timeline
+                        </div>
+                        <div style="color: var(--text-primary);">${formatAnalysisText(analysis.timeline)}</div>
+                    </div>
+
+                    <div style="background: var(--bg-tertiary); border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; border-left: 4px solid var(--accent-yellow);">
+                        <div style="color: var(--accent-yellow); font-weight: 600; margin-bottom: 0.5rem;">
+                            <i class="fas fa-link"></i> Correlation
+                        </div>
+                        <div style="color: var(--text-primary);">${formatAnalysisText(analysis.correlation)}</div>
+                    </div>
+
+                    <div style="background: var(--bg-tertiary); border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; border-left: 4px solid var(--accent-green);">
+                        <div style="color: var(--accent-green); font-weight: 600; margin-bottom: 0.5rem;">
+                            <i class="fas fa-lightbulb"></i> Recommendations
+                        </div>
+                        <div style="color: var(--text-primary);">${formatAnalysisText(analysis.recommendations)}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadAnomalies() {
+            try {
+                const response = await fetch('/api/critical-services/issues');
+                const data = await response.json();
+
+                if (data.status === 'success' && data.issues) {
+                    displayAnomalies(data.issues);
+                }
+            } catch (error) {
+                console.error('Error loading anomalies:', error);
+            }
+        }
+
+        function displayAnomalies(issues) {
+            const tbody = document.getElementById('anomaliesTable');
+            
+            if (!issues || issues.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                            <i class="fas fa-check-circle" style="font-size: 2rem; color: var(--accent-green); margin-bottom: 0.5rem; display: block;"></i>
+                            No anomalies detected ✅
+                            <div style="font-size: 0.85rem; margin-top: 0.5rem;">All systems operating normally</div>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            let html = '';
+            issues.forEach(issue => {
+                const severityColor = issue.severity === 'CRITICAL' ? 'var(--accent-red)' : issue.severity === 'ERROR' ? 'var(--accent-red)' : 'var(--accent-yellow)';
+                const timeStr = new Date(issue.timestamp).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                html += `
+                    <tr style="transition: background 0.2s;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
+                        <td style="padding: 1rem; border-bottom: 1px solid var(--border-color); white-space: nowrap; vertical-align: middle;">
+                            ${timeStr}
+                        </td>
+                        <td style="padding: 1rem; border-bottom: 1px solid var(--border-color); white-space: nowrap; vertical-align: middle;">
+                            <span style="font-weight: 500;">${issue.service || 'Unknown'}</span>
+                        </td>
+                        <td style="padding: 1rem; border-bottom: 1px solid var(--border-color); white-space: nowrap; vertical-align: middle;">
+                            <span style="padding: 0.35rem 0.75rem; background: ${severityColor}; color: white; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600; display: inline-block;">
+                                ${issue.severity || 'UNKNOWN'}
+                            </span>
+                        </td>
+                        <td style="padding: 1rem; border-bottom: 1px solid var(--border-color); max-width: 500px; word-wrap: break-word; line-height: 1.5; vertical-align: middle;">
+                            ${escapeHtml(issue.message || '')}
+                        </td>
+                        <td style="padding: 1rem; border-bottom: 1px solid var(--border-color); text-align: center; vertical-align: middle;">
+                            <button class="btn btn-primary" onclick='analyzeLogWithAI(${JSON.stringify(issue).replace(/'/g, "&#39;")})' style="font-size: 0.8rem; padding: 0.4rem 0.8rem; white-space: nowrap;">
+                                <i class="fas fa-brain"></i> Analyze
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = html;
         }
         
         // Update statistics with animation
@@ -2638,6 +3340,7 @@
             refreshDDoSData();
             refreshBlockedIPsList();
             updateStatistics(); // Initial statistics load
+            refreshLogs(); // Initial system logs load
             
             // Refresh DDoS data every 5 seconds
             setInterval(refreshDDoSData, 5000);
@@ -2647,6 +3350,9 @@
             
             // Update statistics every 3 seconds for real-time feel
             setInterval(updateStatistics, 3000);
+            
+            // Refresh logs every 15 seconds
+            setInterval(refreshLogs, 15000);
             
             // Add initial activity logs
             setTimeout(() => {

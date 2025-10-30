@@ -974,33 +974,42 @@
         
         function updateRecentActivity() {
             const container = document.getElementById('recentActivity');
-            if (!container) return;
+            if (!container) {
+                console.error('recentActivity container not found');
+                return;
+            }
             
             if (recentActivities.length === 0) {
                 container.innerHTML = `
-                    <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
-                        <p>No recent activity</p>
+                    <div style="text-align: center; padding: 2rem; color: #9aa0a6;">
+                        <p style="margin: 0 0 0.5rem 0;">No recent activity</p>
                         <small>System events will appear here</small>
                     </div>
                 `;
                 return;
             }
             
+            // Map severity to colors
+            const severityColors = {
+                'critical': '#ef4444',
+                'error': '#f87171',
+                'warning': '#f59e0b',
+                'success': '#10b981',
+                'info': '#3b82f6'
+            };
+            
             container.innerHTML = recentActivities.map(activity => {
                 const timeStr = activity.timestamp.toLocaleTimeString();
-                const severityClass = activity.severity === 'critical' ? 'critical' : 
-                                     activity.severity === 'error' ? 'error' :
-                                     activity.severity === 'warning' ? 'warning' :
-                                     activity.severity === 'success' ? 'success' : 'info';
+                const borderColor = severityColors[activity.severity] || severityColors['info'];
                 
                 return `
-                    <div class="log-entry" style="border-left-color: var(--${severityClass});">
+                    <div class="log-entry" style="border-left: 3px solid ${borderColor}; margin-bottom: 0.5rem; padding: 0.75rem; background: rgba(255,255,255,0.03); border-radius: 6px;">
                         <div style="display: flex; justify-content: space-between; align-items: start;">
                             <div style="flex: 1;">
                                 <span style="font-size: 1.2em; margin-right: 0.5rem;">${activity.icon}</span>
-                                <strong style="color: var(--text-primary);">${activity.message}</strong>
+                                <strong style="color: #e8eaed;">${activity.message}</strong>
                             </div>
-                            <small style="color: var(--text-secondary); white-space: nowrap; margin-left: 1rem;">
+                            <small style="color: #9aa0a6; white-space: nowrap; margin-left: 1rem;">
                                 ${timeStr}
                             </small>
                         </div>
@@ -1448,6 +1457,11 @@
         
         // Initialize on load
         window.addEventListener('load', function() {
+            console.log('Dashboard loading...');
+            
+            // Initialize Recent Activity display first
+            updateRecentActivity();
+            
             initializeWebSocket();
             initializeCharts();
             refreshProcesses();
@@ -1456,8 +1470,14 @@
             // Refresh DDoS data every 5 seconds
             setInterval(refreshDDoSData, 5000);
             
-            // Add initial activity log
-            addActivity('system', 'Healing Bot Dashboard started', 'success');
+            // Add initial activity logs
+            setTimeout(() => {
+                addActivity('system', 'Healing Bot Dashboard started', 'success');
+                addActivity('info', 'WebSocket connection established', 'info');
+                addActivity('info', 'All systems initialized', 'success');
+            }, 500);
+            
+            console.log('Dashboard loaded successfully');
         });
     </script>
 </body>

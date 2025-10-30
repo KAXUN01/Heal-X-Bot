@@ -1842,10 +1842,17 @@
             }).join('');
             
             // Update pagination controls
-            if (totalPages > 1) {
+            if (totalItems > 0) {
                 document.getElementById('sourceIpsPagination').style.display = 'flex';
-                document.getElementById('sourceIpsControls').innerHTML = 
-                    createPaginationControls(sourceIpsPage, totalPages, 'goToSourceIpsPage');
+                
+                // Only show page navigation if there are multiple pages
+                if (totalPages > 1) {
+                    document.getElementById('sourceIpsControls').innerHTML = 
+                        createPaginationControls(sourceIpsPage, totalPages, 'goToSourceIpsPage');
+                } else {
+                    document.getElementById('sourceIpsControls').innerHTML = '';
+                }
+                
                 updatePaginationInfo('sourceIpsInfo', sourceIpsPage, sourceIpsPageSize, totalItems);
             } else {
                 document.getElementById('sourceIpsPagination').style.display = 'none';
@@ -2309,10 +2316,17 @@
             }).join('');
             
             // Update pagination controls
-            if (totalPages > 1) {
+            if (totalItems > 0) {
                 document.getElementById('blockedIpsPagination').style.display = 'flex';
-                document.getElementById('blockedIpsControls').innerHTML = 
-                    createPaginationControls(blockedIpsPage, totalPages, 'goToBlockedIpsPage');
+                
+                // Only show page navigation if there are multiple pages
+                if (totalPages > 1) {
+                    document.getElementById('blockedIpsControls').innerHTML = 
+                        createPaginationControls(blockedIpsPage, totalPages, 'goToBlockedIpsPage');
+                } else {
+                    document.getElementById('blockedIpsControls').innerHTML = '';
+                }
+                
                 updatePaginationInfo('blockedIpsInfo', blockedIpsPage, blockedIpsPageSize, totalItems);
             } else {
                 document.getElementById('blockedIpsPagination').style.display = 'none';

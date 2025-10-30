@@ -1,39 +1,30 @@
 """
-Unified Healing Bot Dashboard API
-Combines ML Model Monitoring + System Health Management
+Healing Bot Dashboard API
+Comprehensive backend for real-time system monitoring and management
 """
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+import psutil
+import subprocess
 import asyncio
 import json
 import time
-import psutil
-import numpy as np
-import subprocess
 import os
 import sys
-import re
-import signal
-import logging
-import requests
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
-from collections import deque, defaultdict
+from collections import defaultdict, Counter
+import logging
+import re
+import requests
 from pathlib import Path
-from dotenv import load_dotenv
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+import signal
 
-# Load environment variables
-env_path = Path(__file__).parent.parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-app = FastAPI(title="Unified Healing Bot Dashboard")
+# Initialize FastAPI app
+app = FastAPI(title="Healing Bot Dashboard API")
 
 # Add CORS middleware
 app.add_middleware(
@@ -44,14 +35,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-# Prometheus metrics
-dashboard_connections_total = Counter('dashboard_connections_total', 'Total dashboard connections')
-dashboard_websocket_messages_total = Counter('dashboard_websocket_messages_total', 'Total WebSocket messages')
-dashboard_attack_simulations_total = Counter('dashboard_attack_simulations_total', 'Total attack simulations')
-dashboard_response_time_seconds = Histogram('dashboard_response_time_seconds', 'Dashboard response time')
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Global configuration
 CONFIG = {
@@ -63,50 +49,7 @@ CONFIG = {
     "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
 }
 
-# ML Model metrics history
-ml_metrics_history = {
-    'timestamps': deque(maxlen=100),
-    'accuracy': deque(maxlen=100),
-    'precision': deque(maxlen=100),
-    'recall': deque(maxlen=100),
-    'f1_score': deque(maxlen=100),
-    'prediction_time': deque(maxlen=100),
-    'throughput': deque(maxlen=100)
-}
-
-# System metrics history
-system_metrics_history = {
-    'timestamps': deque(maxlen=100),
-    'cpu_usage': deque(maxlen=100),
-    'memory_usage': deque(maxlen=100),
-    'disk_usage': deque(maxlen=100),
-    'network_in': deque(maxlen=100),
-    'network_out': deque(maxlen=100)
-}
-
-# Attack detection statistics
-attack_stats = {
-    'total_detections': 0,
-    'ddos_attacks': 0,
-    'false_positives': 0,
-    'false_negatives': 0,
-    'attack_types': defaultdict(int),
-    'top_source_ips': defaultdict(int),
-    'hourly_attacks': defaultdict(int)
-}
-
-# IP blocking statistics
-blocking_stats = {
-    'total_blocked': 0,
-    'currently_blocked': 0,
-    'auto_blocked': 0,
-    'manual_blocked': 0,
-    'unblocked': 0,
-    'recent_blocks_24h': 0,
-    'blocking_rate': 0.0
-}
-
-# Service cache, SSH attempts, blocked IPs
+# Service status cache
 service_cache = {}
 last_cleanup_time = None
 ssh_attempts = defaultdict(list)
@@ -115,7 +58,7 @@ command_history = []
 log_buffer = []
 
 # ============================================================================
-# Connection Manager
+# WebSocket Connection Management
 # ============================================================================
 
 class ConnectionManager:
@@ -125,143 +68,33 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        dashboard_connections_total.inc()
-        logger.info(f"Client connected. Total: {len(self.active_connections)}")
+        logger.info(f"Client connected. Total connections: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-        logger.info(f"Client disconnected. Total: {len(self.active_connections)}")
+        logger.info(f"Client disconnected. Total connections: {len(self.active_connections)}")
 
     async def broadcast(self, message: dict):
+        """Broadcast message to all connected clients"""
         disconnected = []
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
-                dashboard_websocket_messages_total.inc()
             except:
                 disconnected.append(connection)
-        for conn in disconnected:
-            self.disconnect(conn)
+        
+        for connection in disconnected:
+            self.disconnect(connection)
 
 manager = ConnectionManager()
 
 # ============================================================================
-# ML Model Monitoring
-# ============================================================================
-
-class MLModelMonitor:
-    def __init__(self):
-        self.model_url = os.getenv("MODEL_URL", "http://localhost:8080")
-        self.monitoring_server_url = os.getenv("MONITORING_SERVER_URL", "http://localhost:5000")
-        self.network_analyzer_url = os.getenv("NETWORK_ANALYZER_URL", "http://localhost:8000")
-        self.last_prediction_time = 0
-        self.prediction_count = 0
-        self.start_time = time.time()
-
-    async def get_model_health(self) -> Dict[str, Any]:
-        try:
-            response = requests.get(f"{self.model_url}/health", timeout=5)
-            if response.status_code == 200:
-                return {"status": "healthy", "response_time": response.elapsed.total_seconds()}
-            else:
-                return {"status": "unhealthy", "error": f"HTTP {response.status_code}"}
-        except Exception as e:
-            return {"status": "unreachable", "error": str(e)}
-
-    async def simulate_model_metrics(self) -> Dict[str, Any]:
-        current_time = time.time()
-        
-        # Simulate realistic ML metrics
-        base_accuracy = 0.95
-        accuracy_variation = np.random.normal(0, 0.02)
-        accuracy = max(0.8, min(0.99, base_accuracy + accuracy_variation))
-        
-        precision = max(0.85, min(0.98, accuracy + np.random.normal(0, 0.01)))
-        recall = max(0.88, min(0.97, accuracy + np.random.normal(0, 0.015)))
-        f1_score = 2 * (precision * recall) / (precision + recall)
-        
-        prediction_time = np.random.exponential(50) + 10
-        
-        if current_time - self.last_prediction_time > 0:
-            throughput = 1 / (current_time - self.last_prediction_time)
-        else:
-            throughput = 0
-        
-        self.last_prediction_time = current_time
-        self.prediction_count += 1
-        
-        return {
-            'accuracy': accuracy,
-            'precision': precision,
-            'recall': recall,
-            'f1_score': f1_score,
-            'prediction_time_ms': prediction_time,
-            'throughput': min(throughput, 100),
-            'total_predictions': self.prediction_count,
-            'uptime_hours': (current_time - self.start_time) / 3600
-        }
-
-    async def get_attack_statistics(self) -> Dict[str, Any]:
-        current_hour = datetime.now().hour
-        
-        # Simulate attack detection
-        if np.random.random() < 0.1:
-            attack_types = ['HTTP Flood', 'SYN Flood', 'UDP Flood', 'ICMP Flood', 'Slowloris']
-            attack_type = np.random.choice(attack_types)
-            attack_stats['attack_types'][attack_type] += 1
-            attack_stats['total_detections'] += 1
-            attack_stats['ddos_attacks'] += 1
-            attack_stats['hourly_attacks'][current_hour] += 1
-            
-            source_ip = f"192.168.{np.random.randint(1, 255)}.{np.random.randint(1, 255)}"
-            attack_stats['top_source_ips'][source_ip] += 1
-        
-        return {
-            'total_detections': attack_stats['total_detections'],
-            'ddos_attacks': attack_stats['ddos_attacks'],
-            'false_positives': attack_stats['false_positives'],
-            'false_negatives': attack_stats['false_negatives'],
-            'attack_types': dict(attack_stats['attack_types']),
-            'top_source_ips': dict(list(attack_stats['top_source_ips'].items())[:10]),
-            'hourly_attacks': dict(attack_stats['hourly_attacks']),
-            'detection_rate': attack_stats['total_detections'] / max(1, self.prediction_count) * 100
-        }
-
-    async def get_blocking_statistics(self) -> Dict[str, Any]:
-        try:
-            response = requests.get(f"{self.network_analyzer_url}/blocked-ips/stats", timeout=5)
-            if response.status_code == 200:
-                return response.json().get('statistics', {})
-        except:
-            pass
-        
-        return {
-            'total_blocked': blocking_stats['total_blocked'],
-            'currently_blocked': blocking_stats['currently_blocked'],
-            'auto_blocked': blocking_stats['auto_blocked'],
-            'manual_blocked': blocking_stats['manual_blocked'],
-            'unblocked': blocking_stats['unblocked'],
-            'recent_blocks_24h': blocking_stats['recent_blocks_24h'],
-            'blocking_rate': blocking_stats['blocking_rate']
-        }
-
-    async def get_blocked_ips(self) -> List[Dict[str, Any]]:
-        try:
-            response = requests.get(f"{self.network_analyzer_url}/blocked-ips", timeout=5)
-            if response.status_code == 200:
-                return response.json().get('blocked_ips', [])
-        except:
-            pass
-        return []
-
-ml_monitor = MLModelMonitor()
-
-# ============================================================================
-# System Monitoring
+# System Monitoring Functions
 # ============================================================================
 
 def get_system_metrics() -> Dict[str, Any]:
+    """Get current system metrics"""
     try:
         cpu_percent = psutil.cpu_percent(interval=1)
         memory = psutil.virtual_memory()
@@ -272,21 +105,18 @@ def get_system_metrics() -> Dict[str, Any]:
             "cpu": cpu_percent,
             "memory": memory.percent,
             "disk": disk.percent,
-            "memory_available_gb": memory.available / (1024**3),
-            "disk_free_gb": disk.free / (1024**3),
-            "network_in_mbps": net_io.bytes_recv / (1024**2),
-            "network_out_mbps": net_io.bytes_sent / (1024**2),
+            "network": {
+                "bytes_sent": net_io.bytes_sent,
+                "bytes_recv": net_io.bytes_recv
+            },
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
         logger.error(f"Error getting system metrics: {e}")
         return {}
 
-# ============================================================================
-# Service Management
-# ============================================================================
-
 def check_service_status(service_name: str) -> Dict[str, Any]:
+    """Check if a service is running"""
     try:
         result = subprocess.run(
             ["systemctl", "is-active", service_name],
@@ -301,10 +131,14 @@ def check_service_status(service_name: str) -> Dict[str, Any]:
             "status": "running" if is_active else "stopped",
             "active": is_active
         }
-    except:
+    except subprocess.TimeoutExpired:
+        return {"name": service_name, "status": "timeout", "active": False}
+    except Exception as e:
+        logger.error(f"Error checking service {service_name}: {e}")
         return {"name": service_name, "status": "unknown", "active": False}
 
 def get_all_services_status() -> List[Dict[str, Any]]:
+    """Get status of all monitored services"""
     services = []
     for service in CONFIG["services_to_monitor"]:
         status = check_service_status(service)
@@ -312,8 +146,9 @@ def get_all_services_status() -> List[Dict[str, Any]]:
     return services
 
 def restart_service(service_name: str) -> bool:
+    """Restart a failed service"""
     try:
-        logger.info(f"Restarting service: {service_name}")
+        logger.info(f"Attempting to restart service: {service_name}")
         result = subprocess.run(
             ["sudo", "systemctl", "restart", service_name],
             capture_output=True,
@@ -323,12 +158,14 @@ def restart_service(service_name: str) -> bool:
         
         if result.returncode == 0:
             logger.info(f"Successfully restarted {service_name}")
-            log_event("info", f"Service {service_name} restarted")
+            log_event("info", f"Service {service_name} restarted successfully")
             send_discord_alert(f"✅ Service Restarted: {service_name}")
             return True
-        return False
+        else:
+            logger.error(f"Failed to restart {service_name}: {result.stderr}")
+            return False
     except Exception as e:
-        logger.error(f"Error restarting {service_name}: {e}")
+        logger.error(f"Error restarting service {service_name}: {e}")
         return False
 
 # ============================================================================
@@ -336,6 +173,7 @@ def restart_service(service_name: str) -> bool:
 # ============================================================================
 
 def get_top_processes(limit: int = 10) -> List[Dict[str, Any]]:
+    """Get top processes by CPU and memory usage"""
     try:
         processes = []
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
@@ -351,24 +189,31 @@ def get_top_processes(limit: int = 10) -> List[Dict[str, Any]]:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
         
+        # Sort by CPU usage
         processes.sort(key=lambda x: x['cpu'], reverse=True)
         return processes[:limit]
     except Exception as e:
         logger.error(f"Error getting processes: {e}")
         return []
 
-def kill_process(pid: int) -> bool:
+def kill_resource_hog(pid: int) -> bool:
+    """Kill a process by PID"""
     try:
         proc = psutil.Process(pid)
         proc_name = proc.name()
         proc.terminate()
+        
+        # Wait up to 3 seconds for termination
         proc.wait(timeout=3)
         
         logger.info(f"Killed process {proc_name} (PID: {pid})")
-        log_event("warning", f"Killed process: {proc_name} (PID: {pid})")
-        send_discord_alert(f"💀 Killed Process: {proc_name} (PID: {pid})")
+        log_event("warning", f"Killed resource hog: {proc_name} (PID: {pid})")
+        send_discord_alert(f"💀 Killed Resource Hog: {proc_name} (PID: {pid})")
         return True
+    except psutil.NoSuchProcess:
+        return False
     except psutil.TimeoutExpired:
+        # Force kill if terminate didn't work
         try:
             proc.kill()
             return True
@@ -378,25 +223,48 @@ def kill_process(pid: int) -> bool:
         logger.error(f"Error killing process {pid}: {e}")
         return False
 
+def auto_detect_resource_hogs():
+    """Automatically detect and optionally kill resource hogs"""
+    try:
+        for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+            try:
+                pinfo = proc.info
+                if pinfo['cpu_percent'] > CONFIG['cpu_threshold']:
+                    logger.warning(f"CPU hog detected: {pinfo['name']} ({pinfo['cpu_percent']}%)")
+                    send_discord_alert(f"⚠️ CPU Hog Detected: {pinfo['name']} using {pinfo['cpu_percent']}% CPU")
+                
+                if pinfo['memory_percent'] > CONFIG['memory_threshold']:
+                    logger.warning(f"Memory hog detected: {pinfo['name']} ({pinfo['memory_percent']}%)")
+                    send_discord_alert(f"⚠️ Memory Hog Detected: {pinfo['name']} using {pinfo['memory_percent']}% RAM")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+    except Exception as e:
+        logger.error(f"Error in resource hog detection: {e}")
+
 # ============================================================================
 # SSH Intrusion Detection
 # ============================================================================
 
 def parse_ssh_logs() -> List[Dict[str, Any]]:
+    """Parse SSH logs for failed attempts"""
     ssh_events = []
+    
     try:
+        # Check auth log
         if os.path.exists("/var/log/auth.log"):
             with open("/var/log/auth.log", "r") as f:
-                lines = f.readlines()[-1000:]
+                lines = f.readlines()[-1000:]  # Last 1000 lines
                 
                 for line in lines:
                     if "Failed password" in line:
+                        # Parse IP address
                         match = re.search(r'from (\d+\.\d+\.\d+\.\d+)', line)
                         if match:
                             ip = match.group(1)
                             timestamp = line.split()[0:3]
                             ssh_attempts[ip].append(datetime.now())
                             
+                            # Check if IP should be blocked
                             if len(ssh_attempts[ip]) > 5:
                                 block_ip(ip)
                             
@@ -412,8 +280,10 @@ def parse_ssh_logs() -> List[Dict[str, Any]]:
     return ssh_events
 
 def block_ip(ip: str):
+    """Block an IP address using iptables"""
     if ip in blocked_ips:
         return
+    
     try:
         subprocess.run(
             ["sudo", "iptables", "-A", "INPUT", "-s", ip, "-j", "DROP"],
@@ -421,16 +291,16 @@ def block_ip(ip: str):
             timeout=5
         )
         blocked_ips.add(ip)
-        blocking_stats['total_blocked'] += 1
-        blocking_stats['currently_blocked'] += 1
         logger.warning(f"Blocked IP: {ip}")
-        send_discord_alert(f"🚫 Blocked IP: {ip}")
+        send_discord_alert(f"🚫 Blocked Suspicious IP: {ip}")
     except Exception as e:
         logger.error(f"Error blocking IP {ip}: {e}")
 
 def unblock_ip(ip: str):
+    """Unblock an IP address"""
     if ip not in blocked_ips:
         return
+    
     try:
         subprocess.run(
             ["sudo", "iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"],
@@ -438,8 +308,6 @@ def unblock_ip(ip: str):
             timeout=5
         )
         blocked_ips.remove(ip)
-        blocking_stats['currently_blocked'] -= 1
-        blocking_stats['unblocked'] += 1
         logger.info(f"Unblocked IP: {ip}")
     except Exception as e:
         logger.error(f"Error unblocking IP {ip}: {e}")
@@ -449,10 +317,14 @@ def unblock_ip(ip: str):
 # ============================================================================
 
 def run_disk_cleanup() -> Dict[str, Any]:
+    """Run disk cleanup operations"""
     global last_cleanup_time
+    
     try:
         initial_usage = psutil.disk_usage('/')
+        freed_space = 0
         
+        # Clean temp files
         cleanup_commands = [
             ["sudo", "apt-get", "clean"],
             ["sudo", "apt-get", "autoclean"],
@@ -465,14 +337,27 @@ def run_disk_cleanup() -> Dict[str, Any]:
             except:
                 pass
         
+        # Clean log files
+        log_dirs = ["/var/log", "/tmp"]
+        for log_dir in log_dirs:
+            if os.path.exists(log_dir):
+                try:
+                    subprocess.run(
+                        ["find", log_dir, "-type", "f", "-name", "*.log.*", "-delete"],
+                        capture_output=True,
+                        timeout=30
+                    )
+                except:
+                    pass
+        
         final_usage = psutil.disk_usage('/')
-        freed_space = (initial_usage.used - final_usage.used) / (1024 * 1024)
+        freed_space = (initial_usage.used - final_usage.used) / (1024 * 1024)  # MB
         
         last_cleanup_time = datetime.now()
         
-        logger.info(f"Disk cleanup freed {freed_space:.2f} MB")
+        logger.info(f"Disk cleanup completed. Freed {freed_space:.2f} MB")
         log_event("success", f"Disk cleanup freed {freed_space:.2f} MB")
-        send_discord_alert(f"🧹 Cleanup Complete: Freed {freed_space:.2f} MB")
+        send_discord_alert(f"🧹 Disk Cleanup Complete: Freed {freed_space:.2f} MB")
         
         return {
             "success": True,
@@ -488,12 +373,26 @@ def run_disk_cleanup() -> Dict[str, Any]:
 # ============================================================================
 
 def send_discord_alert(message: str, severity: str = "info"):
+    """Send alert to Discord"""
     if not CONFIG["discord_webhook"]:
         return
     
     try:
-        emoji_map = {"info": "ℹ️", "success": "✅", "warning": "⚠️", "error": "❌", "critical": "🚨"}
-        color_map = {"info": 3447003, "success": 3066993, "warning": 16776960, "error": 15158332, "critical": 10038562}
+        emoji_map = {
+            "info": "ℹ️",
+            "success": "✅",
+            "warning": "⚠️",
+            "error": "❌",
+            "critical": "🚨"
+        }
+        
+        color_map = {
+            "info": 3447003,
+            "success": 3066993,
+            "warning": 16776960,
+            "error": 15158332,
+            "critical": 10038562
+        }
         
         payload = {
             "embeds": [{
@@ -509,87 +408,92 @@ def send_discord_alert(message: str, severity: str = "info"):
         logger.error(f"Error sending Discord alert: {e}")
 
 # ============================================================================
+# AI Log Analysis (TF-IDF)
+# ============================================================================
+
+def analyze_logs_tfidf(logs: List[str]) -> Dict[str, Any]:
+    """Analyze logs using TF-IDF for keyword extraction"""
+    try:
+        from sklearn.feature_extraction.text import TfidfVectorizer
+        
+        if not logs:
+            return {"keywords": [], "anomalies": []}
+        
+        # Create TF-IDF vectorizer
+        vectorizer = TfidfVectorizer(max_features=20, stop_words='english')
+        tfidf_matrix = vectorizer.fit_transform(logs)
+        
+        # Get feature names (keywords)
+        keywords = vectorizer.get_feature_names_out()
+        
+        # Calculate importance scores
+        importance = tfidf_matrix.sum(axis=0).A1
+        keyword_scores = dict(zip(keywords, importance))
+        
+        # Sort by importance
+        sorted_keywords = sorted(keyword_scores.items(), key=lambda x: x[1], reverse=True)
+        
+        # Detect anomalies (error keywords)
+        error_keywords = ['error', 'fail', 'exception', 'critical', 'warning']
+        anomalies = [kw for kw, score in sorted_keywords if any(ek in kw.lower() for ek in error_keywords)]
+        
+        return {
+            "keywords": [{"word": kw, "score": float(score)} for kw, score in sorted_keywords[:10]],
+            "anomalies": anomalies
+        }
+    except Exception as e:
+        logger.error(f"Error in TF-IDF analysis: {e}")
+        return {"keywords": [], "anomalies": []}
+
+# ============================================================================
 # Event Logging
 # ============================================================================
 
 def log_event(level: str, message: str):
+    """Log an event to the buffer"""
     log_buffer.append({
         "level": level,
         "message": message,
         "timestamp": datetime.now().isoformat()
     })
+    
+    # Keep only last 1000 logs
     if len(log_buffer) > 1000:
         log_buffer.pop(0)
 
 # ============================================================================
-# Background Monitoring Loop
+# Background Tasks
 # ============================================================================
 
 async def monitoring_loop():
+    """Main monitoring loop"""
     while True:
         try:
             # Get system metrics
             metrics = get_system_metrics()
-            ml_metrics = await ml_monitor.simulate_model_metrics()
-            attack_stats_data = await ml_monitor.get_attack_statistics()
-            blocking_stats_data = await ml_monitor.get_blocking_statistics()
             
-            # Update histories
-            current_time = datetime.now()
-            ml_metrics_history['timestamps'].append(current_time.isoformat())
-            ml_metrics_history['accuracy'].append(ml_metrics['accuracy'])
-            ml_metrics_history['precision'].append(ml_metrics['precision'])
-            ml_metrics_history['recall'].append(ml_metrics['recall'])
-            ml_metrics_history['f1_score'].append(ml_metrics['f1_score'])
-            ml_metrics_history['prediction_time'].append(ml_metrics['prediction_time_ms'])
-            ml_metrics_history['throughput'].append(ml_metrics['throughput'])
-            
-            system_metrics_history['timestamps'].append(current_time.isoformat())
-            system_metrics_history['cpu_usage'].append(metrics.get('cpu', 0))
-            system_metrics_history['memory_usage'].append(metrics.get('memory', 0))
-            system_metrics_history['disk_usage'].append(metrics.get('disk', 0))
-            system_metrics_history['network_in'].append(metrics.get('network_in_mbps', 0))
-            system_metrics_history['network_out'].append(metrics.get('network_out_mbps', 0))
-            
-            # Check services if auto-restart enabled
+            # Check services
             if CONFIG["auto_restart"]:
                 services = get_all_services_status()
                 for service in services:
                     if not service["active"]:
                         restart_service(service["name"])
             
+            # Check resource hogs
+            auto_detect_resource_hogs()
+            
             # Check disk usage
-            if metrics.get('disk', 0) > CONFIG["disk_threshold"]:
+            disk_usage = psutil.disk_usage('/')
+            if disk_usage.percent > CONFIG["disk_threshold"]:
                 run_disk_cleanup()
             
-            # Broadcast unified data
-            dashboard_data = {
-                'timestamp': current_time.isoformat(),
-                'ml_metrics': ml_metrics,
-                'system_metrics': metrics,
-                'attack_statistics': attack_stats_data,
-                'blocking_statistics': blocking_stats_data,
-                'ml_history': {
-                    'timestamps': list(ml_metrics_history['timestamps']),
-                    'accuracy': list(ml_metrics_history['accuracy']),
-                    'precision': list(ml_metrics_history['precision']),
-                    'recall': list(ml_metrics_history['recall']),
-                    'f1_score': list(ml_metrics_history['f1_score'])
-                },
-                'system_history': {
-                    'timestamps': list(system_metrics_history['timestamps']),
-                    'cpu_usage': list(system_metrics_history['cpu_usage']),
-                    'memory_usage': list(system_metrics_history['memory_usage']),
-                    'disk_usage': list(system_metrics_history['disk_usage'])
-                }
-            }
-            
-            await manager.broadcast(dashboard_data)
+            # Broadcast to connected clients
+            await manager.broadcast(metrics)
             
         except Exception as e:
             logger.error(f"Error in monitoring loop: {e}")
         
-        await asyncio.sleep(2)
+        await asyncio.sleep(2)  # Update every 2 seconds
 
 # ============================================================================
 # API Endpoints
@@ -597,17 +501,20 @@ async def monitoring_loop():
 
 @app.on_event("startup")
 async def startup_event():
+    """Start background tasks"""
     asyncio.create_task(monitoring_loop())
-    logger.info("Unified Dashboard API started")
+    logger.info("Healing Bot Dashboard API started")
 
 @app.get("/")
 async def root():
-    dashboard_path = Path(__file__).parent / "static" / "dashboard.html"
+    """Serve the dashboard"""
+    dashboard_path = Path(__file__).parent.parent / "dashboard" / "static" / "healing-dashboard.html"
     with open(dashboard_path, "r") as f:
         return HTMLResponse(content=f.read())
 
-@app.websocket("/ws")
+@app.websocket("/ws/healing")
 async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for real-time updates"""
     await manager.connect(websocket)
     try:
         while True:
@@ -617,120 +524,68 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.get("/api/health")
 async def health_check():
+    """Health check endpoint"""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 @app.get("/api/metrics")
 async def get_metrics():
+    """Get current system metrics"""
     return get_system_metrics()
-
-@app.get("/api/metrics/ml")
-async def get_ml_metrics():
-    return await ml_monitor.simulate_model_metrics()
-
-@app.get("/api/metrics/system")
-async def get_system_metrics_endpoint():
-    return get_system_metrics()
-
-@app.get("/api/metrics/attacks")
-async def get_attack_metrics():
-    return await ml_monitor.get_attack_statistics()
-
-@app.get("/api/history/ml")
-async def get_ml_history():
-    return {
-        'timestamps': list(ml_metrics_history['timestamps']),
-        'accuracy': list(ml_metrics_history['accuracy']),
-        'precision': list(ml_metrics_history['precision']),
-        'recall': list(ml_metrics_history['recall']),
-        'f1_score': list(ml_metrics_history['f1_score']),
-        'prediction_time': list(ml_metrics_history['prediction_time']),
-        'throughput': list(ml_metrics_history['throughput'])
-    }
-
-@app.get("/api/history/system")
-async def get_system_history():
-    return {
-        'timestamps': list(system_metrics_history['timestamps']),
-        'cpu_usage': list(system_metrics_history['cpu_usage']),
-        'memory_usage': list(system_metrics_history['memory_usage']),
-        'disk_usage': list(system_metrics_history['disk_usage']),
-        'network_in': list(system_metrics_history['network_in']),
-        'network_out': list(system_metrics_history['network_out'])
-    }
-
-@app.get("/api/blocking/stats")
-async def get_blocking_stats():
-    return await ml_monitor.get_blocking_statistics()
-
-@app.get("/api/blocking/ips")
-async def get_blocked_ips_list():
-    return await ml_monitor.get_blocked_ips()
-
-@app.post("/api/blocking/block")
-async def block_ip_endpoint(request: dict):
-    try:
-        ip = request.get('ip')
-        if not ip:
-            return {"error": "IP required"}
-        block_ip(ip)
-        return {"status": "success", "ip": ip}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.post("/api/blocking/unblock")
-async def unblock_ip_endpoint(request: dict):
-    try:
-        ip = request.get('ip')
-        if not ip:
-            return {"error": "IP required"}
-        unblock_ip(ip)
-        return {"status": "success", "ip": ip}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
 
 @app.get("/api/services")
 async def get_services():
+    """Get all services status"""
     return {"services": get_all_services_status()}
 
 @app.post("/api/services/{service_name}/restart")
 async def restart_service_endpoint(service_name: str):
+    """Restart a specific service"""
     success = restart_service(service_name)
     return {"success": success, "service": service_name}
 
 @app.get("/api/processes/top")
 async def get_top_processes_endpoint(limit: int = 10):
+    """Get top processes"""
     return get_top_processes(limit)
 
 @app.post("/api/processes/kill")
 async def kill_process_endpoint(data: dict):
+    """Kill a process by PID"""
     pid = data.get("pid")
     if not pid:
-        return {"error": "PID required"}
-    success = kill_process(pid)
+        raise HTTPException(status_code=400, detail="PID is required")
+    
+    success = kill_resource_hog(pid)
     return {"success": success, "pid": pid}
 
 @app.get("/api/ssh/attempts")
 async def get_ssh_attempts():
+    """Get SSH intrusion attempts"""
     return {"attempts": parse_ssh_logs()}
 
 @app.post("/api/ssh/block")
-async def block_ip_ssh(data: dict):
+async def block_ip_endpoint(data: dict):
+    """Block an IP address"""
     ip = data.get("ip")
     if not ip:
-        return {"error": "IP required"}
+        raise HTTPException(status_code=400, detail="IP is required")
+    
     block_ip(ip)
     return {"success": True, "ip": ip}
 
 @app.post("/api/ssh/unblock")
-async def unblock_ip_ssh(data: dict):
+async def unblock_ip_endpoint(data: dict):
+    """Unblock an IP address"""
     ip = data.get("ip")
     if not ip:
-        return {"error": "IP required"}
+        raise HTTPException(status_code=400, detail="IP is required")
+    
     unblock_ip(ip)
     return {"success": True, "ip": ip}
 
 @app.get("/api/disk/status")
 async def get_disk_status():
+    """Get disk usage status"""
     disk = psutil.disk_usage('/')
     return {
         "total": disk.total,
@@ -742,78 +597,128 @@ async def get_disk_status():
 
 @app.post("/api/disk/cleanup")
 async def cleanup_disk_endpoint():
-    return run_disk_cleanup()
+    """Run disk cleanup"""
+    result = run_disk_cleanup()
+    return result
 
 @app.post("/api/discord/test")
 async def test_discord_endpoint(data: dict):
+    """Test Discord webhook"""
     webhook = data.get("webhook")
     if webhook:
         CONFIG["discord_webhook"] = webhook
-    send_discord_alert("Test notification from Healing Bot", "info")
+    
+    send_discord_alert("Test notification from Healing Bot Dashboard", "info")
     return {"success": True}
 
 @app.post("/api/discord/configure")
 async def configure_discord(data: dict):
+    """Configure Discord webhook"""
     CONFIG["discord_webhook"] = data.get("webhook", "")
     return {"success": True}
 
 @app.get("/api/logs")
 async def get_logs(limit: int = 100):
+    """Get recent logs"""
     return {"logs": log_buffer[-limit:]}
+
+@app.post("/api/logs/analyze")
+async def analyze_logs_endpoint(data: dict):
+    """Analyze logs with AI (TF-IDF)"""
+    query = data.get("query", "")
+    logs = [log["message"] for log in log_buffer]
+    
+    analysis = analyze_logs_tfidf(logs)
+    
+    # Simple explanation based on query
+    explanation = f"Analysis of {len(logs)} log entries:\n"
+    explanation += f"Top keywords: {', '.join([kw['word'] for kw in analysis['keywords'][:5]])}\n"
+    
+    if analysis['anomalies']:
+        explanation += f"⚠️ Anomalies detected: {', '.join(analysis['anomalies'])}"
+    else:
+        explanation += "✅ No anomalies detected"
+    
+    return {"explanation": explanation, "analysis": analysis}
 
 @app.post("/api/cli/execute")
 async def execute_cli_endpoint(data: dict):
+    """Execute CLI command"""
     command = data.get("command", "")
+    
     if not command:
-        return {"error": "No command"}
+        return {"error": "No command provided"}
     
-    command_history.append({"command": command, "timestamp": datetime.now().isoformat()})
+    # Add to history
+    command_history.append({
+        "command": command,
+        "timestamp": datetime.now().isoformat()
+    })
     
+    # Security: whitelist allowed commands
     allowed_commands = ["help", "status", "services", "processes", "disk", "logs", "restart"]
     cmd_parts = command.split()
     
     if not cmd_parts or cmd_parts[0] not in allowed_commands:
         return {"error": "Command not allowed"}
     
+    # Execute command
     try:
         if cmd_parts[0] == "help":
-            output = "Available: help, status, services, processes, disk, logs, restart <service>"
+            output = """Available commands:
+- help: Show this help
+- status: Show system status
+- services: List all services
+- processes: Show top processes
+- disk: Show disk usage
+- logs: Show recent logs
+- restart <service>: Restart a service"""
+        
         elif cmd_parts[0] == "status":
             metrics = get_system_metrics()
             output = f"CPU: {metrics['cpu']}%\nMemory: {metrics['memory']}%\nDisk: {metrics['disk']}%"
+        
         elif cmd_parts[0] == "services":
             services = get_all_services_status()
             output = "\n".join([f"{s['name']}: {s['status']}" for s in services])
+        
         elif cmd_parts[0] == "processes":
             processes = get_top_processes(5)
             output = "\n".join([f"{p['name']} - CPU: {p['cpu']}%, MEM: {p['memory']}%" for p in processes])
+        
         elif cmd_parts[0] == "disk":
             disk = psutil.disk_usage('/')
             output = f"Total: {disk.total // (1024**3)} GB\nUsed: {disk.used // (1024**3)} GB\nFree: {disk.free // (1024**3)} GB\nPercent: {disk.percent}%"
+        
         elif cmd_parts[0] == "logs":
             output = "\n".join([f"[{log['level']}] {log['message']}" for log in log_buffer[-10:]])
+        
         elif cmd_parts[0] == "restart" and len(cmd_parts) > 1:
             service = cmd_parts[1]
             success = restart_service(service)
             output = f"Service {service} {'restarted successfully' if success else 'failed to restart'}"
+        
         else:
             output = "Invalid command"
         
         return {"output": output, "command": command}
+    
     except Exception as e:
         return {"error": str(e)}
 
 @app.get("/api/config")
 async def get_config():
+    """Get current configuration"""
     return CONFIG
 
 @app.post("/api/config")
 async def update_config(data: dict):
+    """Update configuration"""
     CONFIG.update(data)
     return {"success": True, "config": CONFIG}
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("DASHBOARD_PORT", 3001))
+    port = int(os.getenv("HEALING_DASHBOARD_PORT", 5001))
     uvicorn.run(app, host="0.0.0.0", port=port)
 

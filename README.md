@@ -39,7 +39,38 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
 
 ## 🚀 Quick Start
 
-### 🎯 **NEW: Unified Launcher (Recommended)**
+### 🛡️ **NEW: Unified Dashboard (Recommended)**
+
+**Complete ML Monitoring + System Healing Control Center:**
+
+```bash
+# Start the unified dashboard (combines both systems)
+./start-unified-dashboard.sh
+
+# Access at http://localhost:3001
+```
+
+**Combined Features:**
+- 📊 ML Model Performance Metrics
+- 🎯 DDoS Attack Detection  
+- 🚫 IP Blocking Management
+- ⚙️ Service Auto-Restart
+- 🔍 Resource Hog Detection
+- 🔐 SSH Intrusion Detection
+- 🧹 Automated Disk Cleanup
+- 🔔 Discord Alerts (replacing Slack)
+- 🤖 AI Log Analysis (TF-IDF)
+- ⚡ CLI Terminal Integration
+
+**Two Dashboards in One:**
+- **ML Monitoring**: `http://localhost:3001` (Original features)
+- **Healing Dashboard**: `http://localhost:3001/static/healing-dashboard.html` (New features)
+
+📖 **[Unified Guide](docs/guides/UNIFIED_DASHBOARD_GUIDE.md)** | 🧪 **Test**: `python3 test-unified-dashboard.py`
+
+---
+
+### 🎯 **Alternative: Unified Launcher**
 
 **Single Command to Run Everything:**
 

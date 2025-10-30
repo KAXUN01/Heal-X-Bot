@@ -1659,16 +1659,11 @@
             }
             
             if (data.system_metrics) {
-                // Handle both old (cpu_usage) and new (cpu) formats
-                const cpuValue = data.system_metrics.cpu || data.system_metrics.cpu_usage || 0;
-                const memValue = data.system_metrics.memory || data.system_metrics.memory_usage || 0;
-                const diskValue = data.system_metrics.disk || data.system_metrics.disk_usage || 0;
-                
-                document.getElementById('cpuUsage').textContent = cpuValue.toFixed(1) + '%';
-                document.getElementById('memoryUsage').textContent = memValue.toFixed(1) + '%';
-                document.getElementById('diskUsage').textContent = diskValue.toFixed(1) + '%';
-                document.getElementById('networkIn').textContent = (data.system_metrics.network_in_mbps || 0).toFixed(2) + ' MB/s';
-                document.getElementById('networkOut').textContent = (data.system_metrics.network_out_mbps || 0).toFixed(2) + ' MB/s';
+                document.getElementById('cpuUsage').textContent = data.system_metrics.cpu_usage.toFixed(1) + '%';
+                document.getElementById('memoryUsage').textContent = data.system_metrics.memory_usage.toFixed(1) + '%';
+                document.getElementById('diskUsage').textContent = data.system_metrics.disk_usage.toFixed(1) + '%';
+                document.getElementById('networkIn').textContent = data.system_metrics.network_in_mbps.toFixed(2) + ' MB/s';
+                document.getElementById('networkOut').textContent = data.system_metrics.network_out_mbps.toFixed(2) + ' MB/s';
                 
                 // Update uptime
                 if (data.ml_metrics && data.ml_metrics.uptime_hours) {
@@ -1720,8 +1715,7 @@
             
             // System status
             const systemStatus = document.getElementById('systemStatus');
-            const cpuUsage = data.system_metrics?.cpu || data.system_metrics?.cpu_usage || 0;
-            if (data.system_metrics && cpuUsage < 80) {
+            if (data.system_metrics && data.system_metrics.cpu_usage < 80) {
                 systemStatus.className = 'status-dot status-online';
             } else {
                 systemStatus.className = 'status-dot status-warning';
@@ -1729,8 +1723,7 @@
             
             // Network status
             const networkStatus = document.getElementById('networkStatus');
-            const networkIn = data.system_metrics?.network_in_mbps || 0;
-            if (data.system_metrics && networkIn > 0) {
+            if (data.system_metrics && data.system_metrics.network_in_mbps > 0) {
                 networkStatus.className = 'status-dot status-online';
             } else {
                 networkStatus.className = 'status-dot status-offline';
@@ -1759,14 +1752,10 @@
             if (data.system_history) {
                 // Update System Resources Chart
                 const latest = data.system_history;
-                const cpuArray = latest.cpu_usage || [];
-                const memArray = latest.memory_usage || [];
-                const diskArray = latest.disk_usage || [];
-                
                 systemResourcesChart.data.datasets[0].data = [
-                    cpuArray[cpuArray.length - 1] || 0,
-                    memArray[memArray.length - 1] || 0,
-                    diskArray[diskArray.length - 1] || 0
+                    latest.cpu_usage[latest.cpu_usage.length - 1] || 0,
+                    latest.memory_usage[latest.memory_usage.length - 1] || 0,
+                    latest.disk_usage[latest.disk_usage.length - 1] || 0
                 ];
                 systemResourcesChart.update('none');
             }

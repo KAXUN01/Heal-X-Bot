@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛡️ Healing Bot Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0f1419;
+            --bg-secondary: #1a1f29;
+            --bg-tertiary: #242b38;
+            --text-primary: #e8eaed;
+            --text-secondary: #9aa0a6;
+            --accent-green: #34d399;
+            --accent-yellow: #fbbf24;
+            --accent-red: #ef4444;
+            --accent-blue: #3b82f6;
+            --accent-purple: #8b5cf6;
+            --border-color: #374151;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 2px solid var(--border-color);
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .status-badge.healthy {
+            background: rgba(52, 211, 153, 0.2);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+
+        .status-badge.warning {
+            background: rgba(251, 191, 36, 0.2);
+            color: var(--accent-yellow);
+            border: 1px solid var(--accent-yellow);
+        }
+
+        .status-badge.critical {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .card-title {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 0.5rem 0;
+        }
+
+        .card-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 2px solid var(--border-color);
+            overflow-x: auto;
+        }
+
+        .tab {
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 1rem;
+            font-weight: 600;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+            white-space: nowrap;
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .chart-container {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .log-container {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 1.5rem;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+
+        .log-entry {
+            padding: 0.5rem;
+            border-left: 3px solid var(--border-color);
+            margin-bottom: 0.5rem;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+        }
+
+        .log-entry.info { border-left-color: var(--accent-blue); }
+        .log-entry.warning { border-left-color: var(--accent-yellow); }
+        .log-entry.error { border-left-color: var(--accent-red); }
+        .log-entry.success { border-left-color: var(--accent-green); }
+
+        .service-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1rem;
+        }
+
+        .service-item {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .service-status {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .service-status.running { background: var(--accent-green); box-shadow: 0 0 10px var(--accent-green); }
+        .service-status.stopped { background: var(--accent-red); }
+        .service-status.restarting { background: var(--accent-yellow); animation: pulse 1s infinite; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            transform: scale(1.05);
+        }
+
+        .btn-danger {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .btn-success {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .btn-warning {
+            background: var(--accent-yellow);
+            color: var(--bg-primary);
+        }
+
+        .btn-sm {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.8rem;
+        }
+
+        .process-list {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .process-item {
+            display: grid;
+            grid-template-columns: 3fr 1fr 1fr 1fr auto;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            align-items: center;
+        }
+
+        .process-header {
+            display: grid;
+            grid-template-columns: 3fr 1fr 1fr 1fr auto;
+            gap: 1rem;
+            padding: 0.5rem 1rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple));
+            transition: width 0.3s;
+        }
+
+        .filter-bar {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.75rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            transition: 0.4s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: var(--text-secondary);
+            transition: 0.4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: var(--accent-green);
+            border-color: var(--accent-green);
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+            background-color: white;
+        }
+
+        .alert-config {
+            background: var(--bg-tertiary);
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 1rem;
+        }
+
+        .alert-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-blue);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .metric-gauge {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            margin: 0 auto;
+        }
+
+        .cli-terminal {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 1.5rem;
+            font-family: 'Courier New', monospace;
+        }
+
+        .cli-input {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .cli-output {
+            background: var(--bg-secondary);
+            padding: 1rem;
+            border-radius: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+        }
+
+        .ip-list {
+            background: var(--bg-tertiary);
+            padding: 1.5rem;
+            border-radius: 12px;
+        }
+
+        .ip-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+
+        .badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-danger { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+        .badge-warning { background: rgba(251, 191, 36, 0.2); color: var(--accent-yellow); }
+        .badge-info { background: rgba(59, 130, 246, 0.2); color: var(--accent-blue); }
+
+        .scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .scrollbar::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+            border-radius: 4px;
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+
+        .scrollbar::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-blue);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🛡️ Healing Bot Dashboard</h1>
+        <div class="status-badge healthy" id="systemStatus">
+            <span id="statusIcon">🟢</span>
+            <span id="statusText">System Healthy</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Summary Cards -->
+        <div class="summary-cards">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">CPU Usage</span>
+                    <span style="font-size: 1.5rem;">🔥</span>
+                </div>
+                <div class="card-value" id="cpuUsage">0%</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="cpuProgress" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Memory Usage</span>
+                    <span style="font-size: 1.5rem;">💾</span>
+                </div>
+                <div class="card-value" id="memUsage">0%</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="memProgress" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Disk Usage</span>
+                    <span style="font-size: 1.5rem;">💿</span>
+                </div>
+                <div class="card-value" id="diskUsage">0%</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="diskProgress" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Running Services</span>
+                    <span style="font-size: 1.5rem;">⚙️</span>
+                </div>
+                <div class="card-value" id="serviceCount">0</div>
+                <div class="card-subtitle">Active / Total</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Active Alerts</span>
+                    <span style="font-size: 1.5rem;">🚨</span>
+                </div>
+                <div class="card-value" id="alertCount">0</div>
+                <div class="card-subtitle">Requires attention</div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">Last Cleanup</span>
+                    <span style="font-size: 1.5rem;">🧹</span>
+                </div>
+                <div class="card-value" style="font-size: 1.2rem;" id="lastCleanup">Never</div>
+                <div class="card-subtitle">Freed space</div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('overview')">📊 Overview</button>
+            <button class="tab" onclick="switchTab('ddos')">🛡️ DDoS Detection</button>
+            <button class="tab" onclick="switchTab('services')">⚙️ Services</button>
+            <button class="tab" onclick="switchTab('processes')">🔍 Processes</button>
+            <button class="tab" onclick="switchTab('ssh')">🔐 SSH Security</button>
+            <button class="tab" onclick="switchTab('disk')">💿 Disk Management</button>
+            <button class="tab" onclick="switchTab('logs')">📝 Logs & AI</button>
+            <button class="tab" onclick="switchTab('alerts')">🔔 Alerts</button>
+            <button class="tab" onclick="switchTab('cli')">⚡ CLI Terminal</button>
+        </div>
+
+        <!-- Tab Content -->
+        <div id="overview" class="tab-content active">
+            <h2 style="margin-bottom: 1.5rem;">System Overview</h2>
+            <div class="chart-container">
+                <h3 style="margin-bottom: 1rem;">Real-time System Metrics</h3>
+                <div style="position: relative; height: 300px; width: 100%;">
+                    <canvas id="metricsChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="log-container scrollbar">
+                <h3 style="margin-bottom: 1rem;">Recent Activity</h3>
+                <div id="recentActivity"></div>
+            </div>
+        </div>
+
+        <div id="ddos" class="tab-content">
+            <h2 style="margin-bottom: 1.5rem;">🛡️ DDoS Attack Detection & ML Model Performance</h2>
+            
+            <!-- Metric Cards -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Total Detections -->
+                <div class="card" style="border-left: 4px solid #ef4444;">
+                    <h4 style="margin-top: 0;">Total Detections</h4>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: #ef4444;" id="ddos_totalDetections">0</div>
+                    <small style="color: var(--text-secondary);">Active monitoring</small>
+                </div>
+                
+                <!-- DDoS Attacks -->
+                <div class="card" style="border-left: 4px solid #f59e0b;">
+                    <h4 style="margin-top: 0;">DDoS Attacks</h4>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: #f59e0b;" id="ddos_attacks">0</div>
+                    <small style="color: var(--text-secondary);">Confirmed threats</small>
+                </div>
+                
+                <!-- False Positives -->
+                <div class="card" style="border-left: 4px solid #8b5cf6;">
+                    <h4 style="margin-top: 0;">False Positives</h4>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: #8b5cf6;" id="ddos_falsePositives">0</div>
+                    <small style="color: var(--text-secondary);">Low error rate</small>
+                </div>
+                
+                <!-- Detection Rate -->
+                <div class="card" style="border-left: 4px solid #10b981;">
+                    <h4 style="margin-top: 0;">Detection Rate</h4>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: #10b981;" id="ddos_detectionRate">0%</div>
+                    <small style="color: var(--text-secondary);">High accuracy</small>
+                </div>
+            </div>
+            
+            <!-- ML Model Performance -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="card">
+                    <h5>Accuracy</h5>
+                    <div style="font-size: 2rem; font-weight: bold; color: #10b981;" id="ml_accuracy">0%</div>
+                </div>
+                <div class="card">
+                    <h5>Precision</h5>
+                    <div style="font-size: 2rem; font-weight: bold; color: #3b82f6;" id="ml_precision">0%</div>
+                </div>
+                <div class="card">
+                    <h5>Recall</h5>
+                    <div style="font-size: 2rem; font-weight: bold; color: #f59e0b;" id="ml_recall">0%</div>
+                </div>
+                <div class="card">
+                    <h5>F1 Score</h5>
+                    <div style="font-size: 2rem; font-weight: bold; color: #ef4444;" id="ml_f1score">0%</div>
+                </div>
+                <div class="card">
+                    <h5>Prediction Time</h5>
+                    <div style="font-size: 2rem; font-weight: bold; color: #8b5cf6;" id="ml_predictionTime">0ms</div>
+                </div>
+                <div class="card">
+                    <h5>Throughput</h5>
+                    <div style="font-size: 2rem; font-weight: bold; color: #ec4899;" id="ml_throughput">0/s</div>
+                </div>
+            </div>
+            
+            <!-- Charts -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="chart-container">
+                    <h3>ML Performance Metrics</h3>
+                    <div style="position: relative; height: 300px; width: 100%;">
+                        <canvas id="mlPerformanceChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-container">
+                    <h3>Attack Types Distribution</h3>
+                    <div style="position: relative; height: 300px; width: 100%;">
+                        <canvas id="attackTypesChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Top Source IPs Table -->
+            <div class="card">
+                <h3 style="margin-top: 0;">Top Source IPs</h3>
+                <div style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid var(--border-color);">
+                                <th style="padding: 0.75rem; text-align: left;">IP Address</th>
+                                <th style="padding: 0.75rem; text-align: left;">Attack Count</th>
+                                <th style="padding: 0.75rem; text-align: left;">Last Seen</th>
+                                <th style="padding: 0.75rem; text-align: left;">Threat Level</th>
+                                <th style="padding: 0.75rem; text-align: left;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sourceIpsTable" style="font-family: 'Courier New', monospace;">
+                            <tr>
+                                <td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                                    Loading threat data...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="services" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2>Service Management</h2>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="autoRestartToggle" checked>
+                    <span class="toggle-slider"></span>
+                </label>
+                <span style="margin-left: 0.5rem;">Auto-Restart</span>
+            </div>
+            
+            <div class="service-list" id="serviceList"></div>
+        </div>
+
+        <div id="processes" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2>Resource Hog Detection</h2>
+                <div style="display: flex; gap: 1rem;">
+                    <button class="btn btn-warning btn-sm" onclick="refreshProcesses()">🔄 Refresh</button>
+                    <button class="btn btn-primary btn-sm" onclick="openThresholdConfig()">⚙️ Configure</button>
+                </div>
+            </div>
+            
+            <div class="process-list scrollbar">
+                <div class="process-header">
+                    <span>Process Name</span>
+                    <span>CPU %</span>
+                    <span>Memory %</span>
+                    <span>PID</span>
+                    <span>Actions</span>
+                </div>
+                <div id="processList"></div>
+            </div>
+        </div>
+
+        <div id="ssh" class="tab-content">
+            <h2 style="margin-bottom: 1.5rem;">SSH Intrusion Detection</h2>
+            
+            <div class="filter-bar">
+                <input type="text" class="search-input" placeholder="Search by IP or location..." id="sshSearch">
+                <button class="btn btn-primary" onclick="refreshSSHLogs()">🔄 Refresh</button>
+                <button class="btn btn-danger" onclick="clearBlockedIPs()">🚫 Clear Blocked IPs</button>
+            </div>
+            
+            <div class="ip-list scrollbar" id="sshList"></div>
+        </div>
+
+        <div id="disk" class="tab-content">
+            <h2 style="margin-bottom: 1.5rem;">Disk Cleanup Management</h2>
+            
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <h3>Cleanup Configuration</h3>
+                <div style="margin-top: 1rem;">
+                    <label>Disk Usage Threshold: <span id="diskThreshold">80</span>%</label>
+                    <input type="range" min="50" max="95" value="80" id="diskThresholdSlider" 
+                           style="width: 100%; margin: 1rem 0;"
+                           oninput="document.getElementById('diskThreshold').textContent = this.value">
+                </div>
+                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+                    <button class="btn btn-primary" onclick="saveCleanupConfig()">💾 Save Config</button>
+                    <button class="btn btn-success" onclick="runCleanup()">🧹 Run Cleanup Now</button>
+                    <button class="btn btn-warning" onclick="scheduleCleanup()">⏰ Schedule</button>
+                </div>
+            </div>
+            
+            <div class="log-container scrollbar" id="cleanupLogs"></div>
+        </div>
+
+        <div id="logs" class="tab-content">
+            <h2 style="margin-bottom: 1.5rem;">Logs & AI Analysis</h2>
+            
+            <div class="filter-bar">
+                <input type="text" class="search-input" placeholder="Search logs or ask AI to explain..." id="logSearch">
+                <select class="search-input" style="flex: 0 0 150px;" id="logLevel">
+                    <option value="all">All Levels</option>
+                    <option value="info">Info</option>
+                    <option value="warning">Warning</option>
+                    <option value="error">Error</option>
+                </select>
+                <button class="btn btn-primary" onclick="analyzeLogsAI()">🤖 AI Analysis</button>
+            </div>
+            
+            <div class="chart-container" style="margin-bottom: 1.5rem;">
+                <h3>Log Keyword Frequency (TF-IDF)</h3>
+                <canvas id="tfidfChart" width="400" height="100"></canvas>
+            </div>
+            
+            <div class="log-container scrollbar" id="logViewer"></div>
+        </div>
+
+        <div id="alerts" class="tab-content">
+            <h2 style="margin-bottom: 1.5rem;">Discord Alert Configuration</h2>
+            
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <h3>Discord Webhook</h3>
+                <input type="text" class="search-input" placeholder="Discord Webhook URL" 
+                       id="discordWebhook" style="margin: 1rem 0;">
+                <button class="btn btn-primary" onclick="testDiscordAlert()">🔔 Test Notification</button>
+            </div>
+            
+            <div class="alert-config">
+                <h3 style="margin-bottom: 1rem;">Alert Modules</h3>
+                <div id="alertModules"></div>
+            </div>
+            
+            <div class="card">
+                <h3>Recent Alerts</h3>
+                <div class="log-container scrollbar" id="recentAlerts"></div>
+            </div>
+        </div>
+
+        <div id="cli" class="tab-content">
+            <h2 style="margin-bottom: 1.5rem;">CLI Terminal Integration</h2>
+            
+            <div class="cli-terminal">
+                <div class="cli-input">
+                    <input type="text" class="search-input" placeholder="Enter command..." 
+                           id="cliCommand" onkeypress="if(event.key==='Enter') executeCLI()">
+                    <button class="btn btn-primary" onclick="executeCLI()">▶️ Execute</button>
+                </div>
+                
+                <div class="cli-output scrollbar" id="cliOutput">
+                    <div style="color: var(--accent-green);">$ Healing Bot CLI Ready</div>
+                    <div style="color: var(--text-secondary);">Type 'help' for available commands</div>
+                </div>
+            </div>
+            
+            <div class="card" style="margin-top: 1.5rem;">
+                <h3>Command History</h3>
+                <div id="cliHistory" style="max-height: 200px; overflow-y: auto;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // WebSocket connection for real-time updates
+        let ws = null;
+        let metricsChart, tfidfChart, mlPerformanceChart, attackTypesChart;
+        
+        // Recent Activity tracking
+        let recentActivities = [];
+        const MAX_ACTIVITIES = 50;
+        
+        function initializeWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws/healing`);
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                updateDashboard(data);
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = function() {
+                console.log('WebSocket closed, reconnecting...');
+                setTimeout(initializeWebSocket, 3000);
+            };
+        }
+        
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tabName).classList.add('active');
+        }
+        
+        function updateDashboard(data) {
+            // Update system metrics
+            if (data.cpu !== undefined) {
+                document.getElementById('cpuUsage').textContent = data.cpu.toFixed(1) + '%';
+                document.getElementById('cpuProgress').style.width = data.cpu + '%';
+            }
+            
+            if (data.memory !== undefined) {
+                document.getElementById('memUsage').textContent = data.memory.toFixed(1) + '%';
+                document.getElementById('memProgress').style.width = data.memory + '%';
+            }
+            
+            if (data.disk !== undefined) {
+                document.getElementById('diskUsage').textContent = data.disk.toFixed(1) + '%';
+                document.getElementById('diskProgress').style.width = data.disk + '%';
+            }
+            
+            // Update chart with new data
+            updateChart(data);
+            
+            // Update system status
+            updateSystemStatus(data);
+            
+            // Add activity based on system changes
+            trackSystemActivity(data);
+        }
+        
+        function updateChart(data) {
+            if (!metricsChart || !data.cpu || !data.memory) return;
+            
+            const now = new Date().toLocaleTimeString();
+            
+            // Add new data point
+            metricsChart.data.labels.push(now);
+            metricsChart.data.datasets[0].data.push(data.cpu);
+            metricsChart.data.datasets[1].data.push(data.memory);
+            
+            // Keep only last 20 data points to prevent chart from growing
+            if (metricsChart.data.labels.length > 20) {
+                metricsChart.data.labels.shift();
+                metricsChart.data.datasets[0].data.shift();
+                metricsChart.data.datasets[1].data.shift();
+            }
+            
+            // Update chart without animation to prevent height issues
+            metricsChart.update('none');
+        }
+        
+        function updateSystemStatus(data) {
+            const statusBadge = document.getElementById('systemStatus');
+            const statusIcon = document.getElementById('statusIcon');
+            const statusText = document.getElementById('statusText');
+            
+            const maxMetric = Math.max(data.cpu || 0, data.memory || 0, data.disk || 0);
+            
+            if (maxMetric > 90) {
+                statusBadge.className = 'status-badge critical';
+                statusIcon.textContent = '🔴';
+                statusText.textContent = 'Critical';
+            } else if (maxMetric > 75) {
+                statusBadge.className = 'status-badge warning';
+                statusIcon.textContent = '🟡';
+                statusText.textContent = 'Warning';
+            } else {
+                statusBadge.className = 'status-badge healthy';
+                statusIcon.textContent = '🟢';
+                statusText.textContent = 'Healthy';
+            }
+        }
+        
+        // Recent Activity Functions
+        function addActivity(type, message, severity = 'info') {
+            const activity = {
+                timestamp: new Date(),
+                type: type,
+                message: message,
+                severity: severity,
+                icon: getActivityIcon(type, severity)
+            };
+            
+            recentActivities.unshift(activity);
+            
+            // Keep only the last MAX_ACTIVITIES
+            if (recentActivities.length > MAX_ACTIVITIES) {
+                recentActivities = recentActivities.slice(0, MAX_ACTIVITIES);
+            }
+            
+            updateRecentActivity();
+        }
+        
+        function getActivityIcon(type, severity) {
+            const icons = {
+                'system': '🖥️',
+                'service': '⚙️',
+                'process': '💀',
+                'ssh': '🔐',
+                'disk': '🧹',
+                'alert': '🔔',
+                'network': '🌐',
+                'info': 'ℹ️',
+                'success': '✅',
+                'warning': '⚠️',
+                'error': '❌',
+                'critical': '🚨'
+            };
+            
+            return icons[type] || icons[severity] || 'ℹ️';
+        }
+        
+        function updateRecentActivity() {
+            const container = document.getElementById('recentActivity');
+            if (!container) return;
+            
+            if (recentActivities.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        <p>No recent activity</p>
+                        <small>System events will appear here</small>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = recentActivities.map(activity => {
+                const timeStr = activity.timestamp.toLocaleTimeString();
+                const severityClass = activity.severity === 'critical' ? 'critical' : 
+                                     activity.severity === 'error' ? 'error' :
+                                     activity.severity === 'warning' ? 'warning' :
+                                     activity.severity === 'success' ? 'success' : 'info';
+                
+                return `
+                    <div class="log-entry" style="border-left-color: var(--${severityClass});">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div style="flex: 1;">
+                                <span style="font-size: 1.2em; margin-right: 0.5rem;">${activity.icon}</span>
+                                <strong style="color: var(--text-primary);">${activity.message}</strong>
+                            </div>
+                            <small style="color: var(--text-secondary); white-space: nowrap; margin-left: 1rem;">
+                                ${timeStr}
+                            </small>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Track system activity changes
+        let lastCpuStatus = null;
+        let lastMemoryStatus = null;
+        let lastDiskStatus = null;
+        
+        function trackSystemActivity(data) {
+            // Track CPU status changes
+            if (data.cpu !== undefined) {
+                const cpuStatus = data.cpu > 90 ? 'critical' : data.cpu > 75 ? 'warning' : 'normal';
+                if (lastCpuStatus && lastCpuStatus !== cpuStatus && cpuStatus !== 'normal') {
+                    const severity = cpuStatus === 'critical' ? 'critical' : 'warning';
+                    addActivity('system', `CPU usage ${cpuStatus}: ${data.cpu.toFixed(1)}%`, severity);
+                }
+                lastCpuStatus = cpuStatus;
+            }
+            
+            // Track Memory status changes
+            if (data.memory !== undefined) {
+                const memStatus = data.memory > 90 ? 'critical' : data.memory > 75 ? 'warning' : 'normal';
+                if (lastMemoryStatus && lastMemoryStatus !== memStatus && memStatus !== 'normal') {
+                    const severity = memStatus === 'critical' ? 'critical' : 'warning';
+                    addActivity('system', `Memory usage ${memStatus}: ${data.memory.toFixed(1)}%`, severity);
+                }
+                lastMemoryStatus = memStatus;
+            }
+            
+            // Track Disk status changes
+            if (data.disk !== undefined) {
+                const diskStatus = data.disk > 90 ? 'critical' : data.disk > 75 ? 'warning' : 'normal';
+                if (lastDiskStatus && lastDiskStatus !== diskStatus && diskStatus !== 'normal') {
+                    const severity = diskStatus === 'critical' ? 'critical' : 'warning';
+                    addActivity('disk', `Disk usage ${diskStatus}: ${data.disk.toFixed(1)}%`, severity);
+                }
+                lastDiskStatus = diskStatus;
+            }
+        }
+        
+        // Initialize charts
+        function initializeCharts() {
+            // Destroy existing chart if it exists to prevent memory leaks
+            if (metricsChart) {
+                metricsChart.destroy();
+            }
+            
+            const canvas = document.getElementById('metricsChart');
+            if (!canvas) {
+                console.error('Canvas element not found');
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            metricsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'CPU %',
+                        data: [],
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }, {
+                        label: 'Memory %',
+                        data: [],
+                        borderColor: '#8b5cf6',
+                        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 0 // Disable animations to prevent rendering issues
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: { 
+                                color: '#e8eaed',
+                                padding: 15
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { 
+                                color: '#9aa0a6',
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            },
+                            grid: { color: '#374151' }
+                        },
+                        x: {
+                            ticks: { 
+                                color: '#9aa0a6',
+                                maxTicksLimit: 10
+                            },
+                            grid: { color: '#374151' }
+                        }
+                    }
+                }
+            });
+            
+            // Initialize ML Performance Chart
+            if (mlPerformanceChart) mlPerformanceChart.destroy();
+            const mlCanvas = document.getElementById('mlPerformanceChart');
+            if (mlCanvas) {
+                const mlCtx = mlCanvas.getContext('2d');
+                mlPerformanceChart = new Chart(mlCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Accuracy',
+                            data: [],
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }, {
+                            label: 'Precision',
+                            data: [],
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }, {
+                            label: 'Recall',
+                            data: [],
+                            borderColor: '#f59e0b',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }, {
+                            label: 'F1 Score',
+                            data: [],
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 0 },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: { color: '#e8eaed', padding: 10 }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 1,
+                                ticks: {
+                                    color: '#9aa0a6',
+                                    callback: function(value) {
+                                        return (value * 100).toFixed(0) + '%';
+                                    }
+                                },
+                                grid: { color: '#374151' }
+                            },
+                            x: {
+                                ticks: {
+                                    color: '#9aa0a6',
+                                    maxTicksLimit: 10
+                                },
+                                grid: { color: '#374151' }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Initialize Attack Types Chart
+            if (attackTypesChart) attackTypesChart.destroy();
+            const attackCanvas = document.getElementById('attackTypesChart');
+            if (attackCanvas) {
+                const attackCtx = attackCanvas.getContext('2d');
+                attackTypesChart = new Chart(attackCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            data: [],
+                            backgroundColor: [
+                                '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57',
+                                '#ff9ff3', '#54a0ff', '#48dbfb', '#1dd1a1', '#ee5a6f'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 0 },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'bottom',
+                                labels: { color: '#e8eaed', padding: 10 }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+        
+        // Fetch and update DDoS detection data
+        async function refreshDDoSData() {
+            try {
+                // Fetch ML metrics
+                const mlResponse = await fetch('/api/metrics/ml');
+                const mlData = await mlResponse.json();
+                
+                // Update ML metric cards
+                if (mlData) {
+                    document.getElementById('ml_accuracy').textContent = (mlData.accuracy * 100).toFixed(1) + '%';
+                    document.getElementById('ml_precision').textContent = (mlData.precision * 100).toFixed(1) + '%';
+                    document.getElementById('ml_recall').textContent = (mlData.recall * 100).toFixed(1) + '%';
+                    document.getElementById('ml_f1score').textContent = (mlData.f1_score * 100).toFixed(1) + '%';
+                    document.getElementById('ml_predictionTime').textContent = mlData.prediction_time_ms.toFixed(1) + 'ms';
+                    document.getElementById('ml_throughput').textContent = mlData.throughput.toFixed(1) + '/s';
+                }
+                
+                // Fetch attack statistics
+                const attackResponse = await fetch('/api/metrics/attacks');
+                const attackData = await attackResponse.json();
+                
+                // Update attack metric cards
+                if (attackData) {
+                    document.getElementById('ddos_totalDetections').textContent = attackData.total_detections || 0;
+                    document.getElementById('ddos_attacks').textContent = attackData.ddos_attacks || 0;
+                    document.getElementById('ddos_falsePositives').textContent = attackData.false_positives || 0;
+                    document.getElementById('ddos_detectionRate').textContent = (attackData.detection_rate || 0).toFixed(1) + '%';
+                    
+                    // Update attack types chart
+                    if (attackTypesChart && attackData.attack_types) {
+                        attackTypesChart.data.labels = Object.keys(attackData.attack_types);
+                        attackTypesChart.data.datasets[0].data = Object.values(attackData.attack_types);
+                        attackTypesChart.update('none');
+                    }
+                    
+                    // Update top source IPs table
+                    if (attackData.top_source_ips) {
+                        updateSourceIpsTable(attackData.top_source_ips);
+                    }
+                }
+                
+                // Fetch ML history
+                const historyResponse = await fetch('/api/history/ml');
+                const historyData = await historyResponse.json();
+                
+                // Update ML performance chart
+                if (mlPerformanceChart && historyData) {
+                    const labels = historyData.timestamps.map(ts => new Date(ts).toLocaleTimeString()).slice(-20);
+                    mlPerformanceChart.data.labels = labels;
+                    mlPerformanceChart.data.datasets[0].data = historyData.accuracy.slice(-20);
+                    mlPerformanceChart.data.datasets[1].data = historyData.precision.slice(-20);
+                    mlPerformanceChart.data.datasets[2].data = historyData.recall.slice(-20);
+                    mlPerformanceChart.data.datasets[3].data = historyData.f1_score.slice(-20);
+                    mlPerformanceChart.update('none');
+                }
+                
+            } catch (error) {
+                console.error('Error refreshing DDoS data:', error);
+            }
+        }
+        
+        // Update source IPs table
+        function updateSourceIpsTable(sourceIps) {
+            const tbody = document.getElementById('sourceIpsTable');
+            if (!tbody) return;
+            
+            if (!sourceIps || Object.keys(sourceIps).length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                            No threats detected - System is secure ✅
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            // Sort by attack count (descending)
+            const sortedIps = Object.entries(sourceIps).sort((a, b) => b[1] - a[1]);
+            
+            tbody.innerHTML = sortedIps.slice(0, 10).map(([ip, count]) => {
+                // Determine threat level
+                let threatLevel, threatColor;
+                if (count >= 10) {
+                    threatLevel = 'Critical';
+                    threatColor = '#ef4444';
+                } else if (count >= 5) {
+                    threatLevel = 'High';
+                    threatColor = '#f59e0b';
+                } else if (count >= 2) {
+                    threatLevel = 'Medium';
+                    threatColor = '#fbbf24';
+                } else {
+                    threatLevel = 'Low';
+                    threatColor = '#10b981';
+                }
+                
+                return `
+                    <tr style="border-bottom: 1px solid var(--border-color);">
+                        <td style="padding: 0.75rem; font-family: 'Courier New', monospace;">${ip}</td>
+                        <td style="padding: 0.75rem;">
+                            <span style="background: ${threatColor}; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-weight: bold;">
+                                ${count}
+                            </span>
+                        </td>
+                        <td style="padding: 0.75rem; color: var(--text-secondary);">Just now</td>
+                        <td style="padding: 0.75rem;">
+                            <span style="color: ${threatColor}; font-weight: bold;">
+                                ${threatLevel}
+                            </span>
+                        </td>
+                        <td style="padding: 0.75rem;">
+                            <button class="btn btn-sm" onclick="blockIP('${ip}')" style="background: #ef4444; color: white; padding: 0.25rem 0.75rem; border: none; border-radius: 6px; cursor: pointer;">
+                                Block
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        // Block IP function
+        async function blockIP(ip) {
+            if (!confirm(`Block IP address ${ip}?`)) return;
+            
+            try {
+                await fetch('/api/blocking/block', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ip: ip })
+                });
+                addActivity('network', `Blocked IP: ${ip}`, 'warning');
+                refreshDDoSData();
+            } catch (error) {
+                console.error('Error blocking IP:', error);
+            }
+        }
+        
+        async function refreshProcesses() {
+            const response = await fetch('/api/processes/top');
+            const processes = await response.json();
+            displayProcesses(processes);
+        }
+        
+        function displayProcesses(processes) {
+            const container = document.getElementById('processList');
+            container.innerHTML = processes.map(proc => `
+                <div class="process-item">
+                    <span>${proc.name}</span>
+                    <span>${proc.cpu}%</span>
+                    <span>${proc.memory}%</span>
+                    <span>${proc.pid}</span>
+                    <button class="btn btn-danger btn-sm" onclick="killProcess(${proc.pid})">
+                        Kill
+                    </button>
+                </div>
+            `).join('');
+        }
+        
+        async function killProcess(pid) {
+            if (confirm('Are you sure you want to kill this process?')) {
+                await fetch('/api/processes/kill', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({pid})
+                });
+                refreshProcesses();
+            }
+        }
+        
+        async function executeCLI() {
+            const command = document.getElementById('cliCommand').value;
+            if (!command) return;
+            
+            const output = document.getElementById('cliOutput');
+            output.innerHTML += `<div style="color: var(--accent-blue);">$ ${command}</div>`;
+            
+            try {
+                const response = await fetch('/api/cli/execute', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({command})
+                });
+                const result = await response.json();
+                output.innerHTML += `<div>${result.output || result.error}</div>`;
+            } catch (error) {
+                output.innerHTML += `<div style="color: var(--accent-red);">Error: ${error.message}</div>`;
+            }
+            
+            document.getElementById('cliCommand').value = '';
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        async function testDiscordAlert() {
+            const webhook = document.getElementById('discordWebhook').value;
+            await fetch('/api/discord/test', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({webhook})
+            });
+            alert('Test notification sent!');
+        }
+        
+        async function runCleanup() {
+            const result = await fetch('/api/disk/cleanup', {method: 'POST'});
+            const data = await result.json();
+            alert(`Cleanup complete! Freed ${data.freed_space}MB`);
+        }
+        
+        async function analyzeLogsAI() {
+            const query = document.getElementById('logSearch').value;
+            const response = await fetch('/api/logs/analyze', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({query})
+            });
+            const analysis = await response.json();
+            alert(analysis.explanation);
+        }
+        
+        // Initialize on load
+        window.addEventListener('load', function() {
+            initializeWebSocket();
+            initializeCharts();
+            refreshProcesses();
+            refreshDDoSData();
+            
+            // Refresh DDoS data every 5 seconds
+            setInterval(refreshDDoSData, 5000);
+            
+            // Add initial activity log
+            addActivity('system', 'Healing Bot Dashboard started', 'success');
+        });
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,2641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automatic Healing Bot - Performance Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #64748b;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --info-color: #3b82f6;
+            --dark-color: #1e293b;
+            --light-color: #f8fafc;
+            --border-color: #e2e8f0;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            color: var(--dark-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+
+        .dashboard-header {
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.5rem 2rem;
+            box-shadow: var(--shadow-sm);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .dashboard-title {
+            font-size: 1.875rem;
+            font-weight: 700;
+            color: var(--dark-color);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .dashboard-subtitle {
+            color: var(--secondary-color);
+            font-size: 0.875rem;
+            margin: 0.25rem 0 0 0;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1rem 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-online { background-color: var(--success-color); }
+        .status-offline { background-color: var(--danger-color); }
+        .status-warning { background-color: var(--warning-color); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .metric-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--primary-color);
+        }
+
+        .metric-card.success::before { background: var(--success-color); }
+        .metric-card.warning::before { background: var(--warning-color); }
+        .metric-card.danger::before { background: var(--danger-color); }
+        .metric-card.info::before { background: var(--info-color); }
+
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .metric-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--secondary-color);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .metric-icon {
+            width: 2rem;
+            height: 2rem;
+            border-radius: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+            color: white;
+        }
+
+        .metric-icon.primary { background: var(--primary-color); }
+        .metric-icon.success { background: var(--success-color); }
+        .metric-icon.warning { background: var(--warning-color); }
+        .metric-icon.danger { background: var(--danger-color); }
+        .metric-icon.info { background: var(--info-color); }
+
+        .metric-value {
+            font-size: 2.25rem;
+            font-weight: 700;
+            color: var(--dark-color);
+            margin-bottom: 0.5rem;
+            line-height: 1;
+        }
+
+        .metric-change {
+            font-size: 0.75rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .metric-change.positive { color: var(--success-color); }
+        .metric-change.negative { color: var(--danger-color); }
+        .metric-change.neutral { color: var(--secondary-color); }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .chart-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            margin: 0;
+        }
+
+        .chart-subtitle {
+            font-size: 0.875rem;
+            color: var(--secondary-color);
+            margin: 0.25rem 0 0 0;
+        }
+
+        .data-table {
+            background: white;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+
+        .table-header {
+            background: var(--light-color);
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .table-title {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            margin: 0;
+        }
+
+        .table-subtitle {
+            font-size: 0.875rem;
+            color: var(--secondary-color);
+            margin: 0.25rem 0 0 0;
+        }
+
+        .table {
+            margin: 0;
+        }
+
+        .table th {
+            background: var(--light-color);
+            border-bottom: 1px solid var(--border-color);
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--secondary-color);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 1rem 1.5rem;
+        }
+
+        .table td {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        .table tbody tr:hover {
+            background: var(--light-color);
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+        }
+
+        .badge-success { background: #dcfce7; color: #166534; }
+        .badge-warning { background: #fef3c7; color: #92400e; }
+        .badge-danger { background: #fee2e2; color: #991b1b; }
+        .badge-info { background: #dbeafe; color: #1e40af; }
+
+        .connection-status {
+            position: fixed;
+            top: 1.5rem;
+            right: 1.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .connection-status.connected {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .connection-status.disconnected {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid transparent;
+            border-top: 2px solid currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .alert {
+            border-radius: 0.75rem;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .alert-danger {
+            background: #fef2f2;
+            border-color: #fecaca;
+            color: #991b1b;
+        }
+
+        .alert-warning {
+            background: #fffbeb;
+            border-color: #fed7aa;
+            color: #92400e;
+        }
+
+        .alert-success {
+            background: #f0fdf4;
+            border-color: #bbf7d0;
+            color: #166534;
+        }
+
+        .alert-info {
+            background: #eff6ff;
+            border-color: #bfdbfe;
+            color: #1e40af;
+        }
+
+        /* Geographic Intelligence Styles */
+        .geographic-section {
+            margin: 2rem 0;
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 1.5rem 2rem;
+            border-bottom: 1px solid var(--border-color);
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        }
+
+        .section-header h3 {
+            margin: 0 0 0.5rem 0;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-header p {
+            margin: 0;
+            color: var(--secondary-color);
+            font-size: 0.875rem;
+        }
+
+        .geographic-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            padding: 1.5rem 2rem;
+        }
+
+        .geographic-card {
+            background: #f8fafc;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 1rem 1.5rem;
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-header h4 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--dark-color);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .country-list, .city-list, .ip-locations {
+            padding: 1rem 1.5rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .country-item, .city-item, .ip-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .country-item:last-child, .city-item:last-child, .ip-item:last-child {
+            border-bottom: none;
+        }
+
+        .location-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .location-name {
+            font-weight: 500;
+            color: var(--dark-color);
+        }
+
+        .location-coords {
+            font-size: 0.75rem;
+            color: var(--secondary-color);
+        }
+
+        .attack-count {
+            background: var(--danger-color);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .no-data {
+            text-align: center;
+            color: var(--secondary-color);
+            font-style: italic;
+            padding: 2rem 0;
+        }
+
+        /* Tab Styles */
+        .tabs-container {
+            background: white;
+            border-radius: 0.75rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .tabs-navigation {
+            display: flex;
+            background: #f8fafc;
+            border-bottom: 2px solid var(--border-color);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .tab-button {
+            flex: 1;
+            min-width: 120px;
+            padding: 1rem 1.5rem;
+            background: transparent;
+            border: none;
+            color: var(--secondary-color);
+            font-weight: 600;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            white-space: nowrap;
+        }
+
+        .tab-button:hover {
+            background: rgba(37, 99, 235, 0.05);
+            color: var(--primary-color);
+        }
+
+        .tab-button.active {
+            background: white;
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        .tab-button i {
+            font-size: 1.125rem;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 2rem;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .tab-header {
+            margin-bottom: 1.5rem;
+        }
+
+        .tab-header h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--dark-color);
+            margin: 0 0 0.5rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .tab-header p {
+            color: var(--secondary-color);
+            margin: 0;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 1rem;
+            }
+            
+            .dashboard-header {
+                padding: 1rem;
+            }
+            
+            .dashboard-title {
+                font-size: 1.5rem;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .geographic-grid {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+            
+            .status-bar {
+                flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+
+            .tabs-navigation {
+                overflow-x: scroll;
+            }
+
+            .tab-button {
+                min-width: 100px;
+                padding: 0.75rem 1rem;
+                font-size: 0.8125rem;
+            }
+
+            .tab-content {
+                padding: 1rem;
+            }
+        }
+
+        /* Log Source Tabs */
+        .log-source-tab {
+            background: none;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--secondary-color);
+            transition: all 0.2s;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .log-source-tab:hover {
+            color: var(--primary-color);
+            background: var(--light-color);
+        }
+
+        .log-source-tab.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        .log-source-tab i {
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus">
+        <i class="fas fa-circle"></i> Connecting...
+    </div>
+
+    <!-- Dashboard Header -->
+    <div class="dashboard-header">
+        <div class="dashboard-title">
+            Automatic Self-Healing Bot
+        </div>
+        <div class="dashboard-subtitle">Real-time Performance Monitoring Dashboard</div>
+    </div>
+
+    <div class="dashboard-container">
+        <!-- System Status Bar -->
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-dot status-online" id="modelStatus"></div>
+                <span>Model Service</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot status-online" id="systemStatus"></div>
+                <span>System Health</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot status-online" id="networkStatus"></div>
+                <span>Network Monitoring</span>
+            </div>
+            <div class="status-item">
+                <span id="lastUpdate">Last Update: --</span>
+            </div>
+        </div>
+
+        <!-- Tabs Container -->
+        <div class="tabs-container">
+            <!-- Tabs Navigation -->
+            <div class="tabs-navigation">
+                <button class="tab-button active" onclick="switchTab('overview')">
+                    <i class="fas fa-tachometer-alt"></i> Overview
+                </button>
+                <button class="tab-button" onclick="switchTab('attacks')">
+                    <i class="fas fa-exclamation-triangle"></i> Attacks
+                </button>
+                <button class="tab-button" onclick="switchTab('blocking')">
+                    <i class="fas fa-ban"></i> IP Blocking
+                </button>
+                <button class="tab-button" onclick="switchTab('geographic')">
+                    <i class="fas fa-globe-americas"></i> Geographic
+                </button>
+                <button class="tab-button" onclick="switchTab('analytics')">
+                    <i class="fas fa-chart-line"></i> Analytics
+                </button>
+                <button class="tab-button" onclick="switchTab('logs')">
+                    <i class="fas fa-file-alt"></i> Logs & AI Analysis
+                </button>
+            </div>
+
+            <!-- Tab Content: Overview -->
+            <div id="overview-tab" class="tab-content active">
+                <div class="tab-header">
+                    <h2><i class="fas fa-tachometer-alt"></i> System Overview</h2>
+                    <p>Real-time ML model and system performance metrics</p>
+                </div>
+
+        <!-- ML Model Performance Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card success">
+                <div class="metric-header">
+                    <div class="metric-title">Model Accuracy</div>
+                    <div class="metric-icon success">
+                        <i class="fas fa-bullseye"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="accuracy">0%</div>
+                <div class="metric-change positive" id="accuracyChange">
+                    <i class="fas fa-arrow-up"></i> +0.2% from last hour
+                </div>
+            </div>
+
+            <div class="metric-card success">
+                <div class="metric-header">
+                    <div class="metric-title">Precision</div>
+                    <div class="metric-icon success">
+                        <i class="fas fa-crosshairs"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="precision">0%</div>
+                <div class="metric-change positive" id="precisionChange">
+                    <i class="fas fa-arrow-up"></i> +0.1% from last hour
+                </div>
+            </div>
+
+            <div class="metric-card success">
+                <div class="metric-header">
+                    <div class="metric-title">Recall</div>
+                    <div class="metric-icon success">
+                        <i class="fas fa-search"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="recall">0%</div>
+                <div class="metric-change positive" id="recallChange">
+                    <i class="fas fa-arrow-up"></i> +0.3% from last hour
+                </div>
+            </div>
+
+            <div class="metric-card success">
+                <div class="metric-header">
+                    <div class="metric-title">F1 Score</div>
+                    <div class="metric-icon success">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="f1Score">0%</div>
+                <div class="metric-change positive" id="f1Change">
+                    <i class="fas fa-arrow-up"></i> +0.2% from last hour
+                </div>
+            </div>
+
+            <div class="metric-card info">
+                <div class="metric-header">
+                    <div class="metric-title">Prediction Time</div>
+                    <div class="metric-icon info">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="predictionTime">0ms</div>
+                <div class="metric-change neutral" id="timeChange">
+                    <i class="fas fa-minus"></i> Stable performance
+                </div>
+            </div>
+
+            <div class="metric-card primary">
+                <div class="metric-header">
+                    <div class="metric-title">Throughput</div>
+                    <div class="metric-icon primary">
+                        <i class="fas fa-tachometer-alt"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="throughput">0/s</div>
+                <div class="metric-change positive" id="throughputChange">
+                    <i class="fas fa-arrow-up"></i> +5% from last hour
+                </div>
+            </div>
+        </div>
+
+        <!-- System Performance Metrics -->
+        <div class="metrics-grid">
+            <div class="metric-card warning">
+                <div class="metric-header">
+                    <div class="metric-title">CPU Usage</div>
+                    <div class="metric-icon warning">
+                        <i class="fas fa-microchip"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="cpuUsage">0%</div>
+                <div class="metric-change neutral" id="cpuChange">
+                    <i class="fas fa-minus"></i> Normal load
+                </div>
+            </div>
+
+            <div class="metric-card warning">
+                <div class="metric-header">
+                    <div class="metric-title">Memory Usage</div>
+                    <div class="metric-icon warning">
+                        <i class="fas fa-memory"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="memoryUsage">0%</div>
+                <div class="metric-change neutral" id="memoryChange">
+                    <i class="fas fa-minus"></i> Stable usage
+                </div>
+            </div>
+
+            <div class="metric-card info">
+                <div class="metric-header">
+                    <div class="metric-title">Disk Usage</div>
+                    <div class="metric-icon info">
+                        <i class="fas fa-hdd"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="diskUsage">0%</div>
+                <div class="metric-change neutral" id="diskChange">
+                    <i class="fas fa-minus"></i> Healthy storage
+                </div>
+            </div>
+
+            <div class="metric-card primary">
+                <div class="metric-header">
+                    <div class="metric-title">Network In</div>
+                    <div class="metric-icon primary">
+                        <i class="fas fa-download"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="networkIn">0 MB/s</div>
+                <div class="metric-change positive" id="networkInChange">
+                    <i class="fas fa-arrow-up"></i> Active traffic
+                </div>
+            </div>
+
+            <div class="metric-card primary">
+                <div class="metric-header">
+                    <div class="metric-title">Network Out</div>
+                    <div class="metric-icon primary">
+                        <i class="fas fa-upload"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="networkOut">0 MB/s</div>
+                <div class="metric-change positive" id="networkOutChange">
+                    <i class="fas fa-arrow-up"></i> Active traffic
+                </div>
+            </div>
+
+            <div class="metric-card success">
+                <div class="metric-header">
+                    <div class="metric-title">Uptime</div>
+                    <div class="metric-icon success">
+                        <i class="fas fa-server"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="uptime">0h</div>
+                <div class="metric-change positive" id="uptimeChange">
+                    <i class="fas fa-check"></i> System stable
+                </div>
+            </div>
+        </div>
+            </div>
+            <!-- End of Overview Tab -->
+
+            <!-- Tab Content: Attacks -->
+            <div id="attacks-tab" class="tab-content">
+                <div class="tab-header">
+                    <h2><i class="fas fa-exclamation-triangle"></i> Attack Detection</h2>
+                    <p>Real-time threat monitoring and attack statistics</p>
+                </div>
+
+        <!-- Attack Detection Statistics -->
+        <div class="metrics-grid">
+            <div class="metric-card danger">
+                <div class="metric-header">
+                    <div class="metric-title">Total Detections</div>
+                    <div class="metric-icon danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="totalDetections">0</div>
+                <div class="metric-change positive" id="detectionsChange">
+                    <i class="fas fa-arrow-up"></i> Active monitoring
+                </div>
+            </div>
+
+            <div class="metric-card danger">
+                <div class="metric-header">
+                    <div class="metric-title">DDoS Attacks</div>
+                    <div class="metric-icon danger">
+                        <i class="fas fa-shield-virus"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="ddosAttacks">0</div>
+                <div class="metric-change neutral" id="attacksChange">
+                    <i class="fas fa-minus"></i> No active threats
+                </div>
+            </div>
+
+            <div class="metric-card warning">
+                <div class="metric-header">
+                    <div class="metric-title">False Positives</div>
+                    <div class="metric-icon warning">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="falsePositives">0</div>
+                <div class="metric-change neutral" id="falsePositivesChange">
+                    <i class="fas fa-minus"></i> Low error rate
+                </div>
+            </div>
+
+            <div class="metric-card success">
+                <div class="metric-header">
+                    <div class="metric-title">Detection Rate</div>
+                    <div class="metric-icon success">
+                        <i class="fas fa-percentage"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="detectionRate">0%</div>
+                <div class="metric-change positive" id="detectionRateChange">
+                    <i class="fas fa-arrow-up"></i> High accuracy
+                </div>
+            </div>
+
+            <div class="metric-card info">
+                <div class="metric-header">
+                    <div class="metric-title">Model Confidence</div>
+                    <div class="metric-icon info">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="modelConfidence">0%</div>
+                <div class="metric-change positive" id="confidenceChange">
+                    <i class="fas fa-arrow-up"></i> High confidence
+                </div>
+            </div>
+
+            <div class="metric-card primary">
+                <div class="metric-header">
+                    <div class="metric-title">Active Sessions</div>
+                    <div class="metric-icon primary">
+                        <i class="fas fa-users"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="activeSessions">0</div>
+                <div class="metric-change positive" id="sessionsChange">
+                    <i class="fas fa-arrow-up"></i> Connected users
+                </div>
+            </div>
+        </div>
+            </div>
+            <!-- End of Attacks Tab -->
+
+            <!-- Tab Content: IP Blocking -->
+            <div id="blocking-tab" class="tab-content">
+                <div class="tab-header">
+                    <h2><i class="fas fa-ban"></i> IP Blocking Management</h2>
+                    <p>Manage blocked IPs and view blocking statistics</p>
+                </div>
+
+        <!-- IP Blocking Statistics -->
+        <div class="metrics-grid">
+            <div class="metric-card danger">
+                <div class="metric-header">
+                    <div class="metric-title">Total Blocked IPs</div>
+                    <div class="metric-icon danger">
+                        <i class="fas fa-ban"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="totalBlockedIps">0</div>
+                <div class="metric-change positive" id="blockedIpsChange">
+                    <i class="fas fa-shield-alt"></i> Active protection
+                </div>
+            </div>
+
+            <div class="metric-card warning">
+                <div class="metric-header">
+                    <div class="metric-title">Auto-Blocked</div>
+                    <div class="metric-icon warning">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="autoBlockedIps">0</div>
+                <div class="metric-change positive" id="autoBlockedChange">
+                    <i class="fas fa-cog"></i> Automated response
+                </div>
+            </div>
+
+            <div class="metric-card info">
+                <div class="metric-header">
+                    <div class="metric-title">Manual Blocks</div>
+                    <div class="metric-icon info">
+                        <i class="fas fa-user-shield"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="manualBlockedIps">0</div>
+                <div class="metric-change neutral" id="manualBlockedChange">
+                    <i class="fas fa-hand-paper"></i> Admin actions
+                </div>
+            </div>
+
+            <div class="metric-card success">
+                <div class="metric-header">
+                    <div class="metric-title">Unblocked</div>
+                    <div class="metric-icon success">
+                        <i class="fas fa-unlock"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="unblockedIps">0</div>
+                <div class="metric-change positive" id="unblockedChange">
+                    <i class="fas fa-check"></i> Restored access
+                </div>
+            </div>
+
+            <div class="metric-card primary">
+                <div class="metric-header">
+                    <div class="metric-title">Blocking Rate</div>
+                    <div class="metric-icon primary">
+                        <i class="fas fa-percentage"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="blockingRate">0%</div>
+                <div class="metric-change positive" id="blockingRateChange">
+                    <i class="fas fa-chart-line"></i> Efficiency
+                </div>
+            </div>
+
+            <div class="metric-card secondary">
+                <div class="metric-header">
+                    <div class="metric-title">Recent Blocks (24h)</div>
+                    <div class="metric-icon secondary">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                </div>
+                <div class="metric-value" id="recentBlocks24h">0</div>
+                <div class="metric-change neutral" id="recentBlocksChange">
+                    <i class="fas fa-history"></i> Last 24 hours
+                </div>
+            </div>
+        </div>
+
+        <!-- Blocked IPs Table -->
+        <div class="data-table">
+            <div class="table-header">
+                <div class="table-title">Blocked IP Addresses</div>
+                <div class="table-subtitle">Currently blocked IP addresses and their details</div>
+                <div class="table-actions">
+                    <button class="btn btn-primary btn-sm" onclick="refreshBlockedIps()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                    <button class="btn btn-success btn-sm" onclick="showBlockIpModal()">
+                        <i class="fas fa-plus"></i> Block IP
+                    </button>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>IP Address</th>
+                            <th>Blocked At</th>
+                            <th>Reason</th>
+                            <th>Threat Level</th>
+                            <th>Attack Type</th>
+                            <th>Auto Blocked</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="blockedIpsTable">
+                        <tr>
+                            <td colspan="7" class="text-center">Loading blocked IPs...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Block IP Modal -->
+        <div class="modal fade" id="blockIpModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Block IP Address</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="blockIpForm">
+                            <div class="mb-3">
+                                <label for="blockIpAddress" class="form-label">IP Address</label>
+                                <input type="text" class="form-control" id="blockIpAddress" placeholder="192.168.1.100" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="blockReason" class="form-label">Reason</label>
+                                <input type="text" class="form-control" id="blockReason" placeholder="Manual block - suspicious activity" required>
+                            </div>
+                            <div class="mb-3">
+                                <label for="blockThreatLevel" class="form-label">Threat Level</label>
+                                <input type="number" class="form-control" id="blockThreatLevel" min="0" max="1" step="0.1" value="0.5">
+                            </div>
+                            <div class="mb-3">
+                                <label for="blockAttackType" class="form-label">Attack Type</label>
+                                <select class="form-control" id="blockAttackType">
+                                    <option value="Manual">Manual</option>
+                                    <option value="HTTP Flood">HTTP Flood</option>
+                                    <option value="SYN Flood">SYN Flood</option>
+                                    <option value="UDP Flood">UDP Flood</option>
+                                    <option value="ICMP Flood">ICMP Flood</option>
+                                    <option value="Bot Activity">Bot Activity</option>
+                                    <option value="Volumetric Attack">Volumetric Attack</option>
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-danger" onclick="blockIp()">Block IP</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+            </div>
+            <!-- End of IP Blocking Tab -->
+
+            <!-- Tab Content: Geographic -->
+            <div id="geographic-tab" class="tab-content">
+                <div class="tab-header">
+                    <h2><i class="fas fa-globe-americas"></i> Geographic Intelligence</h2>
+                    <p>Track threats by geographic location and country</p>
+                </div>
+
+        <!-- Geographic Intelligence Section -->
+        <div class="geographic-section">
+            <div class="section-header">
+                <h3><i class="fas fa-globe-americas"></i> Geographic Threat Intelligence</h3>
+                <p>Attack sources and geographic distribution analysis</p>
+            </div>
+            
+            <div class="geographic-grid">
+                <div class="geographic-card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-map-marked-alt"></i> Attack Sources by Country</h4>
+                    </div>
+                    <div class="country-list" id="countryAttacks">
+                        <div class="no-data">No geographic data available</div>
+                    </div>
+                </div>
+                
+                <div class="geographic-card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-city"></i> Attack Sources by City</h4>
+                    </div>
+                    <div class="city-list" id="cityAttacks">
+                        <div class="no-data">No geographic data available</div>
+                    </div>
+                </div>
+                
+                <div class="geographic-card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-map-pin"></i> Source IP Locations</h4>
+                    </div>
+                    <div class="ip-locations" id="ipLocations">
+                        <div class="no-data">No IP location data available</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+            </div>
+            <!-- End of Geographic Tab -->
+
+            <!-- Tab Content: Analytics -->
+            <div id="analytics-tab" class="tab-content">
+                <div class="tab-header">
+                    <h2><i class="fas fa-chart-line"></i> Analytics & Charts</h2>
+                    <p>Detailed performance charts and data tables</p>
+                </div>
+
+        <!-- Charts Section -->
+        <div class="charts-grid">
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">ML Model Performance Over Time</div>
+                        <div class="chart-subtitle">Accuracy, Precision, Recall, and F1 Score trends</div>
+                    </div>
+                </div>
+                <canvas id="mlPerformanceChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">System Resource Usage</div>
+                        <div class="chart-subtitle">CPU, Memory, and Disk utilization</div>
+                    </div>
+                </div>
+                <canvas id="systemResourcesChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">Attack Types Distribution</div>
+                        <div class="chart-subtitle">Breakdown of detected attack types</div>
+                    </div>
+                </div>
+                <canvas id="attackTypesChart"></canvas>
+            </div>
+
+            <div class="chart-container">
+                <div class="chart-header">
+                    <div>
+                        <div class="chart-title">Throughput Over Time</div>
+                        <div class="chart-subtitle">Model prediction throughput in requests per second</div>
+                    </div>
+                </div>
+                <canvas id="throughputChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Data Tables -->
+        <div class="data-table">
+            <div class="table-header">
+                <div class="table-title">Top Source IPs</div>
+                <div class="table-subtitle">Most active IP addresses detected by the system</div>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Source IP</th>
+                            <th>Attack Count</th>
+                            <th>Last Seen</th>
+                            <th>Threat Level</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sourceIpsTable">
+                        <tr>
+                            <td colspan="5" class="text-center">Loading threat intelligence data...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+            </div>
+            <!-- End of Analytics Tab -->
+
+            <!-- Tab Content: Logs & AI Analysis -->
+            <div id="logs-tab" class="tab-content">
+                <div class="tab-header">
+                    <h2><i class="fas fa-file-alt"></i> Centralized Logs & AI Analysis</h2>
+                    <p>View all system logs and get AI-powered insights from Google Gemini</p>
+                </div>
+
+                <!-- Log Stats Cards -->
+                <div class="metrics-grid">
+                    <div class="metric-card info">
+                        <div class="metric-header">
+                            <div class="metric-title">Total Logs Collected</div>
+                            <div class="metric-icon info">
+                                <i class="fas fa-file-alt"></i>
+                            </div>
+                        </div>
+                        <div class="metric-value" id="totalLogsCollected">0</div>
+                        <div class="metric-change neutral">
+                            <i class="fas fa-check"></i> Aggregating
+                        </div>
+                    </div>
+
+                    <div class="metric-card primary">
+                        <div class="metric-header">
+                            <div class="metric-title">Services Monitored</div>
+                            <div class="metric-icon primary">
+                                <i class="fas fa-server"></i>
+                            </div>
+                        </div>
+                        <div class="metric-value" id="servicesMonitored">0</div>
+                        <div class="metric-change positive">
+                            <i class="fas fa-arrow-up"></i> Active
+                        </div>
+                    </div>
+
+                    <div class="metric-card warning">
+                        <div class="metric-header">
+                            <div class="metric-title">Recent Errors</div>
+                            <div class="metric-icon warning">
+                                <i class="fas fa-exclamation-circle"></i>
+                            </div>
+                        </div>
+                        <div class="metric-value" id="recentErrors">0</div>
+                        <div class="metric-change" id="errorsChange">
+                            <i class="fas fa-minus"></i> Last hour
+                        </div>
+                    </div>
+
+                    <div class="metric-card success">
+                        <div class="metric-header">
+                            <div class="metric-title">AI Analyses</div>
+                            <div class="metric-icon success">
+                                <i class="fas fa-brain"></i>
+                            </div>
+                        </div>
+                        <div class="metric-value" id="aiAnalyses">0</div>
+                        <div class="metric-change positive">
+                            <i class="fas fa-check"></i> Gemini AI
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Log Viewer and AI Analysis -->
+                <div class="charts-grid" style="grid-template-columns: 1fr 1fr;">
+                    <!-- Log Viewer -->
+                    <div class="chart-container" style="grid-column: span 1;">
+                        <div class="chart-header">
+                            <div>
+                                <div class="chart-title">Centralized Logs</div>
+                                <div class="chart-subtitle">Real-time log aggregation from all services</div>
+                            </div>
+                            <button class="btn btn-primary btn-sm" onclick="refreshLogs()">
+                                <i class="fas fa-sync"></i> Refresh
+                            </button>
+                        </div>
+
+                        <!-- System Monitoring Info -->
+                        <div style="margin-bottom: 1rem; padding: 0.75rem; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 0.5rem; color: white;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fas fa-server" style="font-size: 1.5rem;"></i>
+                                <div>
+                                    <div style="font-weight: 600; font-size: 1rem;">System Service Monitoring</div>
+                                    <div style="font-size: 0.875rem; opacity: 0.9;">Monitoring Docker, systemd, syslog, auth, kernel for failures & crashes</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Service/Source Filter -->
+                        <div style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+                            <select id="serviceFilter" class="form-select" onchange="filterLogsByService()" style="flex: 1;">
+                                <option value="">All Services</option>
+                            </select>
+                            <select id="logLevelFilter" class="form-select" onchange="filterLogsByService()" style="flex: 1;">
+                                <option value="">All Levels</option>
+                                <option value="ERROR">ERROR</option>
+                                <option value="WARNING">WARNING</option>
+                                <option value="INFO">INFO</option>
+                                <option value="DEBUG">DEBUG</option>
+                            </select>
+                        </div>
+
+                        <!-- Log List -->
+                        <div id="logsList" style="max-height: 500px; overflow-y: auto; font-family: monospace; font-size: 0.875rem;">
+                            <div class="text-center text-muted p-3">
+                                <i class="fas fa-spinner fa-spin"></i> Loading logs...
+                            </div>
+                        </div>
+                        
+                        <!-- System Log Statistics (always shown) -->
+                        <div id="systemLogStats" style="margin-top: 1rem; padding: 1rem; background: var(--light-color); border-radius: 0.5rem;">
+                            <div style="font-size: 0.875rem; color: var(--secondary-color); margin-bottom: 0.5rem;">
+                                <strong>Active System Log Sources:</strong>
+                            </div>
+                            <div id="systemLogSourcesList" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                                <!-- Will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AI Analysis Panel -->
+                    <div class="chart-container" style="grid-column: span 1;">
+                        <div class="chart-header">
+                            <div>
+                                <div class="chart-title">
+                                    <i class="fas fa-brain"></i> Gemini AI Analysis
+                                </div>
+                                <div class="chart-subtitle">AI-powered log analysis and insights</div>
+                            </div>
+                        </div>
+
+                        <div id="aiAnalysisPanel">
+                            <div class="text-center text-muted p-4">
+                                <i class="fas fa-robot" style="font-size: 3rem; opacity: 0.3;"></i>
+                                <p>Click "Analyze with AI" on any error log to get intelligent insights</p>
+                                <button class="btn btn-primary" onclick="quickAnalyzeErrors()">
+                                    <i class="fas fa-magic"></i> Quick Analyze Recent Errors
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Anomaly Detection -->
+                <div class="data-table">
+                    <div class="table-header">
+                        <div class="table-title">Detected Anomalies & Errors</div>
+                        <div class="table-subtitle">System issues detected through log analysis</div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Service</th>
+                                    <th>Severity</th>
+                                    <th>Message</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="anomaliesTable">
+                                <tr>
+                                    <td colspan="5" class="text-center">Loading anomalies...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- End of Logs Tab -->
+        </div>
+        <!-- End of Tabs Container -->
+    </div>
+
+    <script>
+        // Tab switching function
+        function switchTab(tabName) {
+            // Hide all tab contents
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabContents.forEach(content => {
+                content.classList.remove('active');
+            });
+
+            // Remove active class from all tab buttons
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach(button => {
+                button.classList.remove('active');
+            });
+
+            // Show selected tab content
+            const selectedTab = document.getElementById(tabName + '-tab');
+            if (selectedTab) {
+                selectedTab.classList.add('active');
+            }
+
+            // Add active class to clicked button
+            event.target.closest('.tab-button').classList.add('active');
+        }
+    </script>
+    
+    <script>
+        // WebSocket connection
+        let ws = null;
+        let reconnectInterval = null;
+        
+        // Chart instances
+        let mlPerformanceChart = null;
+        let systemResourcesChart = null;
+        let attackTypesChart = null;
+        let throughputChart = null;
+        
+        // Initialize charts
+        function initializeCharts() {
+            // ML Performance Chart
+            const mlCtx = document.getElementById('mlPerformanceChart').getContext('2d');
+            mlPerformanceChart = new Chart(mlCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: 'Accuracy',
+                            data: [],
+                            borderColor: '#28a745',
+                            backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Precision',
+                            data: [],
+                            borderColor: '#007bff',
+                            backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Recall',
+                            data: [],
+                            borderColor: '#ffc107',
+                            backgroundColor: 'rgba(255, 193, 7, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'F1 Score',
+                            data: [],
+                            borderColor: '#dc3545',
+                            backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 1
+                        }
+                    }
+                }
+            });
+            
+            // System Resources Chart
+            const systemCtx = document.getElementById('systemResourcesChart').getContext('2d');
+            systemResourcesChart = new Chart(systemCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['CPU', 'Memory', 'Disk'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#007bff', '#28a745', '#ffc107'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+            
+            // Attack Types Chart
+            const attackCtx = document.getElementById('attackTypesChart').getContext('2d');
+            attackTypesChart = new Chart(attackCtx, {
+                type: 'pie',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: [
+                            '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+            
+            // Throughput Chart
+            const throughputCtx = document.getElementById('throughputChart').getContext('2d');
+            throughputChart = new Chart(throughputCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        label: 'Throughput (predictions/sec)',
+                        data: [],
+                        borderColor: '#6f42c1',
+                        backgroundColor: 'rgba(111, 66, 193, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Connect to WebSocket
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function() {
+                console.log('Connected to dashboard WebSocket');
+                updateConnectionStatus(true);
+                if (reconnectInterval) {
+                    clearInterval(reconnectInterval);
+                    reconnectInterval = null;
+                }
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                updateDashboard(data);
+            };
+            
+            ws.onclose = function() {
+                console.log('Disconnected from dashboard WebSocket');
+                updateConnectionStatus(false);
+                if (!reconnectInterval) {
+                    reconnectInterval = setInterval(connectWebSocket, 5000);
+                }
+            };
+            
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+                updateConnectionStatus(false);
+            };
+        }
+        
+        // Update connection status indicator
+        function updateConnectionStatus(connected) {
+            const statusEl = document.getElementById('connectionStatus');
+            if (connected) {
+                statusEl.innerHTML = '<i class="fas fa-circle"></i> Connected';
+                statusEl.className = 'connection-status connected';
+            } else {
+                statusEl.innerHTML = '<i class="fas fa-circle"></i> Disconnected';
+                statusEl.className = 'connection-status disconnected';
+            }
+        }
+        
+        // Update dashboard with new data
+        function updateDashboard(data) {
+            // Update last update time
+            document.getElementById('lastUpdate').textContent = `Last Update: ${new Date().toLocaleTimeString()}`;
+            
+            // Update metric cards
+            if (data.ml_metrics) {
+                document.getElementById('accuracy').textContent = (data.ml_metrics.accuracy * 100).toFixed(1) + '%';
+                document.getElementById('precision').textContent = (data.ml_metrics.precision * 100).toFixed(1) + '%';
+                document.getElementById('recall').textContent = (data.ml_metrics.recall * 100).toFixed(1) + '%';
+                document.getElementById('f1Score').textContent = (data.ml_metrics.f1_score * 100).toFixed(1) + '%';
+                document.getElementById('predictionTime').textContent = data.ml_metrics.prediction_time_ms.toFixed(1) + 'ms';
+                document.getElementById('throughput').textContent = data.ml_metrics.throughput.toFixed(1) + '/s';
+                
+                // Update model confidence
+                const confidence = ((data.ml_metrics.accuracy + data.ml_metrics.precision + data.ml_metrics.recall) / 3 * 100);
+                document.getElementById('modelConfidence').textContent = confidence.toFixed(1) + '%';
+            }
+            
+            if (data.system_metrics) {
+                document.getElementById('cpuUsage').textContent = data.system_metrics.cpu_usage.toFixed(1) + '%';
+                document.getElementById('memoryUsage').textContent = data.system_metrics.memory_usage.toFixed(1) + '%';
+                document.getElementById('diskUsage').textContent = data.system_metrics.disk_usage.toFixed(1) + '%';
+                document.getElementById('networkIn').textContent = data.system_metrics.network_in_mbps.toFixed(2) + ' MB/s';
+                document.getElementById('networkOut').textContent = data.system_metrics.network_out_mbps.toFixed(2) + ' MB/s';
+                
+                // Update uptime
+                if (data.ml_metrics && data.ml_metrics.uptime_hours) {
+                    document.getElementById('uptime').textContent = data.ml_metrics.uptime_hours.toFixed(1) + 'h';
+                }
+            }
+            
+            if (data.attack_statistics) {
+                document.getElementById('totalDetections').textContent = data.attack_statistics.total_detections;
+                document.getElementById('ddosAttacks').textContent = data.attack_statistics.ddos_attacks;
+                document.getElementById('falsePositives').textContent = data.attack_statistics.false_positives;
+                document.getElementById('detectionRate').textContent = data.attack_statistics.detection_rate.toFixed(1) + '%';
+            }
+            
+            // Update active sessions (simulate)
+            const activeSessions = Math.floor(Math.random() * 10) + 1;
+            document.getElementById('activeSessions').textContent = activeSessions;
+            
+            // Update status indicators
+            updateStatusIndicators(data);
+            
+            // Update charts
+            updateCharts(data);
+            
+            // Update source IPs table
+            updateSourceIpsTable(data.attack_statistics?.top_source_ips || {});
+            
+            // Update geographic data
+            updateGeographicData(data.attack_statistics);
+            
+            // Update IP blocking statistics
+            updateBlockingStatistics(data);
+            
+            // Update blocked IPs table
+            if (data.blocked_ips) {
+                updateBlockedIpsTable(data.blocked_ips);
+            }
+        }
+        
+        // Update status indicators
+        function updateStatusIndicators(data) {
+            // Model status
+            const modelStatus = document.getElementById('modelStatus');
+            if (data.ml_metrics && data.ml_metrics.accuracy > 0.8) {
+                modelStatus.className = 'status-dot status-online';
+            } else {
+                modelStatus.className = 'status-dot status-warning';
+            }
+            
+            // System status
+            const systemStatus = document.getElementById('systemStatus');
+            if (data.system_metrics && data.system_metrics.cpu_usage < 80) {
+                systemStatus.className = 'status-dot status-online';
+            } else {
+                systemStatus.className = 'status-dot status-warning';
+            }
+            
+            // Network status
+            const networkStatus = document.getElementById('networkStatus');
+            if (data.system_metrics && data.system_metrics.network_in_mbps > 0) {
+                networkStatus.className = 'status-dot status-online';
+            } else {
+                networkStatus.className = 'status-dot status-offline';
+            }
+        }
+        
+        // Update charts with new data
+        function updateCharts(data) {
+            if (data.ml_history) {
+                const labels = data.ml_history.timestamps.map(ts => new Date(ts).toLocaleTimeString());
+                
+                // Update ML Performance Chart
+                mlPerformanceChart.data.labels = labels.slice(-20);
+                mlPerformanceChart.data.datasets[0].data = data.ml_history.accuracy.slice(-20);
+                mlPerformanceChart.data.datasets[1].data = data.ml_history.precision.slice(-20);
+                mlPerformanceChart.data.datasets[2].data = data.ml_history.recall.slice(-20);
+                mlPerformanceChart.data.datasets[3].data = data.ml_history.f1_score.slice(-20);
+                mlPerformanceChart.update('none');
+                
+                // Update Throughput Chart
+                throughputChart.data.labels = labels.slice(-20);
+                throughputChart.data.datasets[0].data = data.ml_history.throughput.slice(-20);
+                throughputChart.update('none');
+            }
+            
+            if (data.system_history) {
+                // Update System Resources Chart
+                const latest = data.system_history;
+                systemResourcesChart.data.datasets[0].data = [
+                    latest.cpu_usage[latest.cpu_usage.length - 1] || 0,
+                    latest.memory_usage[latest.memory_usage.length - 1] || 0,
+                    latest.disk_usage[latest.disk_usage.length - 1] || 0
+                ];
+                systemResourcesChart.update('none');
+            }
+            
+            if (data.attack_statistics?.attack_types) {
+                // Update Attack Types Chart
+                const attackTypes = data.attack_statistics.attack_types;
+                attackTypesChart.data.labels = Object.keys(attackTypes);
+                attackTypesChart.data.datasets[0].data = Object.values(attackTypes);
+                attackTypesChart.update('none');
+            }
+        }
+        
+        // Update source IPs table
+        function updateSourceIpsTable(sourceIps) {
+            const tbody = document.getElementById('sourceIpsTable');
+            tbody.innerHTML = '';
+            
+            if (Object.keys(sourceIps).length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No threats detected - System is secure</td></tr>';
+                return;
+            }
+            
+            // Sort by attack count (descending)
+            const sortedIps = Object.entries(sourceIps).sort((a, b) => b[1] - a[1]);
+            
+            sortedIps.forEach(([ip, count]) => {
+                const row = document.createElement('tr');
+                
+                // Determine threat level
+                let threatLevel, threatClass, statusClass, statusText;
+                if (count >= 10) {
+                    threatLevel = 'Critical';
+                    threatClass = 'badge-danger';
+                    statusClass = 'badge-danger';
+                    statusText = 'Active Threat';
+                } else if (count >= 5) {
+                    threatLevel = 'High';
+                    threatClass = 'badge-warning';
+                    statusClass = 'badge-warning';
+                    statusText = 'Suspicious';
+                } else {
+                    threatLevel = 'Low';
+                    threatClass = 'badge-info';
+                    statusClass = 'badge-success';
+                    statusText = 'Monitored';
+                }
+                
+                row.innerHTML = `
+                    <td><code>${ip}</code></td>
+                    <td><strong>${count}</strong></td>
+                    <td>${new Date().toLocaleTimeString()}</td>
+                    <td><span class="badge ${threatClass}">${threatLevel}</span></td>
+                    <td><span class="badge ${statusClass}">${statusText}</span></td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        // Update geographic data
+        function updateGeographicData(attackStats) {
+            if (!attackStats) return;
+            
+            // Update country attacks
+            updateCountryAttacks(attackStats.country_attacks || {});
+            
+            // Update city attacks
+            updateCityAttacks(attackStats.city_attacks || {});
+            
+            // Update IP locations
+            updateIpLocations(attackStats.geographic_data || {});
+        }
+        
+        function updateCountryAttacks(countryAttacks) {
+            const container = document.getElementById('countryAttacks');
+            container.innerHTML = '';
+            
+            if (Object.keys(countryAttacks).length === 0) {
+                container.innerHTML = '<div class="no-data">No country data available</div>';
+                return;
+            }
+            
+            const sortedCountries = Object.entries(countryAttacks)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            
+            sortedCountries.forEach(([country, count]) => {
+                const item = document.createElement('div');
+                item.className = 'country-item';
+                item.innerHTML = `
+                    <div class="location-info">
+                        <div class="location-name">${country}</div>
+                    </div>
+                    <div class="attack-count">${count}</div>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function updateCityAttacks(cityAttacks) {
+            const container = document.getElementById('cityAttacks');
+            container.innerHTML = '';
+            
+            if (Object.keys(cityAttacks).length === 0) {
+                container.innerHTML = '<div class="no-data">No city data available</div>';
+                return;
+            }
+            
+            const sortedCities = Object.entries(cityAttacks)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            
+            sortedCities.forEach(([city, count]) => {
+                const item = document.createElement('div');
+                item.className = 'city-item';
+                item.innerHTML = `
+                    <div class="location-info">
+                        <div class="location-name">${city}</div>
+                    </div>
+                    <div class="attack-count">${count}</div>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        function updateIpLocations(geographicData) {
+            const container = document.getElementById('ipLocations');
+            container.innerHTML = '';
+            
+            if (Object.keys(geographicData).length === 0) {
+                container.innerHTML = '<div class="no-data">No IP location data available</div>';
+                return;
+            }
+            
+            const sortedIps = Object.entries(geographicData)
+                .sort((a, b) => b[1].count - a[1].count)
+                .slice(0, 10);
+            
+            sortedIps.forEach(([ip, data]) => {
+                const item = document.createElement('div');
+                item.className = 'ip-item';
+                const coords = data.latitude !== 0 && data.longitude !== 0 
+                    ? `${data.latitude.toFixed(2)}, ${data.longitude.toFixed(2)}`
+                    : 'Unknown';
+                item.innerHTML = `
+                    <div class="location-info">
+                        <div class="location-name">${ip}</div>
+                        <div class="location-coords">${data.city}, ${data.country} (${coords})</div>
+                    </div>
+                    <div class="attack-count">${data.count}</div>
+                `;
+                container.appendChild(item);
+            });
+        }
+        
+        // IP Blocking Functions
+        function updateBlockingStatistics(data) {
+            if (data.blocking_statistics) {
+                const stats = data.blocking_statistics;
+                document.getElementById('totalBlockedIps').textContent = stats.total_blocked || 0;
+                document.getElementById('autoBlockedIps').textContent = stats.auto_blocked || 0;
+                document.getElementById('manualBlockedIps').textContent = stats.manual_blocked || 0;
+                document.getElementById('unblockedIps').textContent = stats.unblocked || 0;
+                document.getElementById('blockingRate').textContent = (stats.blocking_rate || 0).toFixed(1) + '%';
+                document.getElementById('recentBlocks24h').textContent = stats.recent_blocks_24h || 0;
+            }
+        }
+
+        function updateBlockedIpsTable(blockedIps) {
+            const tbody = document.getElementById('blockedIpsTable');
+            tbody.innerHTML = '';
+            
+            if (!blockedIps || blockedIps.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No blocked IPs</td></tr>';
+                return;
+            }
+            
+            blockedIps.forEach(ip => {
+                const row = document.createElement('tr');
+                const blockedAt = new Date(ip.blocked_at).toLocaleString();
+                const threatLevel = (ip.threat_level * 100).toFixed(1) + '%';
+                const autoBlocked = ip.auto_blocked ? 'Yes' : 'No';
+                const autoBlockedClass = ip.auto_blocked ? 'badge-warning' : 'badge-info';
+                
+                row.innerHTML = `
+                    <td><code>${ip.ip}</code></td>
+                    <td>${blockedAt}</td>
+                    <td>${ip.reason}</td>
+                    <td><span class="badge badge-danger">${threatLevel}</span></td>
+                    <td><span class="badge badge-secondary">${ip.attack_type}</span></td>
+                    <td><span class="badge ${autoBlockedClass}">${autoBlocked}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" onclick="unblockIp('${ip.ip}')">
+                            <i class="fas fa-unlock"></i> Unblock
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function showBlockIpModal() {
+            const modal = new bootstrap.Modal(document.getElementById('blockIpModal'));
+            modal.show();
+        }
+
+        async function blockIp() {
+            const ip = document.getElementById('blockIpAddress').value;
+            const reason = document.getElementById('blockReason').value;
+            const threatLevel = parseFloat(document.getElementById('blockThreatLevel').value);
+            const attackType = document.getElementById('blockAttackType').value;
+            
+            if (!ip || !reason) {
+                alert('Please fill in all required fields');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/blocking/block', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        ip: ip,
+                        reason: reason,
+                        threat_level: threatLevel,
+                        attack_type: attackType
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('IP blocked successfully');
+                    bootstrap.Modal.getInstance(document.getElementById('blockIpModal')).hide();
+                    refreshBlockedIps();
+                } else {
+                    alert('Error blocking IP: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error blocking IP: ' + error.message);
+            }
+        }
+
+        async function unblockIp(ip) {
+            if (!confirm(`Are you sure you want to unblock IP ${ip}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/blocking/unblock', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ ip: ip })
+                });
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    alert('IP unblocked successfully');
+                    refreshBlockedIps();
+                } else {
+                    alert('Error unblocking IP: ' + result.message);
+                }
+            } catch (error) {
+                alert('Error unblocking IP: ' + error.message);
+            }
+        }
+
+        async function refreshBlockedIps() {
+            try {
+                const response = await fetch('/api/blocking/ips');
+                const data = await response.json();
+                updateBlockedIpsTable(data);
+            } catch (error) {
+                console.error('Error fetching blocked IPs:', error);
+            }
+        }
+
+        // ========== Logs Tab Functions ==========
+        
+        let currentLogs = [];
+        let aiAnalysisCount = 0;
+
+        async function loadCentralizedLogs() {
+            try {
+                const response = await fetch('http://localhost:5000/api/central-logs/recent?limit=100');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    currentLogs = data.logs;
+                    displayLogs(currentLogs);
+                    loadServices();
+                    updateLogStats();
+                }
+            } catch (error) {
+                console.error('Error loading logs:', error);
+                document.getElementById('logsList').innerHTML = 
+                    '<div class="alert alert-danger">Failed to load logs. Make sure monitoring server is running on port 5000.</div>';
+            }
+        }
+
+        function displayLogs(logs) {
+            const logsList = document.getElementById('logsList');
+            
+            if (!logs || logs.length === 0) {
+                logsList.innerHTML = '<div class="text-center text-muted p-3">No logs available</div>';
+                return;
+            }
+
+            let html = '<div style="background: #f8f9fa; border-radius: 0.5rem;">';
+            
+            logs.forEach((log, index) => {
+                const severity = determineSeverity(log.message);
+                const severityColor = getSeverityColor(severity);
+                const timeStr = new Date(log.timestamp).toLocaleTimeString();
+                
+                html += `
+                    <div style="padding: 0.75rem; border-bottom: 1px solid #e9ecef; hover:background-color: #ffffff;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.25rem;">
+                            <div style="flex: 1;">
+                                <span style="color: #6c757d; font-size: 0.75rem;">${timeStr}</span>
+                                <span class="badge bg-${severityColor}" style="margin-left: 0.5rem; font-size: 0.7rem;">${log.service}</span>
+                                ${severity !== 'INFO' ? `<span class="badge bg-${getSeverityBadge(severity)}" style="font-size: 0.7rem;">${severity}</span>` : ''}
+                            </div>
+                            ${severity !== 'INFO' ? `
+                                <button class="btn btn-sm btn-outline-primary" onclick='analyzeLogWithAI(${JSON.stringify(log)})' style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">
+                                    <i class="fas fa-brain"></i> Analyze
+                                </button>
+                            ` : ''}
+                        </div>
+                        <div style="color: #212529; word-wrap: break-word;">${escapeHtml(log.message)}</div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            logsList.innerHTML = html;
+        }
+
+        function determineSeverity(message) {
+            const msg = message.toLowerCase();
+            if (msg.includes('critical') || msg.includes('fatal')) return 'CRITICAL';
+            if (msg.includes('error') || msg.includes('exception') || msg.includes('fail')) return 'ERROR';
+            if (msg.includes('warning') || msg.includes('warn')) return 'WARNING';
+            return 'INFO';
+        }
+
+        function getSeverityColor(severity) {
+            switch(severity) {
+                case 'CRITICAL': return 'danger';
+                case 'ERROR': return 'danger';
+                case 'WARNING': return 'warning';
+                default: return 'secondary';
+            }
+        }
+
+        function getSeverityBadge(severity) {
+            switch(severity) {
+                case 'CRITICAL': return 'danger';
+                case 'ERROR': return 'danger';
+                case 'WARNING': return 'warning';
+                default: return 'info';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function loadServices() {
+            try {
+                const response = await fetch('http://localhost:5000/api/central-logs/services');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const select = document.getElementById('serviceFilter');
+                    select.innerHTML = '<option value="">All Services</option>';
+                    data.services.forEach(service => {
+                        select.innerHTML += `<option value="${service}">${service}</option>`;
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading services:', error);
+            }
+        }
+
+        function filterLogsByService() {
+            const selectedService = document.getElementById('serviceFilter').value;
+            
+            if (!selectedService) {
+                displayLogs(currentLogs);
+            } else {
+                const filtered = currentLogs.filter(log => log.service === selectedService);
+                displayLogs(filtered);
+            }
+        }
+
+        // Only system logs are enabled (application logs disabled)
+        let currentLogSource = 'system';
+
+        function refreshLogs() {
+            // Always load system logs (application logging is disabled)
+            loadSystemLogs();
+        }
+
+        async function loadSystemLogs() {
+            try {
+                const levelFilter = document.getElementById('logLevelFilter').value;
+                let url = 'http://localhost:5000/api/system-logs/recent?limit=100';
+                
+                if (levelFilter) {
+                    url += `&level=${levelFilter}`;
+                }
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    currentLogs = data.logs;
+                    displaySystemLogs(currentLogs);
+                    updateSystemLogStats();
+                }
+            } catch (error) {
+                console.error('Error loading system logs:', error);
+                document.getElementById('logsList').innerHTML = 
+                    '<div class="alert alert-warning">System logs not available. This requires access to /var/log/ (run with sudo or add user to adm group).</div>';
+            }
+        }
+
+        function displaySystemLogs(logs) {
+            const logsList = document.getElementById('logsList');
+            
+            if (!logs || logs.length === 0) {
+                logsList.innerHTML = '<div class="text-center text-muted p-3">No system logs collected yet. Please wait...</div>';
+                return;
+            }
+
+            let html = '<div style="background: #f8f9fa; border-radius: 0.5rem;">';
+            
+            logs.forEach((log, index) => {
+                const level = log.level || 'INFO';
+                const severityColor = getSeverityColor(level);
+                const timeStr = new Date(log.timestamp).toLocaleTimeString();
+                const source = log.source || 'unknown';
+                
+                // Get source icon
+                let sourceIcon = 'fa-file-alt';
+                if (source === 'docker') sourceIcon = 'fa-docker';
+                else if (source === 'systemd') sourceIcon = 'fa-cogs';
+                else if (source === 'syslog') sourceIcon = 'fa-list';
+                else if (source === 'kernel') sourceIcon = 'fa-microchip';
+                else if (source === 'apache') sourceIcon = 'fa-globe';
+                else if (source === 'nginx') sourceIcon = 'fa-server';
+                
+                html += `
+                    <div style="padding: 0.75rem; border-bottom: 1px solid #e9ecef; hover:background-color: #ffffff;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.25rem;">
+                            <div style="flex: 1;">
+                                <span style="color: #6c757d; font-size: 0.75rem;">${timeStr}</span>
+                                <span class="badge" style="margin-left: 0.5rem; font-size: 0.7rem; background-color: #6c757d;">
+                                    <i class="fab ${sourceIcon}"></i> ${log.service}
+                                </span>
+                                <span class="badge bg-${getSeverityBadge(level)}" style="font-size: 0.7rem;">${level}</span>
+                            </div>
+                            ${level === 'ERROR' || level === 'WARNING' ? `
+                                <button class="btn btn-sm btn-outline-primary" onclick='analyzeLogWithAI(${JSON.stringify(log)})' style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">
+                                    <i class="fas fa-brain"></i> Analyze
+                                </button>
+                            ` : ''}
+                        </div>
+                        <div style="color: #212529; word-wrap: break-word; font-size: 0.85rem;">${escapeHtml(log.message)}</div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            logsList.innerHTML = html;
+        }
+
+        async function updateSystemLogStats() {
+            try {
+                const response = await fetch('http://localhost:5000/api/system-logs/statistics');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const stats = data.statistics;
+                    
+                    // Update counters
+                    document.getElementById('totalLogsCollected').textContent = stats.total_logs || 0;
+                    document.getElementById('totalErrors').textContent = (stats.by_level['ERROR'] || 0) + (stats.by_level['CRITICAL'] || 0);
+                }
+            } catch (error) {
+                console.error('Error loading system log stats:', error);
+            }
+        }
+
+        async function loadSystemLogSources() {
+            try {
+                const response = await fetch('http://localhost:5000/api/system-logs/sources');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const sources = data.sources;
+                    const sourcesList = document.getElementById('systemLogSourcesList');
+                    
+                    let html = '';
+                    sources.forEach(source => {
+                        const icon = source.enabled ? 'fa-check-circle' : 'fa-times-circle';
+                        const color = source.enabled ? '#10b981' : '#6c757d';
+                        html += `
+                            <span style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: white; border-radius: 0.25rem; border: 1px solid var(--border-color);">
+                                <i class="fas ${icon}" style="color: ${color};"></i> ${source.name}
+                            </span>
+                        `;
+                    });
+                    
+                    sourcesList.innerHTML = html;
+                }
+            } catch (error) {
+                console.error('Error loading system log sources:', error);
+            }
+        }
+
+        async function analyzeLogWithAI(logEntry) {
+            const panel = document.getElementById('aiAnalysisPanel');
+            panel.innerHTML = `
+                <div class="text-center p-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Analyzing with Gemini AI...</span>
+                    </div>
+                    <p class="mt-3">Analyzing with Google Gemini AI...</p>
+                    <small class="text-muted">This may take a few seconds</small>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('http://localhost:5000/api/gemini/analyze-log', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(logEntry)
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    displayAIAnalysis(result);
+                    aiAnalysisCount++;
+                    document.getElementById('aiAnalyses').textContent = aiAnalysisCount;
+                } else {
+                    panel.innerHTML = `
+                        <div class="alert alert-warning">
+                            <strong>Analysis Failed</strong><br>
+                            ${result.message || 'Unknown error'}
+                            ${result.message && result.message.includes('API key') ? '<br><small>Make sure GEMINI_API_KEY is set in your environment variables</small>' : ''}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                panel.innerHTML = `
+                    <div class="alert alert-danger">
+                        <strong>Error</strong><br>
+                        ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function displayAIAnalysis(result) {
+            const panel = document.getElementById('aiAnalysisPanel');
+            const analysis = result.analysis;
+
+            // Parse the full analysis text to extract modern sections
+            const fullText = analysis.full_analysis || '';
+            const whatHappened = extractSection(fullText, '🔍 WHAT HAPPENED:', '💡 QUICK FIX:') || analysis.why || analysis.root_cause || 'Analysis in progress...';
+            const quickFix = extractSection(fullText, '💡 QUICK FIX:', '🛡️ PREVENTION:') || analysis.solution || 'No immediate action required.';
+            const prevention = extractSection(fullText, '🛡️ PREVENTION:', null) || analysis.prevention || 'Monitor system regularly.';
+
+            panel.innerHTML = `
+                <div style="max-height: 800px; overflow-y: auto; padding: 1rem;">
+                    <!-- Header -->
+                    <div class="alert alert-info" style="margin-bottom: 1rem; border-left: 4px solid #3b82f6;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong><i class="fas fa-robot"></i> AI Analysis Complete</strong>
+                            </div>
+                            <span class="badge bg-info">${analysis.severity || 'MEDIUM'}</span>
+                        </div>
+                    </div>
+
+                    <!-- Service & Log Info -->
+                    <div style="background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem; border-left: 4px solid #6c757d;">
+                        <div style="margin-bottom: 0.5rem;"><strong><i class="fas fa-server"></i> Service:</strong> ${result.log_entry.service}</div>
+                        <div style="margin-bottom: 0.5rem;"><strong><i class="fas fa-clock"></i> Time:</strong> ${new Date(result.log_entry.timestamp).toLocaleString()}</div>
+                        <div style="font-family: 'Courier New', monospace; font-size: 0.875rem; margin-top: 0.75rem; padding: 0.75rem; background: white; border-radius: 0.25rem; word-wrap: break-word; border-left: 3px solid #dc3545;">
+                            ${escapeHtml(result.log_entry.message)}
+                        </div>
+                    </div>
+
+                    <!-- WHAT HAPPENED Section -->
+                    <div class="card mb-3" style="border-left: 4px solid #2563eb; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div class="card-header text-white" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);">
+                            <strong> 🔍 What Happened</strong>
+                        </div>
+                        <div class="card-body" style="font-size: 0.95rem; line-height: 1.6;">
+                            ${formatAnalysisText(whatHappened)}
+                        </div>
+                    </div>
+
+                    <!-- QUICK FIX Section -->
+                    <div class="card mb-3" style="border-left: 4px solid #10b981; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div class="card-header text-white" style="background: linear-gradient(135deg, #34d399 0%, #10b981 100%);">
+                            <strong>💡 Quick Fix</strong>
+                        </div>
+                        <div class="card-body" style="font-size: 0.95rem; line-height: 1.6;">
+                            ${formatAnalysisText(quickFix)}
+                        </div>
+                    </div>
+
+                    <!-- PREVENTION Section -->
+                    <div class="card mb-3" style="border-left: 4px solid #f59e0b; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <div class="card-header text-white" style="background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);">
+                            <strong>🛡️ Prevention</strong>
+                        </div>
+                        <div class="card-body" style="font-size: 0.95rem; line-height: 1.6;">
+                            ${formatAnalysisText(prevention)}
+                        </div>
+                    </div>
+
+                    <!-- AI Powered Badge -->
+                    <div style="text-align: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid #e9ecef;">
+                        <small style="color: #6c757d;">
+                            <i class="fas fa-sparkles" style="color: #f59e0b;"></i> 
+                            Powered by <strong>Google Gemini AI</strong>
+                            <i class="fas fa-sparkles" style="color: #f59e0b;"></i>
+                        </small>
+                    </div>
+                </div>
+            `;
+        }
+
+        function extractSection(text, startMarker, endMarker) {
+            if (!text) return null;
+            
+            const startIndex = text.indexOf(startMarker);
+            if (startIndex === -1) return null;
+            
+            const contentStart = startIndex + startMarker.length;
+            
+            if (endMarker) {
+                const endIndex = text.indexOf(endMarker, contentStart);
+                if (endIndex === -1) {
+                    return text.substring(contentStart).trim();
+                }
+                return text.substring(contentStart, endIndex).trim();
+            }
+            
+            return text.substring(contentStart).trim();
+        }
+
+        function formatAnalysisText(text) {
+            if (!text || text === 'Not found in analysis' || text === 'Error extracting information') {
+                return '<em class="text-muted">No information available</em>';
+            }
+            // Convert newlines to <br> and preserve formatting
+            return escapeHtml(text).replace(/\n/g, '<br>');
+        }
+
+        async function quickAnalyzeErrors() {
+            const panel = document.getElementById('aiAnalysisPanel');
+            panel.innerHTML = `
+                <div class="text-center p-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-3">Analyzing recent errors with Gemini AI...</p>
+                </div>
+            `;
+
+            try {
+                const response = await fetch('http://localhost:5000/api/gemini/quick-analyze');
+                const result = await response.json();
+
+                if (result.status === 'success' && result.pattern_analysis) {
+                    displayPatternAnalysis(result);
+                    aiAnalysisCount++;
+                    document.getElementById('aiAnalyses').textContent = aiAnalysisCount;
+                } else {
+                    panel.innerHTML = `
+                        <div class="alert alert-info">
+                            <strong>Analysis Complete</strong><br>
+                            ${result.message || 'No recent errors to analyze'}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                panel.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+            }
+        }
+
+        function displayPatternAnalysis(result) {
+            const panel = document.getElementById('aiAnalysisPanel');
+            const analysis = result.pattern_analysis;
+
+            panel.innerHTML = `
+                <div style="max-height: 500px; overflow-y: auto; padding: 1rem;">
+                    <div class="alert alert-primary">
+                        <strong><i class="fas fa-brain"></i> Pattern Analysis Complete</strong><br>
+                        <small>Analyzed ${result.logs_analyzed} recent error logs</small>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header bg-danger text-white">
+                            <strong><i class="fas fa-bug"></i> Common Issues</strong>
+                        </div>
+                        <div class="card-body">
+                            ${formatAnalysisText(analysis.common_issues)}
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header bg-info text-white">
+                            <strong><i class="fas fa-clock"></i> Timeline</strong>
+                        </div>
+                        <div class="card-body">
+                            ${formatAnalysisText(analysis.timeline)}
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header bg-warning">
+                            <strong><i class="fas fa-link"></i> Correlation</strong>
+                        </div>
+                        <div class="card-body">
+                            ${formatAnalysisText(analysis.correlation)}
+                        </div>
+                    </div>
+
+                    <div class="card mb-3">
+                        <div class="card-header bg-success text-white">
+                            <strong><i class="fas fa-lightbulb"></i> Recommendations</strong>
+                        </div>
+                        <div class="card-body">
+                            ${formatAnalysisText(analysis.recommendations)}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function updateLogStats() {
+            try {
+                const response = await fetch('http://localhost:5000/api/central-logs/statistics');
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    const stats = data.statistics;
+                    document.getElementById('totalLogsCollected').textContent = stats.total_logs_collected || 0;
+                    document.getElementById('servicesMonitored').textContent = stats.total_services || 0;
+                    
+                    // Count recent errors
+                    const errorCount = currentLogs.filter(log => 
+                        determineSeverity(log.message) !== 'INFO'
+                    ).length;
+                    document.getElementById('recentErrors').textContent = errorCount;
+                }
+            } catch (error) {
+                console.error('Error updating log stats:', error);
+            }
+        }
+
+        async function loadAnomalies() {
+            try {
+                // Fetch critical issues from system services
+                const response = await fetch('http://localhost:5000/api/critical-services/issues');
+                const data = await response.json();
+
+                if (data.status === 'success' && data.issues) {
+                    displayAnomalies(data.issues);
+                } else {
+                    // Fallback to system logs with ERROR level
+                    const systemLogsResponse = await fetch('http://localhost:5000/api/system-logs/recent?level=ERROR&limit=50');
+                    const systemLogsData = await systemLogsResponse.json();
+                    
+                    if (systemLogsData.status === 'success' && systemLogsData.logs) {
+                        displayAnomalies(systemLogsData.logs);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading anomalies:', error);
+                document.getElementById('anomaliesTable').innerHTML = 
+                    '<tr><td colspan="5" class="text-center text-muted">Unable to load critical issues</td></tr>';
+            }
+        }
+
+        function displayAnomalies(anomalies) {
+            const table = document.getElementById('anomaliesTable');
+            
+            if (!anomalies || anomalies.length === 0) {
+                table.innerHTML = '<tr><td colspan="5" class="text-center text-success"><i class="fas fa-check-circle"></i> No critical anomalies detected - System running smoothly!</td></tr>';
+                return;
+            }
+
+            // Sort by timestamp (most recent first)
+            const sortedAnomalies = anomalies.sort((a, b) => 
+                new Date(b.timestamp) - new Date(a.timestamp)
+            ).slice(0, 20); // Show top 20 most recent
+
+            table.innerHTML = sortedAnomalies.map(anomaly => {
+                const level = anomaly.level || anomaly.severity || 'ERROR';
+                const service = anomaly.service || anomaly.category || 'system';
+                const message = anomaly.message || anomaly.log_line || anomaly.description || 'Unknown issue';
+                const timestamp = anomaly.timestamp || new Date().toISOString();
+                
+                // Determine badge color
+                const levelBadge = getLevelBadgeColor(level);
+                
+                return `
+                    <tr>
+                        <td style="white-space: nowrap;">${new Date(timestamp).toLocaleString()}</td>
+                        <td>
+                            <span class="badge" style="background-color: #6c757d;">
+                                <i class="fas fa-server"></i> ${escapeHtml(service)}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge bg-${levelBadge}">${level}</span>
+                        </td>
+                        <td style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(message)}">
+                            ${escapeHtml(message)}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick='analyzeLogWithAI(${JSON.stringify({timestamp, service, message, level})})' title="Analyze with AI">
+                                <i class="fas fa-brain"></i> Analyze
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function getLevelBadgeColor(level) {
+            const levelUpper = (level || 'ERROR').toUpperCase();
+            switch(levelUpper) {
+                case 'CRITICAL':
+                case 'ERROR':
+                    return 'danger';
+                case 'WARNING':
+                case 'WARN':
+                    return 'warning';
+                case 'INFO':
+                case 'NOTICE':
+                    return 'info';
+                case 'DEBUG':
+                    return 'secondary';
+                default:
+                    return 'danger';
+            }
+        }
+
+        // Initialize dashboard
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCharts();
+            connectWebSocket();
+            refreshBlockedIps(); // Load blocked IPs on startup
+            
+            // Load system logs when Logs tab is activated
+            document.querySelector('[onclick*="logs"]').addEventListener('click', function() {
+                setTimeout(() => {
+                    loadSystemLogs();  // Load system logs instead of application logs
+                    loadSystemLogSources();  // Load available log sources
+                    loadAnomalies();
+                }, 100);
+            });
+        });
+    </script>
+</body>
+</html>

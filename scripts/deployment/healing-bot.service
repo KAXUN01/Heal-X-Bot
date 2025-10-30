@@ -1,0 +1,23 @@
+[Unit]
+Description=Healing-bot AI-Powered Auto-Healing System
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/home/cdrditgis/Documents/Healing-bot/monitoring/server
+Environment="PATH=/home/cdrditgis/Documents/Healing-bot/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/home/cdrditgis/Documents/Healing-bot/venv/bin/python /home/cdrditgis/Documents/Healing-bot/monitoring/server/app.py
+Restart=always
+RestartSec=10
+StandardOutput=append:/home/cdrditgis/Documents/Healing-bot/logs/monitoring-server.log
+StandardError=append:/home/cdrditgis/Documents/Healing-bot/logs/monitoring-server.log
+
+# Security settings
+NoNewPrivileges=false
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
+

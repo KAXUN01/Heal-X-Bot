@@ -1,0 +1,102 @@
+.metric-card {
+    padding: 15px;
+    border-radius: 8px;
+    background-color: #f8f9fa;
+    margin-bottom: 15px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+}
+
+.metric-card h6 {
+    margin-bottom: 10px;
+    color: #495057;
+    font-weight: 600;
+}
+
+.progress {
+    height: 10px;
+    margin-bottom: 5px;
+    border-radius: 5px;
+    background-color: #e9ecef;
+}
+
+.metric-info {
+    padding: 15px;
+    background-color: #f8f9fa;
+}
+
+/* DDoS Threat Monitor Styles */
+.ddos-threat {
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+}
+
+.ddos-threat .progress {
+    height: 25px;
+    border-radius: 12px;
+}
+
+.ddos-threat .progress-bar {
+    transition: width 0.5s ease-in-out;
+}
+
+/* Chart containers */
+.chart-container {
+    position: relative;
+    margin: auto;
+    height: 300px;
+    width: 100%;
+}
+
+/* Card enhancements */
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-radius: 10px;
+    border: none;
+    margin-bottom: 20px;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0,0,0,0.125);
+    padding: 15px 20px;
+}
+
+.card-body {
+    padding: 20px;
+}
+
+/* Status indicators */
+.status-normal {
+    color: #28a745;
+}
+
+.status-warning {
+    color: #ffc107;
+}
+
+.status-danger {
+    color: #dc3545;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.metric-info h6 {
+    margin-bottom: 10px;
+    color: #495057;
+}
+
+.metric-info p {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 500;
+}
+
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+}

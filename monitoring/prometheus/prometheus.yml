@@ -1,0 +1,72 @@
+# my global config
+global:
+  scrape_interval: 15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - localhost:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+   - "first_rules.yml"
+  # - "second_rules.yml"
+
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  # Prometheus itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Healing-bot Model API
+  - job_name: "healing-bot-model"
+    static_configs:
+      - targets: ["model:8080"]
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Healing-bot Network Analyzer
+  - job_name: "healing-bot-network-analyzer"
+    static_configs:
+      - targets: ["network-analyzer:8000"]
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Healing-bot Incident Bot
+  - job_name: "healing-bot-incident-bot"
+    static_configs:
+      - targets: ["incident-bot:8000"]
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Healing-bot Monitoring Server
+  - job_name: "healing-bot-monitoring-server"
+    static_configs:
+      - targets: ["server:5000"]
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Healing-bot Dashboard
+  - job_name: "healing-bot-dashboard"
+    static_configs:
+      - targets: ["dashboard:3001"]
+    metrics_path: "/metrics"
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Node Exporter (if available)
+  - job_name: "node-exporter"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+    scrape_interval: 15s
+    scrape_timeout: 10s

@@ -1,0 +1,98 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+.env.save*
+
+# Environment Variables
+.env
+.conf
+*.conf.local
+
+# Logs
+*.log
+logs/
+*.log.*
+*.log.gz
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+*.tar
+*.pid
+docker-compose.override.yml
+
+# IDE and Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Model files (optional - uncomment if models are large)
+# *.h5
+# *.keras
+# *.pkl
+# *.joblib
+
+# Prometheus data
+/monitoring/prometheus/data/
+/monitoring/prometheus/*.tmp
+
+# Alertmanager data
+/monitoring/alertmanager/data/
+/monitoring/alertmanager/*.tmp
+
+# GeoIP database files (optional - uncomment if you don't want to track)
+# GeoLite2-*.mmdb
+GeoLite2-*/*.txt
+GeoLite2-*/COPYRIGHT.txt
+GeoLite2-*/LICENSE.txt
+GeoLite2-*/README.txt
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+.cache/
+
+# Runtime data
+alerts_processed.jsonl
+blocked_ips.db
+
+# System files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node modules (if any)
+node_modules/
+
+# Coverage reports
+coverage/
+.nyc_output/

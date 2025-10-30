@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Metrics{% endblock %}
+
+{% block content %}
+<!-- Threat Summary -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div id="threatSummary">
+            <!-- Threat summary will be populated by JavaScript -->
+        </div>
+    </div>
+</div>
+
+<!-- DDoS Threat Alert & Map -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">DDoS Threat Monitor</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <h6>Current Threat Level</h6>
+                        <div class="progress" style="height: 25px;">
+                            <div id="ddosThreatBar" class="progress-bar" role="progressbar" style="width: 0%">
+                                <span id="ddosThreatText" class="h6">Normal (0%)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Attack Origin Map</h5>
+            </div>
+            <div class="card-body">
+                <div id="worldMap" style="height: 300px;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Attack Pattern Analysis -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Attack Patterns (24h)</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="attackHeatmap"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Active Threats</h5>
+            </div>
+            <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                <div id="activeThreats">
+                    <!-- Active threats will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- System Overview -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">System Overview</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <h6>CPU Load</h6>
+                            <div class="progress">
+                                <div id="cpuLoad" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted" id="cpuLoadText">0%</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <h6>Memory Usage</h6>
+                            <div class="progress">
+                                <div id="memoryUsage" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted" id="memoryUsageText">0%</small>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-card">
+                            <h6>System CPU</h6>
+                            <div class="progress">
+                                <div id="systemCpu" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                            </div>
+                            <small class="text-muted" id="systemCpuText">0%</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Charts -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">CPU Usage History</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="cpuChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Memory Usage History</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="memoryChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Charts -->
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Network Traffic</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="networkChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Stats -->
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Network Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="metric-info">
+                            <h6>Network In</h6>
+                            <p id="networkIn">-</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-info">
+                            <h6>Network Out</h6>
+                            <p id="networkOut">-</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="metric-info">
+                            <h6>Active Connections</h6>
+                            <p id="connections">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Process Information -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Process Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="metric-info">
+                            <h6>Virtual Memory</h6>
+                            <p id="virtualMemory">-</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-info">
+                            <h6>Resident Memory</h6>
+                            <p id="residentMemory">-</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-info">
+                            <h6>Open File Descriptors</h6>
+                            <p id="openFds">-</p>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="metric-info">
+                            <h6>CPU Time</h6>
+                            <p id="cpuTime">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Python Information -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Python Information</h5>
+            </div>
+            <div class="card-body">
+                <div id="pythonInfo">
+                    <!-- Python info will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

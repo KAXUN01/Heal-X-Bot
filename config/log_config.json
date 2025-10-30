@@ -1,0 +1,41 @@
+{
+  "log_rotation": {
+    "enabled": true,
+    "max_file_size_mb": 5,
+    "backup_count": 3,
+    "auto_cleanup_days": 7
+  },
+  "memory_limits": {
+    "system_logs_in_memory": 1000,
+    "centralized_logs_in_memory": 2000,
+    "max_log_entry_size_bytes": 10240
+  },
+  "collection_settings": {
+    "docker_tail_lines": 10,
+    "systemd_tail_lines": 20,
+    "collection_interval_seconds": 30
+  },
+  "cleanup_schedule": {
+    "auto_cleanup_enabled": true,
+    "cleanup_interval_hours": 24,
+    "aggressive_mode": false
+  },
+  "log_levels": {
+    "default": "INFO",
+    "services": {
+      "dashboard": "INFO",
+      "model": "INFO",
+      "monitoring-server": "INFO",
+      "network-analyzer": "WARNING",
+      "incident-bot": "INFO"
+    }
+  },
+  "notes": [
+    "max_file_size_mb: Maximum size of each log file before rotation",
+    "backup_count: Number of rotated log files to keep (total space = max_file_size_mb * (backup_count + 1))",
+    "system_logs_in_memory: Number of system logs to keep in RAM",
+    "collection_interval_seconds: How often to collect system logs",
+    "auto_cleanup_days: Delete log files older than this many days"
+  ]
+}
+

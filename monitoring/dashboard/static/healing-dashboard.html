@@ -484,9 +484,203 @@
         .scrollbar::-webkit-scrollbar-thumb:hover {
             background: var(--accent-blue);
         }
+
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            max-width: 700px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: slideUp 0.3s ease-out;
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .modal-close {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .modal-close:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .info-item {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 3px solid var(--accent-blue);
+        }
+
+        .info-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.25rem;
+        }
+
+        .info-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--border-color);
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 1.5rem;
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-left: 1rem;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -1.5rem;
+            top: 1.2rem;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--accent-blue);
+            border: 2px solid var(--bg-secondary);
+            z-index: 1;
+        }
+
+        .timeline-action {
+            font-weight: 700;
+            color: var(--accent-green);
+            text-transform: uppercase;
+            font-size: 0.85rem;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .timeline-action.blocked {
+            color: var(--accent-red);
+        }
+
+        .timeline-action.unblocked {
+            color: var(--accent-green);
+        }
+
+        .timeline-details {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .timeline-time {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 <body>
+    <!-- IP History Modal -->
+    <div id="ipHistoryModal" class="modal-overlay" style="display: none;" onclick="closeIPHistoryModal(event)">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-title">
+                    <span>📋</span>
+                    <span id="modalIPAddress">IP History</span>
+                </div>
+                <button class="modal-close" onclick="closeIPHistoryModal()">✕</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Content will be injected here -->
+            </div>
+        </div>
+    </div>
     <div class="header">
         <h1>🛡️ Healing Bot Dashboard</h1>
         <div class="status-badge healthy" id="systemStatus">
@@ -697,10 +891,10 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                     <h3 style="margin: 0;">🚫 Blocked IPs List</h3>
                     <div style="display: flex; gap: 0.5rem;">
-                        <button class="btn btn-sm" onclick="refreshBlockedIPsList()" style="background: #3b82f6; color: white; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer;">
+                        <button class="btn btn-sm" onclick="refreshBlockedIPsListWithFeedback()" style="background: #3b82f6; color: white; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; transition: all 0.3s;">
                             🔄 Refresh
                         </button>
-                        <button class="btn btn-sm" onclick="exportBlockedIPs()" style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer;">
+                        <button class="btn btn-sm" onclick="exportBlockedIPs()" style="background: #10b981; color: white; padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; transition: all 0.3s;">
                             📥 Export CSV
                         </button>
                     </div>
@@ -1478,9 +1672,10 @@
                     showNotification(`❌ Failed to block IP ${ip}: ${result.message || 'Unknown error'}`, 'error');
                 }
                 
-                // Refresh both tables
+                // Refresh both tables and statistics immediately
                 await refreshDDoSData();
                 await refreshBlockedIPsList();
+                await updateStatistics();
                 
             } catch (error) {
                 console.error('Error blocking IP:', error);
@@ -1515,9 +1710,10 @@
                     showNotification(`❌ Failed to unblock IP ${ip}: ${result.message}`, 'error');
                 }
                 
-                // Refresh both tables
+                // Refresh both tables and statistics immediately
                 await refreshDDoSData();
                 await refreshBlockedIPsList();
+                await updateStatistics();
                 
             } catch (error) {
                 console.error('Error unblocking IP:', error);
@@ -1666,6 +1862,56 @@
             alert(analysis.explanation);
         }
         
+        // Update statistics with animation
+        async function updateStatistics() {
+            try {
+                const statsResponse = await fetch('/api/blocked-ips/statistics');
+                const statsData = await statsResponse.json();
+                
+                if (statsData.success) {
+                    const stats = statsData.statistics;
+                    const statsDiv = document.getElementById('blockedIpsStats');
+                    
+                    // Show stats panel if there are blocked IPs
+                    if (stats.total_blocked > 0) {
+                        statsDiv.style.display = 'block';
+                    } else {
+                        statsDiv.style.display = 'none';
+                    }
+                    
+                    // Update with animation
+                    updateStatValue('statsTotal', stats.total_blocked || 0);
+                    updateStatValue('statsTotalAttacks', stats.total_attacks || 0);
+                    updateStatValue('statsCritical', stats.by_threat_level?.Critical || 0);
+                    updateStatValue('statsHigh', stats.by_threat_level?.High || 0);
+                }
+            } catch (error) {
+                console.error('Error updating statistics:', error);
+            }
+        }
+        
+        // Update a single stat value with animation
+        function updateStatValue(elementId, newValue) {
+            const element = document.getElementById(elementId);
+            if (!element) return;
+            
+            const oldValue = parseInt(element.textContent) || 0;
+            
+            if (oldValue !== newValue) {
+                // Add pulse animation
+                element.style.transform = 'scale(1.2)';
+                element.style.transition = 'transform 0.2s ease-out';
+                
+                // Update value
+                element.textContent = newValue;
+                
+                // Reset animation
+                setTimeout(() => {
+                    element.style.transform = 'scale(1)';
+                }, 200);
+            }
+        }
+        
         // Refresh blocked IPs list table
         async function refreshBlockedIPsList() {
             try {
@@ -1678,7 +1924,7 @@
                 if (!tbody) return;
                 
                 if (data.success && data.blocked_ips && data.blocked_ips.length > 0) {
-                    // Show stats
+                    // Show stats panel
                     statsDiv.style.display = 'block';
                     
                     // Update blocked IPs table
@@ -1741,17 +1987,8 @@
                         `;
                     }).join('');
                     
-                    // Fetch and update statistics
-                    const statsResponse = await fetch('/api/blocked-ips/statistics');
-                    const statsData = await statsResponse.json();
-                    
-                    if (statsData.success) {
-                        const stats = statsData.statistics;
-                        document.getElementById('statsTotal').textContent = stats.total_blocked || 0;
-                        document.getElementById('statsTotalAttacks').textContent = stats.total_attacks || 0;
-                        document.getElementById('statsCritical').textContent = stats.by_threat_level?.Critical || 0;
-                        document.getElementById('statsHigh').textContent = stats.by_threat_level?.High || 0;
-                    }
+                    // Update statistics
+                    await updateStatistics();
                 } else {
                     statsDiv.style.display = 'none';
                     tbody.innerHTML = `
@@ -1777,35 +2014,129 @@
             }
         }
         
-        // View IP history
+        // View IP history with beautiful modal
         async function viewIPHistory(ip) {
             try {
                 const response = await fetch(`/api/blocked-ips/${ip}`);
                 const data = await response.json();
                 
                 if (data.success) {
-                    let historyHTML = `<strong>History for ${ip}:</strong>\n\n`;
-                    historyHTML += `IP Info:\n`;
-                    historyHTML += `- Attack Count: ${data.ip_info.attack_count}\n`;
-                    historyHTML += `- Threat Level: ${data.ip_info.threat_level}\n`;
-                    historyHTML += `- First Seen: ${new Date(data.ip_info.first_seen).toLocaleString()}\n`;
-                    historyHTML += `- Last Seen: ${new Date(data.ip_info.last_seen).toLocaleString()}\n`;
-                    historyHTML += `- Blocked At: ${new Date(data.ip_info.blocked_at).toLocaleString()}\n`;
-                    historyHTML += `- Blocked By: ${data.ip_info.blocked_by}\n`;
-                    historyHTML += `- Reason: ${data.ip_info.reason}\n\n`;
+                    const ipInfo = data.ip_info;
                     
-                    if (data.history && data.history.length > 0) {
-                        historyHTML += `Action History:\n`;
-                        data.history.forEach((entry, index) => {
-                            historyHTML += `${index + 1}. ${entry.action} - ${new Date(entry.timestamp).toLocaleString()}\n`;
-                            historyHTML += `   By: ${entry.performed_by}\n`;
-                            if (entry.reason) {
-                                historyHTML += `   Reason: ${entry.reason}\n`;
-                            }
-                        });
+                    // Determine threat color
+                    let threatColor;
+                    switch(ipInfo.threat_level) {
+                        case 'Critical':
+                            threatColor = '#ef4444';
+                            break;
+                        case 'High':
+                            threatColor = '#f59e0b';
+                            break;
+                        case 'Medium':
+                            threatColor = '#fbbf24';
+                            break;
+                        default:
+                            threatColor = '#10b981';
                     }
                     
-                    alert(historyHTML);
+                    // Set modal title
+                    document.getElementById('modalIPAddress').innerHTML = `
+                        <span></span>
+                        <span>History for <code style="background: var(--bg-tertiary); padding: 0.25rem 0.5rem; border-radius: 4px; font-family: 'Courier New', monospace;">${ip}</code></span>
+                    `;
+                    
+                    // Build modal content
+                    let modalContent = `
+                        <h3 style="margin-top: 0; margin-bottom: 1rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                            <span>🛡️</span>
+                            <span>IP Information</span>
+                        </h3>
+                        <div class="info-grid">
+                            <div class="info-item" style="border-left-color: ${threatColor};">
+                                <div class="info-label">Attack Count</div>
+                                <div class="info-value" style="color: ${threatColor};">
+                                    ${ipInfo.attack_count} attacks
+                                </div>
+                            </div>
+                            <div class="info-item" style="border-left-color: ${threatColor};">
+                                <div class="info-label">Threat Level</div>
+                                <div class="info-value" style="color: ${threatColor};">
+                                    ${ipInfo.threat_level}
+                                </div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">First Seen</div>
+                                <div class="info-value">${new Date(ipInfo.first_seen).toLocaleString()}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Last Seen</div>
+                                <div class="info-value">${new Date(ipInfo.last_seen).toLocaleString()}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Blocked At</div>
+                                <div class="info-value">${new Date(ipInfo.blocked_at).toLocaleString()}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="info-label">Blocked By</div>
+                                <div class="info-value">${ipInfo.blocked_by}</div>
+                            </div>
+                        </div>
+                        
+                        <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 3px solid var(--accent-yellow);">
+                            <div class="info-label">Block Reason</div>
+                            <div class="info-value" style="font-size: 1rem; color: var(--text-primary);">
+                                ${ipInfo.reason || 'No reason provided'}
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Add action history timeline
+                    if (data.history && data.history.length > 0) {
+                        modalContent += `
+                            <h3 style="margin-bottom: 1rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                                <span>📅</span>
+                                <span>Action History</span>
+                            </h3>
+                            <div class="timeline">
+                        `;
+                        
+                        data.history.forEach((entry, index) => {
+                            const actionClass = entry.action.includes('block') && !entry.action.includes('unblock') ? 'blocked' : 'unblocked';
+                            const actionIcon = entry.action.includes('unblock') ? '✅' : '🚫';
+                            
+                            modalContent += `
+                                <div class="timeline-item">
+                                    <div class="timeline-action ${actionClass}">
+                                        ${actionIcon} ${entry.action.toUpperCase()}
+                                    </div>
+                                    <div class="timeline-details">
+                                        <div style="margin-bottom: 0.25rem;">
+                                            <strong>Performed by:</strong> ${entry.performed_by}
+                                        </div>
+                                        ${entry.reason ? `
+                                            <div>
+                                                <strong>Reason:</strong> ${entry.reason}
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                    <div class="timeline-time">
+                                        <span>🕐</span>
+                                        <span>${new Date(entry.timestamp).toLocaleString()}</span>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        modalContent += `</div>`;
+                    }
+                    
+                    // Set modal content and show
+                    document.getElementById('modalBody').innerHTML = modalContent;
+                    document.getElementById('ipHistoryModal').style.display = 'flex';
+                    
+                    // Prevent body scroll
+                    document.body.style.overflow = 'hidden';
+                    
                 } else {
                     showNotification(`Could not load history for ${ip}`, 'error');
                 }
@@ -1815,30 +2146,141 @@
             }
         }
         
-        // Export blocked IPs to CSV
+        // Close IP history modal
+        function closeIPHistoryModal(event) {
+            if (event && event.target !== event.currentTarget) return;
+            
+            document.getElementById('ipHistoryModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        // Close modal on ESC key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeIPHistoryModal();
+            }
+        });
+        
+        // Export blocked IPs to CSV with download
         async function exportBlockedIPs() {
             try {
-                showNotification('Exporting blocked IPs to CSV...', 'info');
+                showNotification('📥 Exporting blocked IPs to CSV...', 'info');
                 
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+                // Fetch blocked IPs data
+                const response = await fetch('/api/blocked-ips');
+                const data = await response.json();
+                
+                if (!data.success || !data.blocked_ips || data.blocked_ips.length === 0) {
+                    showNotification('❌ No blocked IPs to export', 'error');
+                    return;
+                }
+                
+                // Convert to CSV format
+                const csvContent = convertToCSV(data.blocked_ips);
+                
+                // Create download
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
                 const filename = `blocked_ips_${timestamp}.csv`;
                 
-                const response = await fetch('/api/blocked-ips/export', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ filepath: filename })
-                });
+                // Create download link
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', filename);
+                link.style.visibility = 'hidden';
                 
-                const result = await response.json();
+                // Trigger download
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
                 
-                if (result.success) {
-                    showNotification(`Exported to ${filename}`, 'success');
-                } else {
-                    showNotification('Export failed', 'error');
-                }
+                // Clean up
+                URL.revokeObjectURL(url);
+                
+                showNotification(`✅ Downloaded ${filename} (${data.blocked_ips.length} IPs)`, 'success');
+                
             } catch (error) {
                 console.error('Error exporting blocked IPs:', error);
-                showNotification(`Export error: ${error.message}`, 'error');
+                showNotification(`❌ Export error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Convert JSON data to CSV format
+        function convertToCSV(data) {
+            if (!data || data.length === 0) return '';
+            
+            // CSV Headers
+            const headers = [
+                'IP Address',
+                'Attack Count',
+                'Threat Level',
+                'Attack Type',
+                'First Seen',
+                'Last Seen',
+                'Blocked At',
+                'Blocked By',
+                'Reason',
+                'Status'
+            ];
+            
+            // Build CSV rows
+            const rows = data.map(ip => {
+                return [
+                    ip.ip_address || '',
+                    ip.attack_count || 0,
+                    ip.threat_level || '',
+                    ip.attack_type || 'Unknown',
+                    ip.first_seen ? new Date(ip.first_seen).toLocaleString() : '',
+                    ip.last_seen ? new Date(ip.last_seen).toLocaleString() : '',
+                    ip.blocked_at ? new Date(ip.blocked_at).toLocaleString() : '',
+                    ip.blocked_by || '',
+                    `"${(ip.reason || '').replace(/"/g, '""')}"`, // Escape quotes
+                    ip.is_blocked === 1 ? 'Blocked' : 'Unblocked'
+                ].join(',');
+            });
+            
+            // Combine headers and rows
+            return [headers.join(','), ...rows].join('\n');
+        }
+        
+        // Refresh blocked IPs list with visual feedback
+        async function refreshBlockedIPsListWithFeedback() {
+            const refreshBtn = event.target;
+            const originalText = refreshBtn.innerHTML;
+            
+            try {
+                // Show loading state
+                refreshBtn.innerHTML = '🔄 Refreshing...';
+                refreshBtn.disabled = true;
+                refreshBtn.style.opacity = '0.6';
+                
+                // Refresh the list
+                await refreshBlockedIPsList();
+                await updateStatistics();
+                
+                // Show success
+                refreshBtn.innerHTML = '✅ Refreshed!';
+                showNotification('✅ Blocked IPs list refreshed', 'success');
+                
+                // Reset button after 1 second
+                setTimeout(() => {
+                    refreshBtn.innerHTML = originalText;
+                    refreshBtn.disabled = false;
+                    refreshBtn.style.opacity = '1';
+                }, 1000);
+                
+            } catch (error) {
+                console.error('Error refreshing:', error);
+                refreshBtn.innerHTML = '❌ Error';
+                showNotification('❌ Failed to refresh', 'error');
+                
+                // Reset button after 1 second
+                setTimeout(() => {
+                    refreshBtn.innerHTML = originalText;
+                    refreshBtn.disabled = false;
+                    refreshBtn.style.opacity = '1';
+                }, 1000);
             }
         }
         
@@ -1854,12 +2296,16 @@
             refreshProcesses();
             refreshDDoSData();
             refreshBlockedIPsList();
+            updateStatistics(); // Initial statistics load
             
             // Refresh DDoS data every 5 seconds
             setInterval(refreshDDoSData, 5000);
             
             // Refresh blocked IPs list every 10 seconds
             setInterval(refreshBlockedIPsList, 10000);
+            
+            // Update statistics every 3 seconds for real-time feel
+            setInterval(updateStatistics, 3000);
             
             // Add initial activity logs
             setTimeout(() => {

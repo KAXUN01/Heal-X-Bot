@@ -1,0 +1,7 @@
+id,ip_address,attack_count,threat_level,attack_type,first_seen,last_seen,blocked_at,blocked_by,reason,is_blocked,unblocked_at,unblocked_by,notes
+6,192.168.1.100,24,Critical,,2025-10-30 06:45:45,2025-10-30 06:46:16,2025-10-30 06:46:16,dashboard,Manual block - Critical threat with 12 attacks,1,2025-10-30 06:46:08,dashboard_user,
+5,10.0.0.99,5,High,Test,2025-10-30 06:42:27,2025-10-30 06:42:27,2025-10-30 06:42:27,dashboard,Manual block via dashboard,1,,,
+2,203.0.113.100,15,Critical,UDP Flood,2025-10-30 06:40:50,2025-10-30 06:40:50,2025-10-30 06:40:50,dashboard,High volume attack,1,,,
+3,198.51.100.50,7,High,HTTP Flood,2025-10-30 06:40:50,2025-10-30 06:40:50,2025-10-30 06:40:50,dashboard,Web server attack,1,,,
+4,192.0.2.25,3,Medium,Port Scan,2025-10-30 06:40:50,2025-10-30 06:40:50,2025-10-30 06:40:50,dashboard,Suspicious scanning,1,,,
+1,192.0.2.200,10,Critical,TCP SYN Flood,2025-10-30 06:40:22,2025-10-30 06:40:22,2025-10-30 06:40:22,dashboard,Test block,1,,,

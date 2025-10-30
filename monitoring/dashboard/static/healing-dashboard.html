@@ -663,6 +663,87 @@
                 opacity: 1;
             }
         }
+        
+        /* Pagination Styles */
+        .pagination-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        
+        .pagination-info {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+        
+        .pagination-controls {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        
+        .pagination-btn {
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+            min-width: 35px;
+            text-align: center;
+        }
+        
+        .pagination-btn:hover:not(:disabled) {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+            transform: translateY(-1px);
+        }
+        
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .pagination-btn.active {
+            background: var(--accent-blue);
+            color: white;
+            border-color: var(--accent-blue);
+            font-weight: bold;
+        }
+        
+        .page-size-selector {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .page-size-selector select {
+            padding: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        
+        .page-size-selector select:hover {
+            border-color: var(--accent-blue);
+        }
+        
+        .page-size-selector label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
     </style>
 </head>
 <body>
@@ -884,6 +965,21 @@
                         </tbody>
                     </table>
                 </div>
+                <!-- Pagination for Top Source IPs -->
+                <div class="pagination-container" id="sourceIpsPagination" style="display: none;">
+                    <div class="pagination-info" id="sourceIpsInfo">Showing 0-0 of 0 IPs</div>
+                    <div class="pagination-controls" id="sourceIpsControls"></div>
+                    <div class="page-size-selector">
+                        <label>Show:</label>
+                        <select id="sourceIpsPageSize" onchange="changeSourceIpsPageSize()">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                </div>
             </div>
             
             <!-- Blocked IPs List Table -->
@@ -939,6 +1035,21 @@
                             <div style="font-size: 0.8rem; color: var(--text-secondary);">High Threats</div>
                             <div style="font-size: 1.5rem; font-weight: bold; color: #f59e0b;" id="statsHigh">0</div>
                         </div>
+                    </div>
+                </div>
+                <!-- Pagination for Blocked IPs -->
+                <div class="pagination-container" id="blockedIpsPagination" style="display: none;">
+                    <div class="pagination-info" id="blockedIpsInfo">Showing 0-0 of 0 IPs</div>
+                    <div class="pagination-controls" id="blockedIpsControls"></div>
+                    <div class="page-size-selector">
+                        <label>Show:</label>
+                        <select id="blockedIpsPageSize" onchange="changeBlockedIpsPageSize()">
+                            <option value="5">5</option>
+                            <option value="10" selected>10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -1086,6 +1197,72 @@
         // Recent Activity tracking
         let recentActivities = [];
         const MAX_ACTIVITIES = 50;
+        
+        // Pagination state
+        let sourceIpsPage = 1;
+        let sourceIpsPageSize = 10;
+        let sourceIpsData = [];
+        
+        let blockedIpsPage = 1;
+        let blockedIpsPageSize = 10;
+        let blockedIpsData = [];
+        
+        // Pagination helper functions
+        function createPaginationControls(currentPage, totalPages, onPageChange) {
+            let html = '';
+            
+            // Previous button
+            html += `<button class="pagination-btn" onclick="${onPageChange}(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
+                ← Prev
+            </button>`;
+            
+            // Page numbers with smart display
+            const maxButtons = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+            let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+            
+            // Adjust start if we're near the end
+            if (endPage - startPage < maxButtons - 1) {
+                startPage = Math.max(1, endPage - maxButtons + 1);
+            }
+            
+            // First page + ellipsis if needed
+            if (startPage > 1) {
+                html += `<button class="pagination-btn" onclick="${onPageChange}(1)">1</button>`;
+                if (startPage > 2) {
+                    html += `<span style="padding: 0 0.5rem; color: var(--text-secondary);">...</span>`;
+                }
+            }
+            
+            // Page number buttons
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<button class="pagination-btn ${i === currentPage ? 'active' : ''}" onclick="${onPageChange}(${i})">
+                    ${i}
+                </button>`;
+            }
+            
+            // Ellipsis + last page if needed
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    html += `<span style="padding: 0 0.5rem; color: var(--text-secondary);">...</span>`;
+                }
+                html += `<button class="pagination-btn" onclick="${onPageChange}(${totalPages})">${totalPages}</button>`;
+            }
+            
+            // Next button
+            html += `<button class="pagination-btn" onclick="${onPageChange}(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
+                Next →
+            </button>`;
+            
+            return html;
+        }
+        
+        function updatePaginationInfo(infoElementId, currentPage, pageSize, totalItems) {
+            const start = (currentPage - 1) * pageSize + 1;
+            const end = Math.min(currentPage * pageSize, totalItems);
+            document.getElementById(infoElementId).textContent = 
+                `Showing ${start}-${end} of ${totalItems} IPs`;
+        }
         
         function initializeWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1560,27 +1737,48 @@
                         </td>
                     </tr>
                 `;
+                document.getElementById('sourceIpsPagination').style.display = 'none';
                 return;
             }
             
             // Fetch blocked IPs status from database
-            let blockedIpsData = {};
+            let blockedIpsDataMap = {};
             try {
                 const response = await fetch('/api/blocked-ips');
                 const data = await response.json();
                 if (data.success) {
                     data.blocked_ips.forEach(ip => {
-                        blockedIpsData[ip.ip_address] = ip;
+                        blockedIpsDataMap[ip.ip_address] = ip;
                     });
                 }
             } catch (error) {
                 console.error('Error fetching blocked IPs:', error);
             }
             
-            // Sort by attack count (descending)
-            const sortedIps = Object.entries(sourceIps).sort((a, b) => b[1] - a[1]);
+            // Sort by attack count (descending) and store
+            sourceIpsData = Object.entries(sourceIps).sort((a, b) => b[1] - a[1]);
             
-            tbody.innerHTML = sortedIps.slice(0, 10).map(([ip, count]) => {
+            // Render current page
+            renderSourceIpsPage(blockedIpsDataMap);
+        }
+        
+        function renderSourceIpsPage(blockedIpsDataMap = {}) {
+            const tbody = document.getElementById('sourceIpsTable');
+            if (!tbody || sourceIpsData.length === 0) return;
+            
+            const totalItems = sourceIpsData.length;
+            const totalPages = Math.ceil(totalItems / sourceIpsPageSize);
+            
+            // Ensure current page is valid
+            if (sourceIpsPage > totalPages) sourceIpsPage = totalPages;
+            if (sourceIpsPage < 1) sourceIpsPage = 1;
+            
+            // Calculate slice indices
+            const startIdx = (sourceIpsPage - 1) * sourceIpsPageSize;
+            const endIdx = Math.min(startIdx + sourceIpsPageSize, totalItems);
+            const pageData = sourceIpsData.slice(startIdx, endIdx);
+            
+            tbody.innerHTML = pageData.map(([ip, count]) => {
                 // Determine threat level
                 let threatLevel, threatColor;
                 if (count >= 10) {
@@ -1642,6 +1840,30 @@
                     </tr>
                 `;
             }).join('');
+            
+            // Update pagination controls
+            if (totalPages > 1) {
+                document.getElementById('sourceIpsPagination').style.display = 'flex';
+                document.getElementById('sourceIpsControls').innerHTML = 
+                    createPaginationControls(sourceIpsPage, totalPages, 'goToSourceIpsPage');
+                updatePaginationInfo('sourceIpsInfo', sourceIpsPage, sourceIpsPageSize, totalItems);
+            } else {
+                document.getElementById('sourceIpsPagination').style.display = 'none';
+            }
+        }
+        
+        // Source IPs pagination functions
+        function goToSourceIpsPage(page) {
+            sourceIpsPage = page;
+            renderSourceIpsPage({});
+            // Refetch blocked IPs data for accurate status
+            updateSourceIpsTable(Object.fromEntries(sourceIpsData));
+        }
+        
+        function changeSourceIpsPageSize() {
+            sourceIpsPageSize = parseInt(document.getElementById('sourceIpsPageSize').value);
+            sourceIpsPage = 1; // Reset to first page
+            renderSourceIpsPage({});
         }
         
         // Block IP function
@@ -1664,18 +1886,35 @@
                 
                 if (result.success) {
                     addActivity('network', `✅ Blocked IP: ${ip} (${threatLevel})`, 'warning');
+                    showNotification(`✅ IP ${ip} blocked - Moving to Blocked IPs table...`, 'success');
                     
-                    // Show success message
-                    showNotification(`✅ IP ${ip} blocked successfully and added to database`, 'success');
+                    // Remove IP from Top Source IPs data immediately
+                    sourceIpsData = sourceIpsData.filter(([ipAddr, count]) => ipAddr !== ip);
+                    
+                    // Adjust pagination for source IPs if needed
+                    sourceIpsPage = adjustPaginationAfterRemoval(sourceIpsData, sourceIpsPage, sourceIpsPageSize);
+                    
+                    // Re-render source IPs table immediately (removes the IP visually)
+                    if (sourceIpsData.length > 0) {
+                        renderSourceIpsPage({});
+                    }
+                    
+                    // Refresh both tables to show the change
+                    // This will update Top Source IPs and add the IP to Blocked IPs
+                    await Promise.all([
+                        refreshDDoSData(),
+                        refreshBlockedIPsList(),
+                        updateStatistics()
+                    ]);
+                    
+                    // Show final success message
+                    setTimeout(() => {
+                        showNotification(`✅ IP ${ip} moved to Blocked IPs table`, 'success');
+                    }, 500);
                 } else {
                     addActivity('network', `❌ Failed to block IP: ${ip}`, 'error');
                     showNotification(`❌ Failed to block IP ${ip}: ${result.message || 'Unknown error'}`, 'error');
                 }
-                
-                // Refresh both tables and statistics immediately
-                await refreshDDoSData();
-                await refreshBlockedIPsList();
-                await updateStatistics();
                 
             } catch (error) {
                 console.error('Error blocking IP:', error);
@@ -1702,18 +1941,49 @@
                 
                 if (result.success) {
                     addActivity('network', `✅ Unblocked IP: ${ip}`, 'success');
+                    showNotification(`✅ IP ${ip} unblocked - Moving to Top Source IPs...`, 'success');
                     
-                    // Show success message
-                    showNotification(`✅ IP ${ip} unblocked successfully`, 'success');
+                    // Remove IP from Blocked IPs data immediately
+                    blockedIpsData = blockedIpsData.filter(ipData => ipData.ip_address !== ip);
+                    
+                    // Adjust pagination for blocked IPs if needed
+                    blockedIpsPage = adjustPaginationAfterRemoval(blockedIpsData, blockedIpsPage, blockedIpsPageSize);
+                    
+                    // Re-render blocked IPs table immediately (removes the IP visually)
+                    if (blockedIpsData.length > 0) {
+                        renderBlockedIpsPage();
+                    } else {
+                        // If no more blocked IPs, show empty message
+                        const tbody = document.getElementById('blockedIpsTable');
+                        if (tbody) {
+                            tbody.innerHTML = `
+                                <tr>
+                                    <td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                                        No blocked IPs found - System is secure ✅
+                                    </td>
+                                </tr>
+                            `;
+                        }
+                        document.getElementById('blockedIpsPagination').style.display = 'none';
+                        document.getElementById('blockedIpsStats').style.display = 'none';
+                    }
+                    
+                    // Refresh both tables to show the change
+                    // This will update Blocked IPs and add the IP back to Top Source IPs
+                    await Promise.all([
+                        refreshDDoSData(),
+                        refreshBlockedIPsList(),
+                        updateStatistics()
+                    ]);
+                    
+                    // Show final success message
+                    setTimeout(() => {
+                        showNotification(`✅ IP ${ip} moved to Top Source IPs table`, 'success');
+                    }, 500);
                 } else {
                     addActivity('network', `❌ Failed to unblock IP: ${ip}`, 'error');
                     showNotification(`❌ Failed to unblock IP ${ip}: ${result.message}`, 'error');
                 }
-                
-                // Refresh both tables and statistics immediately
-                await refreshDDoSData();
-                await refreshBlockedIPsList();
-                await updateStatistics();
                 
             } catch (error) {
                 console.error('Error unblocking IP:', error);
@@ -1924,11 +2194,62 @@
                 if (!tbody) return;
                 
                 if (data.success && data.blocked_ips && data.blocked_ips.length > 0) {
+                    // Store data for pagination
+                    blockedIpsData = data.blocked_ips;
+                    
                     // Show stats panel
                     statsDiv.style.display = 'block';
                     
-                    // Update blocked IPs table
-                    tbody.innerHTML = data.blocked_ips.map(ip => {
+                    // Render current page
+                    renderBlockedIpsPage();
+                    
+                    // Update statistics
+                    await updateStatistics();
+                } else {
+                    blockedIpsData = [];
+                    statsDiv.style.display = 'none';
+                    document.getElementById('blockedIpsPagination').style.display = 'none';
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                                No blocked IPs found - System is secure ✅
+                            </td>
+                        </tr>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error refreshing blocked IPs list:', error);
+                const tbody = document.getElementById('blockedIpsTable');
+                if (tbody) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="padding: 2rem; text-align: center; color: var(--accent-red);">
+                                Error loading blocked IPs: ${error.message}
+                            </td>
+                        </tr>
+                    `;
+                }
+            }
+        }
+        
+        function renderBlockedIpsPage() {
+            const tbody = document.getElementById('blockedIpsTable');
+            if (!tbody || blockedIpsData.length === 0) return;
+            
+            const totalItems = blockedIpsData.length;
+            const totalPages = Math.ceil(totalItems / blockedIpsPageSize);
+            
+            // Ensure current page is valid
+            if (blockedIpsPage > totalPages) blockedIpsPage = totalPages;
+            if (blockedIpsPage < 1) blockedIpsPage = 1;
+            
+            // Calculate slice indices
+            const startIdx = (blockedIpsPage - 1) * blockedIpsPageSize;
+            const endIdx = Math.min(startIdx + blockedIpsPageSize, totalItems);
+            const pageData = blockedIpsData.slice(startIdx, endIdx);
+            
+            // Update blocked IPs table
+            tbody.innerHTML = pageData.map(ip => {
                         // Determine threat color
                         let threatColor;
                         switch(ip.threat_level) {
@@ -1985,33 +2306,39 @@
                                 </td>
                             </tr>
                         `;
-                    }).join('');
-                    
-                    // Update statistics
-                    await updateStatistics();
-                } else {
-                    statsDiv.style.display = 'none';
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="7" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
-                                No blocked IPs found - System is secure ✅
-                            </td>
-                        </tr>
-                    `;
-                }
-            } catch (error) {
-                console.error('Error refreshing blocked IPs list:', error);
-                const tbody = document.getElementById('blockedIpsTable');
-                if (tbody) {
-                    tbody.innerHTML = `
-                        <tr>
-                            <td colspan="7" style="padding: 2rem; text-align: center; color: var(--accent-red);">
-                                Error loading blocked IPs: ${error.message}
-                            </td>
-                        </tr>
-                    `;
-                }
+            }).join('');
+            
+            // Update pagination controls
+            if (totalPages > 1) {
+                document.getElementById('blockedIpsPagination').style.display = 'flex';
+                document.getElementById('blockedIpsControls').innerHTML = 
+                    createPaginationControls(blockedIpsPage, totalPages, 'goToBlockedIpsPage');
+                updatePaginationInfo('blockedIpsInfo', blockedIpsPage, blockedIpsPageSize, totalItems);
+            } else {
+                document.getElementById('blockedIpsPagination').style.display = 'none';
             }
+        }
+        
+        // Blocked IPs pagination functions
+        function goToBlockedIpsPage(page) {
+            blockedIpsPage = page;
+            renderBlockedIpsPage();
+        }
+        
+        function changeBlockedIpsPageSize() {
+            blockedIpsPageSize = parseInt(document.getElementById('blockedIpsPageSize').value);
+            blockedIpsPage = 1; // Reset to first page
+            renderBlockedIpsPage();
+        }
+        
+        // Helper function to adjust pagination after item removal
+        function adjustPaginationAfterRemoval(dataArray, currentPage, pageSize) {
+            const totalPages = Math.ceil(dataArray.length / pageSize);
+            // If current page is now beyond total pages, go to last page
+            if (currentPage > totalPages && totalPages > 0) {
+                return totalPages;
+            }
+            return currentPage;
         }
         
         // View IP history with beautiful modal

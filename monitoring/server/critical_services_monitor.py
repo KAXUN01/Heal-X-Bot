@@ -258,13 +258,45 @@ class CriticalServicesMonitor:
         return sorted_logs[:limit]
     
     def get_critical_issues(self) -> List[Dict[str, Any]]:
-        """Get critical issues (errors from CRITICAL category services)"""
+        """Get critical issues (errors from CRITICAL/IMPORTANT category services)"""
         issues = []
         
+        # Keywords that indicate problems even if level is INFO
+        problem_keywords = ['error', 'fail', 'failed', 'exception', 'critical', 'warning', 
+                           'timeout', 'crash', 'abort', 'denied', 'refused', 'unavailable',
+                           'not found', 'cannot', 'unable', 'broken', 'invalid', 'degraded']
+        
+        total_logs = len(self.service_logs)
+        logger.debug(f"Checking {total_logs} logs for critical issues")
+        
         for log in self.service_logs:
-            if (log.get('category') == 'CRITICAL' and 
-                log.get('level') in ['ERROR', 'WARNING']):
-                issues.append(log)
+            level = log.get('level', '').upper()
+            category = log.get('category', '')
+            message = (log.get('message', '') or '').lower()
+            
+            # Include ERROR and WARNING from CRITICAL and IMPORTANT categories
+            is_error_or_warning = level in ['ERROR', 'WARNING', 'ERR', 'WARN', 'CRITICAL', 'CRIT']
+            is_critical_or_important = category in ['CRITICAL', 'IMPORTANT']
+            
+            # Also include logs with problem keywords from CRITICAL or IMPORTANT category
+            has_problem_keyword = is_critical_or_important and any(keyword in message for keyword in problem_keywords)
+            
+            # Include if it matches our criteria
+            if (is_critical_or_important and is_error_or_warning) or has_problem_keyword:
+                # Create issue entry with severity field for frontend compatibility
+                issue = log.copy()
+                # Map level to severity: ERROR -> CRITICAL/ERROR, WARNING -> WARNING
+                if level in ['ERROR', 'ERR', 'CRITICAL', 'CRIT']:
+                    issue['severity'] = 'CRITICAL' if log.get('priority', 6) <= 2 else 'ERROR'
+                elif level in ['WARNING', 'WARN']:
+                    issue['severity'] = 'WARNING'
+                elif has_problem_keyword:
+                    issue['severity'] = 'WARNING'
+                else:
+                    issue['severity'] = level or 'UNKNOWN'
+                issues.append(issue)
+        
+        logger.debug(f"Found {len(issues)} critical issues from {total_logs} total logs")
         
         # Sort by timestamp (newest first)
         sorted_issues = sorted(

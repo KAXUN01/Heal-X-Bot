@@ -2826,11 +2826,36 @@
                 const response = await fetch('/api/critical-services/issues');
                 const data = await response.json();
 
-                if (data.status === 'success' && data.issues) {
+                if (data.status === 'success' && data.issues !== undefined) {
                     displayAnomalies(data.issues);
+                    console.log(`Loaded ${data.count || 0} anomalies`);
+                } else if (data.status === 'error') {
+                    console.error('Error loading anomalies:', data.message);
+                    const tbody = document.getElementById('anomaliesTable');
+                    if (tbody) {
+                        tbody.innerHTML = `
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                                    <i class="fas fa-exclamation-triangle" style="color: var(--accent-yellow); margin-right: 0.5rem;"></i>
+                                    ${data.message || 'Unable to load anomalies'}
+                                </td>
+                            </tr>
+                        `;
+                    }
                 }
             } catch (error) {
                 console.error('Error loading anomalies:', error);
+                const tbody = document.getElementById('anomaliesTable');
+                if (tbody) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                                <i class="fas fa-exclamation-triangle" style="color: var(--accent-red); margin-right: 0.5rem;"></i>
+                                Error loading anomalies: ${error.message}
+                            </td>
+                        </tr>
+                    `;
+                }
             }
         }
 
@@ -2852,7 +2877,9 @@
 
             let html = '';
             issues.forEach(issue => {
-                const severityColor = issue.severity === 'CRITICAL' ? 'var(--accent-red)' : issue.severity === 'ERROR' ? 'var(--accent-red)' : 'var(--accent-yellow)';
+                // Handle both 'severity' and 'level' fields for compatibility
+                const severity = issue.severity || issue.level || 'UNKNOWN';
+                const severityColor = severity === 'CRITICAL' ? 'var(--accent-red)' : severity === 'ERROR' ? 'var(--accent-red)' : 'var(--accent-yellow)';
                 const timeStr = new Date(issue.timestamp).toLocaleString('en-US', {
                     month: 'short',
                     day: 'numeric',
@@ -2870,7 +2897,7 @@
                         </td>
                         <td style="padding: 1rem; border-bottom: 1px solid var(--border-color); white-space: nowrap; vertical-align: middle;">
                             <span style="padding: 0.35rem 0.75rem; background: ${severityColor}; color: white; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600; display: inline-block;">
-                                ${issue.severity || 'UNKNOWN'}
+                                ${severity}
                             </span>
                         </td>
                         <td style="padding: 1rem; border-bottom: 1px solid var(--border-color); max-width: 500px; word-wrap: break-word; line-height: 1.5; vertical-align: middle;">
@@ -3400,6 +3427,12 @@
             
             // Refresh logs every 15 seconds
             setInterval(refreshLogs, 15000);
+            
+            // Refresh anomalies every 30 seconds
+            setInterval(loadAnomalies, 30000);
+            
+            // Load anomalies on initial load
+            loadAnomalies();
             
             // Add initial activity logs
             setTimeout(() => {

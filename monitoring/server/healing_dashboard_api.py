@@ -23,7 +23,16 @@ import requests
 from pathlib import Path
 import signal
 import random
+from dotenv import load_dotenv
 from blocked_ips_db import BlockedIPsDatabase
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent.parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
+from system_log_collector import initialize_system_log_collector, get_system_log_collector
+from centralized_logger import initialize_centralized_logging, centralized_logger
+from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
+from critical_services_monitor import initialize_critical_services_monitor, get_critical_services_monitor
 
 # Initialize FastAPI app
 app = FastAPI(title="Healing Bot Dashboard API")
@@ -43,6 +52,44 @@ app.add_middleware(
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize log collectors (must be after logger is defined)
+system_log_collector = None
+_gemini_analyzer = None
+
+def initialize_log_services():
+    """Initialize log collection services"""
+    global system_log_collector, _gemini_analyzer
+    try:
+        system_log_collector = initialize_system_log_collector()
+        logger.info("System log collector initialized")
+    except Exception as e:
+        logger.warning(f"System log collector not available: {e}")
+    
+    try:
+        # centralized_logger is a global variable from the module
+        initialize_centralized_logging()
+        logger.info("Centralized logger initialized")
+    except Exception as e:
+        logger.warning(f"Centralized logger not available: {e}")
+    
+    try:
+        # gemini_analyzer is a global variable from the module
+        initialize_gemini_analyzer()
+        from gemini_log_analyzer import gemini_analyzer as _gemini_analyzer
+        logger.info("Gemini AI analyzer initialized")
+    except Exception as e:
+        logger.warning(f"Gemini analyzer not available: {e}")
+    
+    try:
+        # critical_services_monitor initialization
+        initialize_critical_services_monitor()
+        logger.info("Critical services monitor initialized")
+    except Exception as e:
+        logger.warning(f"Critical services monitor not available: {e}")
+
+# Initialize on startup
+initialize_log_services()
 
 # Global configuration
 CONFIG = {
@@ -933,6 +980,433 @@ async def analyze_logs_endpoint(data: dict):
         explanation += "✅ No anomalies detected"
     
     return {"explanation": explanation, "analysis": analysis}
+
+# System Logs Endpoints
+@app.get("/api/system-logs/recent")
+async def get_system_logs(limit: int = 100, level: str = None, source: str = None):
+    """Get recent system-wide logs"""
+    try:
+        collector = get_system_log_collector()
+        
+        if not collector:
+            return {
+                "status": "error",
+                "message": "System log collector not initialized",
+                "logs": []
+            }
+        
+        logs = collector.get_recent_logs(limit=limit, level=level, source=source)
+        
+        return {
+            "status": "success",
+            "logs": logs,
+            "count": len(logs)
+        }
+    except Exception as e:
+        logger.error(f"Error getting system logs: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "logs": []
+        }
+
+@app.get("/api/system-logs/statistics")
+async def get_system_log_statistics():
+    """Get statistics about system-wide logs"""
+    try:
+        collector = get_system_log_collector()
+        
+        if not collector:
+            return {
+                "status": "error",
+                "message": "System log collector not initialized"
+            }
+        
+        stats = collector.get_log_statistics()
+        
+        return {
+            "status": "success",
+            "statistics": stats
+        }
+    except Exception as e:
+        logger.error(f"Error getting system log statistics: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/api/system-logs/sources")
+async def get_system_log_sources():
+    """Get available system log sources"""
+    try:
+        collector = get_system_log_collector()
+        
+        if not collector:
+            return {
+                "status": "error",
+                "message": "System log collector not initialized"
+            }
+        
+        sources = []
+        for source_name, config in collector.log_sources.items():
+            sources.append({
+                "name": source_name,
+                "enabled": config["enabled"],
+                "description": f"{source_name.capitalize()} logs"
+            })
+        
+        return {
+            "status": "success",
+            "sources": sources
+        }
+    except Exception as e:
+        logger.error(f"Error getting system log sources: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+# Centralized Logs Endpoints
+@app.get("/api/central-logs/recent")
+async def get_central_recent_logs(limit: int = 100):
+    """Get recent centralized logs"""
+    try:
+        # Use the global centralized_logger from the module
+        from centralized_logger import centralized_logger as _centralized_logger
+        if not _centralized_logger:
+            return {
+                "status": "error",
+                "message": "Centralized logging not initialized",
+                "logs": []
+            }
+        
+        logs = _centralized_logger.get_recent_logs(limit=limit)
+        
+        return {
+            "status": "success",
+            "logs": logs,
+            "count": len(logs)
+        }
+    except Exception as e:
+        logger.error(f"Error getting centralized logs: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "logs": []
+        }
+
+@app.get("/api/central-logs/statistics")
+async def get_central_log_statistics():
+    """Get centralized logging statistics"""
+    try:
+        # Use the global centralized_logger from the module
+        from centralized_logger import centralized_logger as _centralized_logger
+        if not _centralized_logger:
+            return {
+                "status": "error",
+                "message": "Centralized logging not initialized"
+            }
+        
+        stats = _centralized_logger.get_statistics()
+        
+        return {
+            "status": "success",
+            "statistics": stats
+        }
+    except Exception as e:
+        logger.error(f"Error getting centralized log statistics: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/api/central-logs/services")
+async def get_monitored_services():
+    """Get list of all monitored services"""
+    try:
+        # Use the global centralized_logger from the module
+        from centralized_logger import centralized_logger as _centralized_logger
+        if not _centralized_logger:
+            return {
+                "status": "error",
+                "message": "Centralized logging not initialized",
+                "services": []
+            }
+        
+        services = _centralized_logger.get_service_list()
+        
+        return {
+            "status": "success",
+            "services": services,
+            "count": len(services)
+        }
+    except Exception as e:
+        logger.error(f"Error getting monitored services: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "services": []
+        }
+
+# Critical Services Endpoints
+@app.get("/api/critical-services/list")
+async def get_critical_services_list():
+    """Get list of all critical services by category"""
+    try:
+        monitor = get_critical_services_monitor()
+        
+        if not monitor:
+            return {
+                "status": "error",
+                "message": "Critical services monitor not initialized"
+            }
+        
+        service_list = monitor.get_service_list()
+        
+        return {
+            "status": "success",
+            "services": service_list
+        }
+    except Exception as e:
+        logger.error(f"Error getting critical services list: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/api/critical-services/logs")
+async def get_critical_services_logs(limit: int = 100, level: str = None, category: str = None, service: str = None):
+    """Get logs from critical services"""
+    try:
+        monitor = get_critical_services_monitor()
+        
+        if not monitor:
+            return {
+                "status": "error",
+                "message": "Critical services monitor not initialized",
+                "logs": []
+            }
+        
+        # Get logs based on filters
+        if category:
+            logs = monitor.get_logs_by_category(category, limit=limit)
+        elif service:
+            logs = monitor.get_logs_by_service(service, limit=limit)
+        else:
+            logs = monitor.get_recent_logs(limit=limit, level=level)
+        
+        return {
+            "status": "success",
+            "logs": logs,
+            "count": len(logs)
+        }
+    except Exception as e:
+        logger.error(f"Error getting critical services logs: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "logs": []
+        }
+
+@app.get("/api/critical-services/issues")
+async def get_critical_service_issues():
+    """Get critical issues from monitored services"""
+    try:
+        monitor = get_critical_services_monitor()
+        
+        if not monitor:
+            return {
+                "status": "error",
+                "message": "Critical services monitor not initialized",
+                "issues": []
+            }
+        
+        issues = monitor.get_critical_issues()
+        
+        return {
+            "status": "success",
+            "issues": issues,
+            "count": len(issues)
+        }
+    except Exception as e:
+        logger.error(f"Error getting critical service issues: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "issues": []
+        }
+
+@app.get("/api/critical-services/statistics")
+async def get_critical_services_statistics():
+    """Get statistics about critical services"""
+    try:
+        monitor = get_critical_services_monitor()
+        
+        if not monitor:
+            return {
+                "status": "error",
+                "message": "Critical services monitor not initialized"
+            }
+        
+        stats = monitor.get_statistics()
+        
+        return {
+            "status": "success",
+            "statistics": stats
+        }
+    except Exception as e:
+        logger.error(f"Error getting critical services statistics: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+# Gemini AI Log Analysis Endpoints
+@app.post("/api/gemini/analyze-log")
+async def analyze_single_log(data: dict):
+    """Analyze a single log entry using Gemini AI"""
+    try:
+        # Use the global gemini_analyzer from the module
+        from gemini_log_analyzer import gemini_analyzer as _gemini_analyzer
+        if not _gemini_analyzer:
+            return {
+                "status": "error",
+                "message": "Gemini analyzer not initialized. Check GEMINI_API_KEY"
+            }
+        
+        log_entry = data
+        
+        if not log_entry:
+            return {
+                "status": "error",
+                "message": "No log entry provided"
+            }
+        
+        # Analyze the log
+        analysis = _gemini_analyzer.analyze_error_log(log_entry)
+        
+        return analysis
+    
+    except Exception as e:
+        logger.error(f"Error analyzing log: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.post("/api/gemini/analyze-pattern")
+async def analyze_log_pattern(data: dict):
+    """Analyze multiple logs for patterns using Gemini AI"""
+    try:
+        from gemini_log_analyzer import gemini_analyzer as _gemini_analyzer
+        if not _gemini_analyzer:
+            return {
+                "status": "error",
+                "message": "Gemini analyzer not initialized"
+            }
+        
+        log_entries = data.get("logs", [])
+        limit = data.get("limit", 10)
+        
+        if not log_entries:
+            return {
+                "status": "error",
+                "message": "No log entries provided"
+            }
+        
+        # Analyze patterns
+        analysis = _gemini_analyzer.analyze_multiple_logs(log_entries, limit=limit)
+        
+        return analysis
+    
+    except Exception as e:
+        logger.error(f"Error analyzing log pattern: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/api/gemini/analyze-service/{service_name}")
+async def analyze_service_health(service_name: str, limit: int = 50):
+    """Analyze overall health of a service using Gemini AI"""
+    try:
+        from gemini_log_analyzer import gemini_analyzer as _gemini_analyzer
+        from centralized_logger import centralized_logger as _centralized_logger
+        
+        if not _gemini_analyzer:
+            return {
+                "status": "error",
+                "message": "Gemini analyzer not initialized"
+            }
+        
+        if not _centralized_logger:
+            return {
+                "status": "error",
+                "message": "Centralized logger not initialized"
+            }
+        
+        # Get logs for the service
+        logs = _centralized_logger.get_logs_by_service(service_name, limit=limit)
+        
+        if not logs:
+            return {
+                "status": "error",
+                "message": f"No logs found for service: {service_name}"
+            }
+        
+        # Analyze service health
+        analysis = _gemini_analyzer.analyze_service_health(service_name, logs)
+        
+        return analysis
+    
+    except Exception as e:
+        logger.error(f"Error analyzing service health: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/api/gemini/quick-analyze")
+async def quick_analyze_recent_errors():
+    """Quick analysis of recent errors from centralized logs"""
+    try:
+        from gemini_log_analyzer import gemini_analyzer as _gemini_analyzer
+        from centralized_logger import centralized_logger as _centralized_logger
+        
+        if not _gemini_analyzer:
+            return {
+                "status": "error",
+                "message": "Gemini analyzer not initialized"
+            }
+        
+        if not _centralized_logger:
+            return {
+                "status": "error",
+                "message": "Centralized logger not initialized"
+            }
+        
+        # Get recent error logs
+        logs = _centralized_logger.get_recent_logs(limit=20)
+        error_logs = [log for log in logs if log.get("level", "").upper() in ["ERROR", "CRITICAL", "FATAL"]]
+        
+        if not error_logs:
+            return {
+                "status": "success",
+                "message": "No recent errors found",
+                "analysis": {}
+            }
+        
+        # Analyze errors
+        analysis = _gemini_analyzer.analyze_multiple_logs(error_logs, limit=10)
+        
+        return analysis
+    
+    except Exception as e:
+        logger.error(f"Error in quick analyze: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 @app.post("/api/cli/execute")
 async def execute_cli_endpoint(data: dict):

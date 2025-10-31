@@ -865,7 +865,7 @@ def initialize_services():
         print("⚠️  Service discovery DISABLED (monitoring system services only)")
         
         # Initialize Gemini AI log analyzer (for system log analysis)
-    gemini_log_analyzer_service = initialize_gemini_analyzer()
+        gemini_log_analyzer_service = initialize_gemini_analyzer()
         gemini_analyzer = gemini_log_analyzer_service  # Set alias for endpoints
         print("✅ Gemini AI log analyzer initialized")
         

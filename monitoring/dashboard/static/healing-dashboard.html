@@ -1191,7 +1191,7 @@
                         <i class="fas fa-filter" style="color: var(--text-secondary); font-size: 0.9rem;"></i>
                         <select id="serviceFilter" class="search-input" onchange="filterLogsByService()" style="flex: 1; padding: 0.6rem;">
                             <option value="">All Services</option>
-                        </select>
+                </select>
                         <select id="logLevelFilter" class="search-input" onchange="filterLogsByService()" style="flex: 1; padding: 0.6rem;">
                             <option value="">All Levels</option>
                             <option value="ERROR">ERROR</option>
@@ -1199,16 +1199,16 @@
                             <option value="INFO">INFO</option>
                             <option value="DEBUG">DEBUG</option>
                         </select>
-                    </div>
-
+            </div>
+            
                     <!-- Log List -->
                     <div id="logsList" class="log-container scrollbar" style="flex: 1; max-height: 550px; min-height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.875rem; margin: 0 1.25rem; border: 1px solid var(--border-color); border-radius: 0.5rem; background: var(--bg-primary);">
                         <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
                             <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i>
                             <div>Loading logs...</div>
                         </div>
-                    </div>
-                    
+            </div>
+            
                     <!-- System Log Statistics -->
                     <div id="systemLogStats" style="margin: 1.25rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 0.5rem; border: 1px solid var(--border-color);">
                         <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600;">
@@ -2326,11 +2326,26 @@
             let filtered = currentLogs;
             
             if (selectedService) {
-                filtered = filtered.filter(log => log.service === selectedService);
+                filtered = filtered.filter(log => {
+                    const service = (log.service || '').toLowerCase();
+                    return service === selectedService.toLowerCase();
+                });
             }
             
             if (levelFilter) {
-                filtered = filtered.filter(log => log.level === levelFilter);
+                filtered = filtered.filter(log => {
+                    const logLevel = (log.level || 'INFO').toUpperCase();
+                    const filterLevel = levelFilter.toUpperCase();
+                    
+                    // Handle variations: WARN/WARNING, CRITICAL/CRIT, etc.
+                    if (filterLevel === 'WARNING') {
+                        return logLevel === 'WARNING' || logLevel === 'WARN';
+                    } else if (filterLevel === 'ERROR') {
+                        return logLevel === 'ERROR' || logLevel === 'ERR' || logLevel === 'CRITICAL' || logLevel === 'CRIT' || logLevel === 'FATAL';
+                    } else {
+                        return logLevel === filterLevel;
+                    }
+                });
             }
             
             displaySystemLogs(filtered);
@@ -2572,7 +2587,7 @@
 
             try {
                 const response = await fetch('/api/gemini/analyze-log', {
-                    method: 'POST',
+                method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },

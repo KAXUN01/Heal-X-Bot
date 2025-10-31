@@ -33,6 +33,7 @@ from system_log_collector import initialize_system_log_collector, get_system_log
 from centralized_logger import initialize_centralized_logging, centralized_logger
 from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
 from critical_services_monitor import initialize_critical_services_monitor, get_critical_services_monitor
+from fluent_bit_reader import initialize_fluent_bit_reader, fluent_bit_reader
 
 # Initialize FastAPI app
 app = FastAPI(title="Healing Bot Dashboard API")
@@ -87,6 +88,56 @@ def initialize_log_services():
         logger.info("Critical services monitor initialized")
     except Exception as e:
         logger.warning(f"Critical services monitor not available: {e}")
+    
+    try:
+        # Fluent Bit reader initialization
+        # Use project logs directory if running locally, or container path if in container
+        project_root = Path(__file__).parent.parent.parent
+        default_log_path = str(project_root / 'logs' / 'fluent-bit' / 'fluent-bit-output.jsonl')
+        
+        # Try multiple possible paths
+        possible_paths = [
+            default_log_path,
+            '/home/cdrditgis/Documents/Healing-bot/logs/fluent-bit/fluent-bit-output.jsonl',
+            str(Path.home() / 'Documents' / 'Healing-bot' / 'logs' / 'fluent-bit' / 'fluent-bit-output.jsonl'),
+            os.getenv('FLUENT_BIT_LOG_PATH', ''),
+            '/var/log/fluent-bit/fluent-bit-output.jsonl'
+        ]
+        
+        log_path = None
+        for path in possible_paths:
+            if path:
+                # Convert to absolute path
+                abs_path = str(Path(path).absolute()) if not os.path.isabs(path) else path
+                if Path(abs_path).exists():
+                    log_path = abs_path
+                    logger.info(f"Found Fluent Bit log file at: {log_path}")
+                    break
+        
+        if not log_path:
+            # Use default even if it doesn't exist yet (Fluent Bit will create it)
+            abs_default = str(Path(default_log_path).absolute())
+            log_path = abs_default
+            logger.info(f"Fluent Bit log file not found, will use: {log_path}")
+        
+        # Ensure we use absolute path
+        log_path = str(Path(log_path).absolute())
+        logger.info(f"Initializing Fluent Bit reader with absolute path: {log_path}")
+        
+        reader = initialize_fluent_bit_reader(log_path)
+        if reader:
+            # Force refresh to load any existing logs
+            reader.refresh_logs()
+            # Re-import to get updated global
+            from fluent_bit_reader import fluent_bit_reader as fbr
+            if fbr:
+                logger.info(f"Fluent Bit reader initialized (log path: {log_path}, loaded {len(fbr.log_cache)} logs)")
+            else:
+                logger.warning(f"Fluent Bit reader created but global variable not set")
+        else:
+            logger.warning(f"Fluent Bit reader initialization returned None")
+    except Exception as e:
+        logger.error(f"Fluent Bit reader not available: {e}", exc_info=True)
 
 # Initialize on startup
 initialize_log_services()
@@ -516,10 +567,10 @@ def run_disk_cleanup() -> Dict[str, Any]:
 def fetch_ml_metrics() -> Dict[str, Any]:
     """Fetch ML model performance metrics"""
     try:
-        # Try to fetch from model service
+        # Try to fetch from model service (with short timeout to avoid blocking)
         response = requests.get(
             f"{CONFIG['model_service_url']}/metrics",
-            timeout=2
+            timeout=1  # Reduced timeout to fail fast
         )
         
         if response.status_code == 200:
@@ -1146,6 +1197,164 @@ async def get_monitored_services():
             "status": "error",
             "message": str(e),
             "services": []
+        }
+
+# Fluent Bit Log Endpoints
+@app.get("/api/fluent-bit/recent")
+async def get_fluent_bit_recent_logs(limit: int = 100, service: str = None, level: str = None, tag: str = None):
+    """Get recent logs from Fluent Bit"""
+    try:
+        # Import with reload to get fresh module state
+        import fluent_bit_reader
+        import importlib
+        importlib.reload(fluent_bit_reader)
+        
+        reader = fluent_bit_reader.fluent_bit_reader
+        
+        # If reader doesn't exist or has no logs, try to initialize/find it
+        if not reader or (hasattr(reader, 'log_cache') and len(reader.log_cache) == 0):
+            # Try to find log file in multiple locations
+            project_root = Path(__file__).parent.parent.parent
+            possible_paths = [
+                '/home/cdrditgis/Documents/Healing-bot/logs/fluent-bit/fluent-bit-output.jsonl',
+                str(project_root / 'logs' / 'fluent-bit' / 'fluent-bit-output.jsonl'),
+                str(Path.home() / 'Documents' / 'Healing-bot' / 'logs' / 'fluent-bit' / 'fluent-bit-output.jsonl'),
+                os.getenv('FLUENT_BIT_LOG_PATH', ''),
+                '/var/log/fluent-bit/fluent-bit-output.jsonl'
+            ]
+            
+            log_path = None
+            for path in possible_paths:
+                if path:
+                    # Convert to absolute path
+                    abs_path = str(Path(path).absolute()) if not os.path.isabs(path) else path
+                    if Path(abs_path).exists() and os.access(abs_path, os.R_OK):
+                        log_path = abs_path
+                        logger.info(f"Found Fluent Bit log file at: {log_path}")
+                        break
+            
+            if not log_path:
+                # Use default even if it doesn't exist yet
+                default_rel = str(project_root / 'logs' / 'fluent-bit' / 'fluent-bit-output.jsonl')
+                log_path = str(Path(default_rel).absolute())
+                logger.info(f"Using default Fluent Bit log path: {log_path}")
+            
+            # Initialize or re-initialize the reader
+            logger.info(f"Initializing Fluent Bit reader with: {log_path}")
+            reader = fluent_bit_reader.initialize_fluent_bit_reader(log_path)
+            if reader:
+                # Force refresh to load existing logs
+                reader.refresh_logs()
+                logger.info(f"Fluent Bit reader loaded {len(reader.log_cache)} logs")
+        
+        if not reader:
+            return {
+                "status": "success",
+                "message": "Fluent Bit reader could not be initialized. Check logs for details.",
+                "logs": [],
+                "count": 0
+            }
+        
+        # Check if reader has logs
+        if not hasattr(reader, 'log_cache') or len(reader.log_cache) == 0:
+            # Try refreshing one more time
+            try:
+                reader.refresh_logs()
+            except Exception as e:
+                logger.debug(f"Error refreshing Fluent Bit logs: {e}")
+            
+            if len(reader.log_cache) == 0:
+                return {
+                    "status": "success",
+                    "message": "Fluent Bit is running but no logs available yet. Fluent Bit may still be starting or no logs have been processed.",
+                    "logs": [],
+                    "count": 0
+                }
+        
+        # Refresh logs to get latest
+        try:
+            reader.refresh_logs()
+        except Exception as e:
+            logger.debug(f"Error refreshing Fluent Bit logs: {e}")
+        
+        logs = reader.get_recent_logs(
+            limit=limit,
+            service=service,
+            level=level,
+            tag=tag
+        )
+        
+        return {
+            "status": "success",
+            "logs": logs,
+            "count": len(logs),
+            "source": "fluent-bit"
+        }
+    except Exception as e:
+        logger.error(f"Error getting Fluent Bit logs: {e}", exc_info=True)
+        return {
+            "status": "error",
+            "message": str(e),
+            "logs": []
+        }
+
+@app.get("/api/fluent-bit/statistics")
+async def get_fluent_bit_statistics():
+    """Get Fluent Bit log statistics"""
+    try:
+        if not fluent_bit_reader:
+            log_path = os.getenv('FLUENT_BIT_LOG_PATH', '/var/log/fluent-bit/fluent-bit-output.jsonl')
+            initialize_fluent_bit_reader(log_path)
+        
+        if not fluent_bit_reader:
+            return {
+                "status": "error",
+                "message": "Fluent Bit reader not initialized"
+            }
+        
+        stats = fluent_bit_reader.get_statistics()
+        
+        return {
+            "status": "success",
+            "statistics": stats,
+            "source": "fluent-bit"
+        }
+    except Exception as e:
+        logger.error(f"Error getting Fluent Bit statistics: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/api/fluent-bit/sources")
+async def get_fluent_bit_sources():
+    """Get list of available Fluent Bit log sources/tags"""
+    try:
+        if not fluent_bit_reader:
+            log_path = os.getenv('FLUENT_BIT_LOG_PATH', '/var/log/fluent-bit/fluent-bit-output.jsonl')
+            initialize_fluent_bit_reader(log_path)
+        
+        if not fluent_bit_reader:
+            return {
+                "status": "error",
+                "message": "Fluent Bit reader not initialized",
+                "sources": []
+            }
+        
+        sources = fluent_bit_reader.get_sources()
+        
+        return {
+            "status": "success",
+            "sources": sources,
+            "count": len(sources),
+            "source": "fluent-bit"
+        }
+    except Exception as e:
+        logger.error(f"Error getting Fluent Bit sources: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "sources": []
         }
 
 # Critical Services Endpoints

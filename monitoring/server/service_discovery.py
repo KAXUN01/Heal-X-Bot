@@ -316,15 +316,41 @@ class ServiceDiscovery:
         else:  # Linux/Mac
             common_log_dirs = [
                 '/var/log',
-                '/var/log/syslog',
-                '/var/log/messages',
                 '/var/log/apache2',
                 '/var/log/nginx',
                 '/var/log/mysql',
                 '/var/log/postgresql',
-                '/opt/*/logs',
-                '/home/*/logs',
             ]
+            
+            # Also explicitly add common system log files
+            explicit_log_files = [
+                '/var/log/syslog',
+                '/var/log/kern.log',
+                '/var/log/auth.log',
+                '/var/log/messages',
+                '/var/log/daemon.log',
+            ]
+            
+            # Check each explicit log file
+            for log_file_path in explicit_log_files:
+                log_file = Path(log_file_path)
+                if log_file.exists() and log_file.is_file():
+                    # Extract service name from filename
+                    service_name = log_file.stem.replace('.', '_')
+                    if service_name == 'kern':
+                        service_name = 'kernel'
+                    elif service_name == 'auth':
+                        service_name = 'auth'
+                    
+                    if service_name not in self.log_locations:
+                        self.log_locations[service_name] = []
+                    
+                    self.log_locations[service_name].append({
+                        'path': str(log_file),
+                        'size': log_file.stat().st_size,
+                        'modified': datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
+                    })
+                    logger.debug(f"Found explicit log file: {log_file_path} for service: {service_name}")
         
         # Add current project logs
         project_root = Path(__file__).parent.parent.parent
@@ -358,12 +384,39 @@ class ServiceDiscovery:
             if not dir_path.exists():
                 return
             
-            # Find all .log files
+            # Special handling for /var/log - scan files directly
+            if str(dir_path) == '/var/log':
+                # Look for common system log files
+                common_logs = ['syslog', 'kern.log', 'auth.log', 'messages', 'daemon.log', 'system.log']
+                for log_name in common_logs:
+                    log_file = dir_path / log_name
+                    if log_file.exists() and log_file.is_file():
+                        # Use log name as service name
+                        svc_name = log_name.replace('.log', '').replace('.', '_')
+                        if svc_name not in self.log_locations:
+                            self.log_locations[svc_name] = []
+                        
+                        self.log_locations[svc_name].append({
+                            'path': str(log_file),
+                            'size': log_file.stat().st_size,
+                            'modified': datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
+                        })
+            
+            # Find all .log files in directory
             for log_file in dir_path.rglob('*.log'):
                 if log_file.is_file():
                     # Determine service name from file path
                     if not service_name:
-                        service_name = log_file.parent.name
+                        # Use filename without extension as service name
+                        service_name = log_file.stem
+                        # For /var/log files, use cleaner names
+                        if str(log_file.parent) == '/var/log':
+                            if log_file.name == 'syslog':
+                                service_name = 'syslog'
+                            elif log_file.name == 'kern.log':
+                                service_name = 'kernel'
+                            elif log_file.name == 'auth.log':
+                                service_name = 'auth'
                     
                     if service_name not in self.log_locations:
                         self.log_locations[service_name] = []
@@ -374,6 +427,7 @@ class ServiceDiscovery:
                         'modified': datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
                     })
         except (PermissionError, OSError) as e:
+            logger.debug(f"Cannot access {directory}: {e}")
             pass  # Silently skip directories we can't access
     
     def get_log_locations(self) -> Dict[str, List[Dict[str, Any]]]:

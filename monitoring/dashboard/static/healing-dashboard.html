@@ -1153,78 +1153,174 @@
 
         <div id="logs" class="tab-content">
             <div style="margin-bottom: 2rem;">
-                <h2 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                    <i class="fas fa-file-alt"></i> Centralized Logs & AI Analysis
-                </h2>
-                <p style="color: var(--text-secondary); margin: 0;">View all system logs and get AI-powered insights from Google Gemini</p>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <h2 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-file-alt"></i> System-Wide Logs
+                        </h2>
+                        <p style="color: var(--text-secondary); margin: 0;">View all system logs from Docker, systemd, syslog, auth, kernel, and more</p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <label style="font-size: 0.875rem; color: var(--text-secondary); font-weight: 500;">Log Source:</label>
+                        <select id="logSourceSelector" onchange="switchLogSource()" style="padding: 0.5rem 1rem; border: 1px solid var(--border-color); border-radius: 0.375rem; background: var(--bg-primary); color: var(--text-primary); font-size: 0.875rem; cursor: pointer;">
+                            <option value="fluent-bit" selected>Fluent Bit</option>
+                            <option value="centralized">Centralized Logger</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
-            <!-- Log Viewer and AI Analysis -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
-                <!-- Log Viewer -->
-                <div class="card" style="display: flex; flex-direction: column;">
-                    <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+            <!-- Stats Cards -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                <div class="card" style="padding: 1rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Total Logs</div>
+                            <div id="totalLogsCount" style="font-size: 1.5rem; font-weight: 600; color: var(--accent-blue);">0</div>
+                        </div>
+                        <i class="fas fa-list-alt" style="font-size: 2rem; opacity: 0.2; color: var(--accent-blue);"></i>
+                    </div>
+                </div>
+                <div class="card" style="padding: 1rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Services</div>
+                            <div id="totalServicesCount" style="font-size: 1.5rem; font-weight: 600; color: var(--accent-green);">0</div>
+                        </div>
+                        <i class="fas fa-server" style="font-size: 2rem; opacity: 0.2; color: var(--accent-green);"></i>
+                    </div>
+                </div>
+                <div class="card" style="padding: 1rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Errors</div>
+                            <div id="errorLogsCount" style="font-size: 1.5rem; font-weight: 600; color: var(--accent-red);">0</div>
+                        </div>
+                        <i class="fas fa-exclamation-circle" style="font-size: 2rem; opacity: 0.2; color: var(--accent-red);"></i>
+                    </div>
+                </div>
+                <div class="card" style="padding: 1rem;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Warnings</div>
+                            <div id="warningLogsCount" style="font-size: 1.5rem; font-weight: 600; color: var(--accent-yellow);">0</div>
+                        </div>
+                        <i class="fas fa-exclamation-triangle" style="font-size: 2rem; opacity: 0.2; color: var(--accent-yellow);"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Viewer and AI Analysis - Split View -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+                <!-- Main Log Viewer -->
+                <div class="card" style="grid-column: span 1; display: flex; flex-direction: column;">
+                    <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                         <div>
                             <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">
-                                <i class="fas fa-terminal"></i> Centralized Logs
+                            <i class="fas fa-terminal"></i> System-Wide Logs
                             </h3>
-                            <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Real-time log aggregation from all services</p>
+                        <p id="logSourceDescription" style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">System logs collected by Fluent Bit from syslog, kernel, auth, and systemd</p>
                         </div>
-                        <button class="btn btn-primary" onclick="refreshLogs()" style="white-space: nowrap;">
+                    <div style="display: flex; gap: 0.75rem; align-items: center;">
+                        <button class="btn btn-secondary" onclick="refreshSystemLogs()" id="refreshLogsBtn" style="white-space: nowrap;">
                             <i class="fas fa-sync-alt"></i> Refresh
                         </button>
-                    </div>
-
-                    <!-- System Monitoring Info -->
-                    <div style="margin: 1.25rem 1.25rem 0 1.25rem; padding: 1rem; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 0.5rem; color: white; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);">
-                        <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <i class="fas fa-server" style="font-size: 2rem; opacity: 0.9;"></i>
-                            <div style="flex: 1;">
-                                <div style="font-weight: 600; font-size: 1rem; margin-bottom: 0.25rem;">System Service Monitoring</div>
-                                <div style="font-size: 0.85rem; opacity: 0.95;">Monitoring Docker, systemd, syslog, auth, kernel for failures & crashes</div>
-                            </div>
+                        <button class="btn btn-primary" onclick="toggleAutoRefresh()" id="autoRefreshBtn" style="white-space: nowrap;">
+                            <i class="fas fa-play"></i> Auto-Refresh
+                        </button>
                         </div>
                     </div>
 
-                    <!-- Service/Source Filter -->
-                    <div style="margin: 1.25rem; display: flex; gap: 0.75rem; align-items: center;">
-                        <i class="fas fa-filter" style="color: var(--text-secondary); font-size: 0.9rem;"></i>
-                        <select id="serviceFilter" class="search-input" onchange="filterLogsByService()" style="flex: 1; padding: 0.6rem;">
+                <!-- Filters and Search -->
+                <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                    <div style="flex: 1; min-width: 250px;">
+                        <input type="text" id="logSearchInput" class="search-input" placeholder="Search logs..." 
+                               style="width: 100%;" oninput="filterLogs()" onkeyup="if(event.key==='Enter') filterLogs()">
+                    </div>
+                    <select id="serviceFilter" class="search-input" onchange="filterLogs()" style="min-width: 180px;">
                             <option value="">All Services</option>
                 </select>
-                        <select id="logLevelFilter" class="search-input" onchange="filterLogsByService()" style="flex: 1; padding: 0.6rem;">
+                    <select id="logLevelFilter" class="search-input" onchange="filterLogs()" style="min-width: 150px;">
                             <option value="">All Levels</option>
-                            <option value="DEBUG">DEBUG</option>
-                            <option value="INFO">INFO</option>
-                            <option value="WARNING">WARNING</option>
-                            <option value="ERROR">ERROR</option>
                             <option value="CRITICAL">CRITICAL</option>
+                        <option value="ERROR">ERROR</option>
+                        <option value="WARNING">WARNING</option>
+                        <option value="INFO">INFO</option>
+                        <option value="DEBUG">DEBUG</option>
                         </select>
+                    <select id="logSourceFilter" class="search-input" onchange="filterLogs()" style="min-width: 150px;">
+                        <option value="">All Sources</option>
+                        <option value="systemd-journal">systemd-journal</option>
+                        <option value="docker">Docker</option>
+                        <option value="syslog">syslog</option>
+                        <option value="auth">auth</option>
+                        <option value="kernel">kernel</option>
+                    </select>
+                    <select id="logsPerPage" class="search-input" onchange="filterLogs()" style="min-width: 120px;">
+                        <option value="50">50 per page</option>
+                        <option value="100" selected>100 per page</option>
+                        <option value="200">200 per page</option>
+                        <option value="500">500 per page</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="clearFilters()" style="white-space: nowrap;">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
             </div>
             
-                    <!-- Log List -->
-                    <div id="logsList" class="log-container scrollbar" style="flex: 1; max-height: 550px; min-height: 400px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.875rem; margin: 0 1.25rem; border: 1px solid var(--border-color); border-radius: 0.5rem; background: var(--bg-primary);">
-                        <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
-                            <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem;"></i>
-                            <div>Loading logs...</div>
-                        </div>
+                <!-- Log Table -->
+                <div style="overflow-x: auto; border-radius: 0.5rem; background: var(--bg-primary);">
+                    <table style="width: 100%; border-collapse: separate; border-spacing: 0;">
+                        <thead>
+                            <tr style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white;">
+                                <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 160px; border-top-left-radius: 0.5rem;">
+                                    <i class="fas fa-clock" style="margin-right: 0.5rem;"></i>Timestamp
+                                </th>
+                                <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 180px;">
+                                    <i class="fas fa-server" style="margin-right: 0.5rem;"></i>Service
+                                </th>
+                                <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 120px;">
+                                    <i class="fas fa-shield-alt" style="margin-right: 0.5rem;"></i>Level
+                                </th>
+                                <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 150px;">
+                                    <i class="fas fa-file-alt" style="margin-right: 0.5rem;"></i>Source
+                                </th>
+                                <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; border-top-right-radius: 0.5rem; min-width: 400px;">
+                                    <i class="fas fa-comment-alt" style="margin-right: 0.5rem;"></i>Message
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsTableBody">
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 4rem 2rem; color: var(--text-secondary);">
+                                    <i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-bottom: 1rem; display: block; color: var(--accent-blue);"></i>
+                                    <div style="font-size: 1rem; font-weight: 500;">Loading system logs...</div>
+                                    <div style="font-size: 0.875rem; margin-top: 0.5rem; opacity: 0.7;">Fetching logs from all system services</div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
             </div>
             
-                    <!-- System Log Statistics -->
-                    <div id="systemLogStats" style="margin: 1.25rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 0.5rem; border: 1px solid var(--border-color);">
-                        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem; font-weight: 600;">
-                            <i class="fas fa-database"></i> Active System Log Sources:
+                <!-- Pagination -->
+                <div id="logsPagination" style="padding: 1.25rem; border-top: 1px solid var(--border-color); display: none; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, rgba(59, 130, 246, 0.01) 100%);">
+                    <div style="font-size: 0.875rem; color: var(--text-primary); font-weight: 500;">
+                        <i class="fas fa-list" style="margin-right: 0.5rem; color: var(--accent-blue);"></i>
+                        Showing <span id="logsPageInfo" style="font-weight: 600; color: var(--accent-blue);">0-0 of 0</span> logs
                         </div>
-                        <div id="systemLogSourcesList" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                            <span style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: var(--bg-primary); border-radius: 0.25rem; border: 1px solid var(--border-color); color: var(--text-secondary);">
-                                <i class="fas fa-spinner fa-pulse"></i> Loading...
-                            </span>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <button id="logsPrevBtn" class="btn" onclick="changeLogsPage(-1)" style="padding: 0.625rem 1.25rem; font-size: 0.875rem; border-radius: 0.375rem; transition: all 0.2s;" disabled>
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </button>
+                        <div id="logsPageNumbers" style="display: flex; gap: 0.375rem; align-items: center;"></div>
+                        <button id="logsNextBtn" class="btn" onclick="changeLogsPage(1)" style="padding: 0.625rem 1.25rem; font-size: 0.875rem; border-radius: 0.375rem; transition: all 0.2s;" disabled>
+                            Next <i class="fas fa-chevron-right"></i>
+                        </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- AI Analysis Panel -->
-                <div class="card" style="display: flex; flex-direction: column;">
+            <!-- AI Analysis Panel (separate card below logs for better layout) -->
+            <div class="card" style="margin-top: 1.5rem;">
                     <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color);">
                         <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">
                             <i class="fas fa-brain" style="color: var(--accent-purple);"></i> Gemini AI Analysis
@@ -1232,21 +1328,20 @@
                         <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">AI-powered log analysis and insights</p>
                     </div>
 
-                    <div id="aiAnalysisPanel" style="flex: 1; padding: 2rem; display: flex; flex-direction: column; justify-content: center; min-height: 400px;">
+                <div id="aiAnalysisPanel" style="flex: 1; padding: 2rem; display: flex; flex-direction: column; justify-content: center; min-height: 400px; overflow-y: auto;">
                         <div style="text-align: center; color: var(--text-secondary);">
                             <div style="margin-bottom: 1.5rem;">
                                 <i class="fas fa-robot" style="font-size: 4rem; opacity: 0.2; color: var(--accent-purple);"></i>
                             </div>
                             <h4 style="margin: 0 0 0.5rem 0; color: var(--text-primary); font-weight: 600;">AI Analysis Ready</h4>
-                            <p style="margin: 0 0 1.5rem 0; font-size: 0.9rem;">Click "Analyze" on any error or warning log to get intelligent insights</p>
+                        <p style="margin: 0 0 1.5rem 0; font-size: 0.9rem;">Click "Analyze" button on any error, warning, or critical log row to get intelligent insights</p>
                             <button class="btn btn-primary" onclick="quickAnalyzeErrors()" style="padding: 0.75rem 1.5rem;">
                                 <i class="fas fa-magic"></i> Quick Analyze Recent Errors
                             </button>
                         </div>
                     </div>
-                </div>
             </div>
-
+            
             <!-- Anomaly Detection -->
             <div class="card">
                 <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color);">
@@ -1843,7 +1938,15 @@
         async function refreshDDoSData() {
             try {
                 // Fetch ML metrics
-                const mlResponse = await fetch('/api/metrics/ml');
+                const mlResponse = await fetch('/api/metrics/ml', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                });
+                if (!mlResponse.ok) {
+                    throw new Error(`ML metrics API returned ${mlResponse.status}: ${mlResponse.statusText}`);
+                }
                 const mlData = await mlResponse.json();
                 
                 // Update ML metric cards
@@ -1857,7 +1960,15 @@
                 }
                 
                 // Fetch attack statistics
-                const attackResponse = await fetch('/api/metrics/attacks');
+                const attackResponse = await fetch('/api/metrics/attacks', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                });
+                if (!attackResponse.ok) {
+                    throw new Error(`Attack metrics API returned ${attackResponse.status}: ${attackResponse.statusText}`);
+                }
                 const attackData = await attackResponse.json();
                 
                 // Update attack metric cards
@@ -1881,7 +1992,15 @@
                 }
                 
                 // Fetch ML history
-                const historyResponse = await fetch('/api/history/ml');
+                const historyResponse = await fetch('/api/history/ml', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                });
+                if (!historyResponse.ok) {
+                    throw new Error(`ML history API returned ${historyResponse.status}: ${historyResponse.statusText}`);
+                }
                 const historyData = await historyResponse.json();
                 
                 // Update ML performance chart
@@ -1896,7 +2015,13 @@
                 }
                 
             } catch (error) {
+                // More detailed error logging
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    console.error('Error refreshing DDoS data: Network error - Server may be unreachable or CORS issue', error);
+                } else {
                 console.error('Error refreshing DDoS data:', error);
+                }
+                // Don't break the UI - errors are logged but don't stop updates
             }
         }
         
@@ -2304,26 +2429,27 @@
             alert(`Cleanup complete! Freed ${data.freed_space}MB`);
         }
         
-        // Log monitoring variables
-        let currentLogs = [];
-        let aiAnalysisCount = 0;
+        // System-Wide Logs - Complete Rewrite
+        let allSystemLogs = [];
+        let filteredSystemLogs = [];
+        let logsCurrentPage = 1;
+        let logsPerPage = 100;
+        let autoRefreshEnabled = false;
+        let autoRefreshInterval = null;
+        let currentLogSource = 'fluent-bit'; // Default to Fluent Bit
 
-        // Helper functions
-        function getSeverityColor(severity) {
-            switch(severity) {
-                case 'CRITICAL': return 'danger';
-                case 'ERROR': return 'danger';
-                case 'WARNING': return 'warning';
-                default: return 'secondary';
-            }
-        }
-
-        function getSeverityBadge(severity) {
-            switch(severity) {
-                case 'CRITICAL': return 'danger';
-                case 'ERROR': return 'danger';
-                case 'WARNING': return 'warning';
-                default: return 'info';
+        // Switch between log sources
+        function switchLogSource() {
+            const selector = document.getElementById('logSourceSelector');
+            if (selector) {
+                currentLogSource = selector.value;
+                const desc = document.getElementById('logSourceDescription');
+                if (desc) {
+                    desc.textContent = currentLogSource === 'fluent-bit' 
+                        ? 'System logs collected by Fluent Bit from syslog, kernel, auth, and systemd'
+                        : 'All system logs aggregated from centralized logger';
+                }
+                refreshSystemLogs();
             }
         }
 
@@ -2333,261 +2459,517 @@
             return div.innerHTML;
         }
 
+        function getLevelColor(level) {
+            const upperLevel = (level || 'INFO').toUpperCase();
+            if (upperLevel === 'CRITICAL' || upperLevel === 'CRIT') return '#ef4444';
+            if (upperLevel === 'ERROR' || upperLevel === 'ERR') return '#f87171';
+            if (upperLevel === 'WARNING' || upperLevel === 'WARN') return '#fbbf24';
+            if (upperLevel === 'DEBUG' || upperLevel === 'DBG') return '#94a3b8';
+            return '#3b82f6'; // INFO default
+        }
+
+        function getLevelBgColor(level) {
+            const upperLevel = (level || 'INFO').toUpperCase();
+            if (upperLevel === 'CRITICAL' || upperLevel === 'CRIT') return 'rgba(239, 68, 68, 0.1)';
+            if (upperLevel === 'ERROR' || upperLevel === 'ERR') return 'rgba(248, 113, 113, 0.1)';
+            if (upperLevel === 'WARNING' || upperLevel === 'WARN') return 'rgba(251, 191, 36, 0.1)';
+            if (upperLevel === 'DEBUG' || upperLevel === 'DBG') return 'rgba(148, 163, 184, 0.1)';
+            return 'rgba(59, 130, 246, 0.1)'; // INFO default
+        }
+
         async function loadServices() {
             try {
-                const response = await fetch('/api/central-logs/services');
-                const data = await response.json();
+                let response, data;
                 
-                if (data.status === 'success') {
-                    const select = document.getElementById('serviceFilter');
-                    select.innerHTML = '<option value="">All Services</option>';
-                    data.services.forEach(service => {
-                        select.innerHTML += `<option value="${service}">${service}</option>`;
-                    });
+                if (currentLogSource === 'fluent-bit') {
+                    // Load Fluent Bit sources/tags as services
+                    response = await fetch('/api/fluent-bit/sources');
+                    data = await response.json();
+                    
+                    if (data.status === 'success' && data.sources) {
+                        const select = document.getElementById('serviceFilter');
+                        if (select) {
+                            select.innerHTML = '<option value="">All Services</option>';
+                            data.sources.forEach(source => {
+                                select.innerHTML += `<option value="${source}">${source}</option>`;
+                            });
+                        }
+                        return;
+                    }
+                } else {
+                    // Load centralized logger services
+                    response = await fetch('/api/central-logs/services');
+                    data = await response.json();
+                    
+                    if (data.status === 'success' && data.services) {
+                        const select = document.getElementById('serviceFilter');
+                        if (select) {
+                            select.innerHTML = '<option value="">All Services</option>';
+                            data.services.forEach(service => {
+                                select.innerHTML += `<option value="${service}">${service}</option>`;
+                            });
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('Error loading services:', error);
             }
         }
 
-        function filterLogsByService() {
-            const selectedService = document.getElementById('serviceFilter').value;
-            const levelFilter = document.getElementById('logLevelFilter').value;
-            
-            let filtered = currentLogs || [];
-            
-            if (selectedService) {
-                filtered = filtered.filter(log => {
-                    const service = (log.service || '').toLowerCase();
-                    return service === selectedService.toLowerCase();
-                });
+        // Load all system-wide logs from centralized logger
+        async function refreshSystemLogs() {
+            const btn = document.getElementById('refreshLogsBtn');
+            if (btn) {
+                const icon = btn.querySelector('i');
+                if (icon) icon.classList.add('fa-spin');
+                btn.disabled = true;
             }
-            
-            if (levelFilter) {
-                filtered = filtered.filter(log => {
-                    const logLevel = (log.level || 'INFO').toUpperCase();
-                    const filterLevel = levelFilter.toUpperCase();
-                    
-                    // Handle common variations while keeping levels separate
-                    if (filterLevel === 'DEBUG') {
-                        return logLevel === 'DEBUG' || logLevel === 'DBG';
-                    } else if (filterLevel === 'INFO') {
-                        return logLevel === 'INFO' || logLevel === 'INFORMATION';
-                    } else if (filterLevel === 'WARNING') {
-                        return logLevel === 'WARNING' || logLevel === 'WARN';
-                    } else if (filterLevel === 'ERROR') {
-                        return logLevel === 'ERROR' || logLevel === 'ERR';
-                    } else if (filterLevel === 'CRITICAL') {
-                        return logLevel === 'CRITICAL' || logLevel === 'CRIT' || logLevel === 'FATAL';
-                    } else {
-                        // Exact match for any other level
-                        return logLevel === filterLevel;
-                    }
-                });
-            }
-            
-            console.log(`Filtering: service=${selectedService || 'all'}, level=${levelFilter || 'all'}, found ${filtered.length} logs`);
-            displaySystemLogs(filtered);
-        }
 
-        function refreshLogs() {
-            loadSystemLogs();
-        }
-
-        async function loadSystemLogs() {
-            const logsList = document.getElementById('logsList');
-            
             try {
-                // Show loading state
-                logsList.innerHTML = `
-                    <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
-                        <i class="fas fa-spinner fa-spin" style="font-size: 2rem; color: var(--accent-blue); margin-bottom: 1rem; display: block;"></i>
-                        <div style="font-size: 1rem; margin-bottom: 0.5rem;">Loading system logs...</div>
-                        <div style="font-size: 0.85rem; opacity: 0.7;">Fetching logs from Docker, systemd, syslog, and more</div>
-                    </div>
-                `;
+                let response, data;
                 
-                const levelFilter = document.getElementById('logLevelFilter').value;
-                let url = '/api/system-logs/recent?limit=100';
-                
-                if (levelFilter) {
-                    url += `&level=${levelFilter}`;
-                }
-                
-                console.log('Fetching logs from:', url);
-                const response = await fetch(url);
-                const data = await response.json();
-                
-                console.log('Log API response:', data);
-                
-                if (data.status === 'success' && data.logs) {
-                    currentLogs = data.logs;
-                    console.log('Received logs:', currentLogs.length);
+                // Fetch from appropriate source
+                if (currentLogSource === 'fluent-bit') {
+                    // Get service, level, and tag filters from UI
+                    const serviceFilter = document.getElementById('serviceFilter')?.value || '';
+                    const levelFilter = document.getElementById('logLevelFilter')?.value || '';
                     
-                    // Apply filters to loaded logs
-                    filterLogsByService();
-                    updateSystemLogStats();
-                    loadServices();
-                    loadSystemLogSources();
-                    loadAnomalies();
+                    let url = '/api/fluent-bit/recent?limit=5000';
+                    if (serviceFilter && serviceFilter !== 'all') url += `&service=${encodeURIComponent(serviceFilter)}`;
+                    if (levelFilter && levelFilter !== 'all') url += `&level=${encodeURIComponent(levelFilter)}`;
                     
-                    // Add activity notification
-                    if (currentLogs.length > 0) {
-                        addActivity('logs', `Loaded ${currentLogs.length} system logs`, 'info');
+                    response = await fetch(url);
+                    data = await response.json();
+                    
+                    if (data.status === 'success' && data.logs && data.logs.length > 0) {
+                        // Store Fluent Bit logs
+                        allSystemLogs = data.logs.map(log => ({
+                            timestamp: log.timestamp,
+                            level: log.level || 'INFO',
+                            message: log.message || '',
+                            service: log.service || 'unknown',
+                            source: 'fluent-bit',
+                            source_file: log.source_file || log.tag || 'unknown',
+                            tag: log.tag || 'unknown',
+                            priority: log.priority || 6
+                        }));
+                    } else if (data.status === 'error') {
+                        // API returned an error
+                        throw new Error(data.message || 'Fluent Bit API error');
                     }
                 } else {
-                    // Try centralized logs as fallback
-                    console.log('Trying centralized logs fallback...');
-                    await loadCentralizedLogs();
+                    // Fetch from centralized logger
+                    response = await fetch('/api/central-logs/recent?limit=5000');
+                    data = await response.json();
+                    
+                    if (data.status === 'success' && data.logs && data.logs.length > 0) {
+                        // Store all logs
+                        allSystemLogs = data.logs.map(log => ({
+                            timestamp: log.timestamp,
+                            level: log.level || 'INFO',
+                            message: log.message || '',
+                            service: log.service || 'unknown',
+                            source: log.source || 'centralized',
+                            source_file: log.source_file || log.source || 'unknown',
+                            priority: log.priority || 6
+                        }));
+                    } else if (data.status === 'error') {
+                        // API returned an error
+                        throw new Error(data.message || 'Centralized logger API error');
+                    }
+                }
+                
+                if (data && data.status === 'success' && data.logs && data.logs.length > 0) {
+                    
+                    // Sort by timestamp (newest first)
+                    allSystemLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    
+                    console.log(`Loaded ${allSystemLogs.length} system-wide logs`);
+                    
+                    // Update stats
+                    updateLogStats();
+                    
+                    // Load services list
+                    await loadServices();
+                    
+                    // Apply filters and display
+                    filterLogs();
+                } else {
+                    // Show helpful message based on source
+                    let message = 'No system logs available';
+                    let helpText = 'Try adjusting your filters or refresh to load new logs';
+                    
+                    if (data) {
+                        if (currentLogSource === 'fluent-bit') {
+                            if (data.message) {
+                                message = 'Fluent Bit not available';
+                                helpText = data.message + '. Make sure Docker is running and Fluent Bit container is started. Run: ./scripts/start-fluent-bit.sh';
+                            } else if (data.status === 'success' && (!data.logs || data.logs.length === 0)) {
+                                message = 'Fluent Bit is running but no logs yet';
+                                helpText = 'Fluent Bit may still be starting or no logs have been processed. Logs will appear here once they are collected.';
+                            } else {
+                                message = 'Fluent Bit connection failed';
+                                helpText = 'Make sure Docker is running and Fluent Bit container is started. Run: ./scripts/start-fluent-bit.sh';
+                            }
+                        } else {
+                            if (data.message) {
+                                helpText = data.message;
+                            }
+                        }
+                    }
+                    displayNoLogs(message, helpText);
                 }
             } catch (error) {
                 console.error('Error loading system logs:', error);
-                // Try centralized logs as fallback
-                try {
-                    await loadCentralizedLogs();
-                } catch (fallbackError) {
-                    console.error('Fallback also failed:', fallbackError);
-                    logsList.innerHTML = `
-                        <div style="padding: 3rem 2rem; text-align: center;">
-                            <i class="fas fa-exclamation-triangle" style="font-size: 2.5rem; color: var(--accent-yellow); margin-bottom: 1rem; display: block;"></i>
-                            <div style="color: var(--text-primary); font-size: 1rem; margin-bottom: 0.5rem; font-weight: 600;">System Logs Not Available</div>
-                            <div style="color: var(--text-secondary); font-size: 0.875rem; line-height: 1.6; max-width: 400px; margin: 0 auto;">
-                                Error: ${error.message}<br><br>
-                                This may require access to /var/log/. Please run with sudo or add your user to the 'adm' group.
-                            </div>
-                        </div>
-                    `;
-                }
-            }
-        }
-        
-        async function loadCentralizedLogs() {
-            const logsList = document.getElementById('logsList');
-            
-            console.log('Loading centralized logs...');
-            const response = await fetch('/api/central-logs/recent?limit=100');
-            const data = await response.json();
-            
-            console.log('Centralized logs response:', data);
-            
-            if ((data.status === 'success' || data.success) && data.logs) {
-                currentLogs = data.logs.map(log => ({
-                    timestamp: log.timestamp,
-                    level: log.level || 'INFO',
-                    message: log.message,
-                    service: log.service || 'unknown',
-                    source: log.source || 'centralized'
-                }));
+                let errorMsg = `Error: ${error.message}`;
+                let helpMsg = 'Check the browser console for details. Make sure the API server is running.';
                 
-                console.log('Centralized logs loaded:', currentLogs.length);
-                // Apply filters to loaded logs
-                filterLogsByService();
-                loadServices();
-                
-                if (currentLogs.length > 0) {
-                    addActivity('logs', `Loaded ${currentLogs.length} centralized logs`, 'info');
+                if (currentLogSource === 'fluent-bit' && error.message.includes('fetch')) {
+                    errorMsg = 'Failed to connect to Fluent Bit API';
+                    helpMsg = 'Make sure Docker is running and Fluent Bit container is started. Run: ./scripts/start-fluent-bit.sh';
                 }
-            } else {
-                throw new Error('No logs available from centralized logging');
+                
+                displayNoLogs(errorMsg, helpMsg);
+            } finally {
+                if (btn) {
+                    const icon = btn.querySelector('i');
+                    if (icon) icon.classList.remove('fa-spin');
+                    btn.disabled = false;
+                }
             }
         }
 
-        function displaySystemLogs(logs) {
-            const logsList = document.getElementById('logsList');
-            const selectedService = document.getElementById('serviceFilter').value;
-            const levelFilter = document.getElementById('logLevelFilter').value;
-            const hasFilters = selectedService || levelFilter;
-            
-            if (!logs || logs.length === 0) {
-                if (hasFilters && currentLogs && currentLogs.length > 0) {
-                    logsList.innerHTML = `
-                        <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
-                            <i class="fas fa-filter" style="font-size: 2.5rem; opacity: 0.3; margin-bottom: 1rem; display: block;"></i>
-                            <div style="font-size: 1rem; margin-bottom: 0.5rem;">No logs match the current filters</div>
-                            <div style="font-size: 0.85rem; opacity: 0.7;">
-                                ${selectedService ? `Service: ${selectedService}<br>` : ''}
-                                ${levelFilter ? `Level: ${levelFilter}` : ''}
+        function displayNoLogs(message, helpText = 'Try adjusting your filters or refresh to load new logs') {
+            const tbody = document.getElementById('logsTableBody');
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 4rem 2rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(59, 130, 246, 0.02) 100%);">
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 1rem;">
+                                <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); display: flex; align-items: center; justify-content: center;">
+                                    <i class="fas fa-inbox" style="font-size: 2.5rem; color: var(--accent-blue); opacity: 0.6;"></i>
                             </div>
-                            <button onclick="document.getElementById('serviceFilter').value=''; document.getElementById('logLevelFilter').value=''; filterLogsByService();" 
-                                    style="margin-top: 1rem; padding: 0.5rem 1rem; background: var(--accent-blue); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
-                                Clear Filters
-                            </button>
+                                <div style="font-size: 1.125rem; font-weight: 600; color: var(--text-primary);">${message}</div>
+                                <div style="font-size: 0.875rem; color: var(--text-secondary); max-width: 500px; margin-top: 0.5rem; line-height: 1.5;">
+                                    ${helpText}
                         </div>
-                    `;
-                } else {
-                    logsList.innerHTML = `
-                        <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
-                            <i class="fas fa-inbox" style="font-size: 2.5rem; opacity: 0.3; margin-bottom: 1rem; display: block;"></i>
-                            <div style="font-size: 1rem; margin-bottom: 0.5rem;">No system logs collected yet</div>
-                            <div style="font-size: 0.85rem; opacity: 0.7;">Please wait while we gather logs from system services...</div>
-                        </div>
-                    `;
+                                <button onclick="clearFilters(); refreshSystemLogs();" class="btn btn-primary" style="margin-top: 1rem; padding: 0.75rem 1.5rem;">
+                                    <i class="fas fa-sync-alt"></i> Refresh & Clear Filters
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        // Filter logs based on search and filters
+        function filterLogs() {
+            const searchText = (document.getElementById('logSearchInput')?.value || '').toLowerCase();
+            const serviceFilter = document.getElementById('serviceFilter')?.value || '';
+            const levelFilter = document.getElementById('logLevelFilter')?.value || '';
+            const sourceFilter = document.getElementById('logSourceFilter')?.value || '';
+            const perPageSelect = document.getElementById('logsPerPage');
+            
+            if (perPageSelect) {
+                logsPerPage = parseInt(perPageSelect.value) || 100;
+            }
+            
+            // Apply all filters
+            filteredSystemLogs = allSystemLogs.filter(log => {
+                // Search filter
+                if (searchText) {
+                    const matchesSearch = 
+                        (log.message || '').toLowerCase().includes(searchText) ||
+                        (log.service || '').toLowerCase().includes(searchText) ||
+                        (log.source_file || '').toLowerCase().includes(searchText);
+                    if (!matchesSearch) return false;
                 }
+                
+                // Service filter
+                if (serviceFilter) {
+                    if ((log.service || '').toLowerCase() !== serviceFilter.toLowerCase()) {
+                        return false;
+                    }
+                }
+                
+                // Level filter
+                if (levelFilter) {
+                    const logLevel = (log.level || 'INFO').toUpperCase();
+                    const filterLevel = levelFilter.toUpperCase();
+                    if (logLevel !== filterLevel && 
+                        !(filterLevel === 'ERROR' && logLevel === 'ERR') &&
+                        !(filterLevel === 'WARNING' && logLevel === 'WARN') &&
+                        !(filterLevel === 'CRITICAL' && (logLevel === 'CRIT' || logLevel === 'FATAL'))) {
+                        return false;
+                    }
+                }
+                
+                // Source filter
+                if (sourceFilter) {
+                    const logSource = (log.source_file || log.source || '').toLowerCase();
+                    if (!logSource.includes(sourceFilter.toLowerCase())) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            // Reset to page 1 when filtering
+            logsCurrentPage = 1;
+            
+            // Update stats with filtered results
+            updateFilteredLogStats();
+            
+            // Display paginated results
+            displayLogs();
+        }
+
+        // Display logs in table with pagination
+        function displayLogs() {
+            const tbody = document.getElementById('logsTableBody');
+            if (!tbody) return;
+            
+            if (filteredSystemLogs.length === 0) {
+                displayNoLogs('No logs match the current filters');
+                document.getElementById('logsPagination').style.display = 'none';
                 return;
             }
 
-            let html = '';
+            // Calculate pagination
+            const totalPages = Math.ceil(filteredSystemLogs.length / logsPerPage);
+            const startIndex = (logsCurrentPage - 1) * logsPerPage;
+            const endIndex = Math.min(startIndex + logsPerPage, filteredSystemLogs.length);
+            const pageLogs = filteredSystemLogs.slice(startIndex, endIndex);
             
-            logs.forEach((log, index) => {
-                const level = log.level || 'INFO';
-                const timeStr = new Date(log.timestamp).toLocaleTimeString('en-US', {
+            // Build table rows with alternating colors and better styling
+            let html = '';
+            pageLogs.forEach((log, index) => {
+                const timestamp = new Date(log.timestamp);
+                const dateStr = timestamp.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+                const timeStr = timestamp.toLocaleTimeString('en-US', {
                     hour: '2-digit',
                     minute: '2-digit',
-                    second: '2-digit'
+                    second: '2-digit',
+                    hour12: true
                 });
-                const source = log.source || 'unknown';
                 
-                // Get source icon
-                let sourceIcon = 'fa-file-alt';
-                if (source === 'docker') sourceIcon = 'fa-docker';
-                else if (source === 'systemd') sourceIcon = 'fa-cogs';
-                else if (source === 'syslog') sourceIcon = 'fa-list';
-                else if (source === 'kernel') sourceIcon = 'fa-microchip';
-                else if (source === 'apache') sourceIcon = 'fa-globe';
-                else if (source === 'nginx') sourceIcon = 'fa-server';
+                const level = log.level || 'INFO';
+                const levelUpper = level.toUpperCase();
+                const levelColor = getLevelColor(level);
+                const levelBg = getLevelBgColor(level);
                 
-                // Determine badge color and style
-                let levelBadgeColor = 'var(--accent-blue)';
-                let levelBadgeText = level;
-                if (level === 'ERROR' || level === 'CRITICAL') {
-                    levelBadgeColor = 'var(--accent-red)';
-                } else if (level === 'WARNING' || level === 'WARN') {
-                    levelBadgeColor = 'var(--accent-yellow)';
-                } else if (level === 'DEBUG') {
-                    levelBadgeColor = 'var(--text-secondary)';
+                // Get level icon
+                let levelIcon = 'fa-info-circle';
+                if (levelUpper === 'CRITICAL' || levelUpper === 'CRIT' || levelUpper === 'FATAL') {
+                    levelIcon = 'fa-exclamation-circle';
+                } else if (levelUpper === 'ERROR' || levelUpper === 'ERR') {
+                    levelIcon = 'fa-times-circle';
+                } else if (levelUpper === 'WARNING' || levelUpper === 'WARN') {
+                    levelIcon = 'fa-exclamation-triangle';
+                } else if (levelUpper === 'DEBUG' || levelUpper === 'DBG') {
+                    levelIcon = 'fa-bug';
+                }
+                
+                // Get service icon based on service name
+                let serviceIcon = 'fa-server';
+                const serviceLower = (log.service || '').toLowerCase();
+                if (serviceLower.includes('docker') || serviceLower.includes('container')) {
+                    serviceIcon = 'fa-docker';
+                } else if (serviceLower.includes('nginx')) {
+                    serviceIcon = 'fa-globe';
+                } else if (serviceLower.includes('systemd')) {
+                    serviceIcon = 'fa-cogs';
+                } else if (serviceLower.includes('kernel')) {
+                    serviceIcon = 'fa-microchip';
+                } else if (serviceLower.includes('auth') || serviceLower.includes('ssh')) {
+                    serviceIcon = 'fa-shield-alt';
+                } else if (serviceLower.includes('network')) {
+                    serviceIcon = 'fa-network-wired';
+                }
+                
+                // Alternating row background
+                const rowBg = index % 2 === 0 ? 'var(--bg-primary)' : 'rgba(59, 130, 246, 0.02)';
+                
+                // Truncate long messages
+                let message = escapeHtml(log.message || '');
+                const maxMessageLength = 200;
+                const shouldTruncate = message.length > maxMessageLength;
+                if (shouldTruncate) {
+                    message = message.substring(0, maxMessageLength) + '...';
                 }
                 
                 html += `
-                    <div style="padding: 0.85rem 1rem; border-bottom: 1px solid var(--border-color); transition: all 0.2s; cursor: default;" 
-                         onmouseover="this.style.background='rgba(59, 130, 246, 0.05)'; this.style.borderLeftColor='var(--accent-blue)'; this.style.borderLeftWidth='3px';" 
-                         onmouseout="this.style.background='transparent'; this.style.borderLeftColor='transparent'; this.style.borderLeftWidth='0px';">
-                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem; gap: 0.75rem;">
-                            <div style="flex: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-                                <span style="color: var(--text-secondary); font-size: 0.75rem; font-weight: 500; font-family: 'Courier New', monospace;">
-                                    <i class="fas fa-clock" style="font-size: 0.7rem;"></i> ${timeStr}
-                                </span>
-                                <span style="font-size: 0.75rem; padding: 0.25rem 0.6rem; background: var(--bg-tertiary); border-radius: 0.25rem; color: var(--text-secondary); border: 1px solid var(--border-color); font-weight: 500;">
-                                    <i class="fab ${sourceIcon}"></i> ${log.service}
-                                </span>
-                                <span style="font-size: 0.75rem; padding: 0.25rem 0.6rem; border-radius: 0.25rem; background: ${levelBadgeColor}; color: white; font-weight: 600;">
-                                    ${levelBadgeText}
-                                </span>
+                    <tr style="border-bottom: 1px solid rgba(0, 0, 0, 0.05); background: ${rowBg}; transition: all 0.2s ease;" 
+                        onmouseover="this.style.background='rgba(59, 130, 246, 0.08)'; this.style.transform='scale(1.002)'; this.style.boxShadow='0 2px 8px rgba(59, 130, 246, 0.1)';" 
+                        onmouseout="this.style.background='${rowBg}'; this.style.transform='scale(1)'; this.style.boxShadow='none';"
+                        title="${escapeHtml(log.message)}">
+                        <td style="padding: 1rem 1.25rem; font-family: 'Courier New', monospace; font-size: 0.8125rem; color: var(--text-secondary); vertical-align: middle; border-right: 1px solid rgba(0, 0, 0, 0.05);">
+                            <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                                <div style="font-weight: 600; color: var(--text-primary); font-size: 0.75rem;">${dateStr}</div>
+                                <div style="color: var(--text-secondary);">${timeStr}</div>
                             </div>
-                            ${level === 'ERROR' || level === 'WARNING' || level === 'CRITICAL' ? `
-                                <button class="btn btn-primary" onclick='analyzeLogWithAI(${JSON.stringify(log).replace(/'/g, "&#39;")})' 
-                                        style="font-size: 0.75rem; padding: 0.35rem 0.75rem; white-space: nowrap; flex-shrink: 0;">
+                        </td>
+                        <td style="padding: 1rem 1.25rem; font-weight: 600; color: var(--text-primary); vertical-align: middle; border-right: 1px solid rgba(0, 0, 0, 0.05);">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fab ${serviceIcon}" style="color: var(--accent-blue); font-size: 1rem;"></i>
+                                <span style="font-size: 0.875rem;">${escapeHtml(log.service)}</span>
+                            </div>
+                        </td>
+                        <td style="padding: 1rem 1.25rem; vertical-align: middle; border-right: 1px solid rgba(0, 0, 0, 0.05);">
+                            <span style="display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 700; color: ${levelColor}; background: ${levelBg}; border: 1px solid ${levelColor}; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                                <i class="fas ${levelIcon}"></i>
+                                <span>${level}</span>
+                                </span>
+                        </td>
+                        <td style="padding: 1rem 1.25rem; font-size: 0.8125rem; color: var(--text-secondary); vertical-align: middle; border-right: 1px solid rgba(0, 0, 0, 0.05);">
+                            <div style="display: flex; align-items: center; gap: 0.375rem;">
+                                <i class="fas fa-file-alt" style="font-size: 0.75rem; color: var(--accent-green);"></i>
+                                <span style="font-family: monospace;">${escapeHtml(log.source_file || log.source || 'unknown')}</span>
+                            </div>
+                        </td>
+                        <td style="padding: 1rem 1.25rem; color: var(--text-primary); max-width: 600px; word-wrap: break-word; line-height: 1.5; vertical-align: middle;">
+                            <div style="display: flex; align-items: start; gap: 0.75rem; justify-content: space-between;">
+                                <div style="font-size: 0.875rem; flex: 1; ${shouldTruncate ? 'font-style: italic;' : ''}">
+                                    ${message}
+                                    ${shouldTruncate ? '<span style="color: var(--accent-blue); font-size: 0.75rem; margin-left: 0.5rem;">[Full message on hover]</span>' : ''}
+                                </div>
+                                ${(levelUpper === 'ERROR' || levelUpper === 'ERR' || levelUpper === 'CRITICAL' || levelUpper === 'CRIT' || levelUpper === 'WARNING' || levelUpper === 'WARN') ? `
+                                    <button onclick='analyzeLogWithAI(${JSON.stringify(log).replace(/'/g, "&#39;").replace(/"/g, '&quot;')})' 
+                                            class="btn btn-primary" 
+                                            style="padding: 0.375rem 0.75rem; font-size: 0.75rem; white-space: nowrap; flex-shrink: 0; border-radius: 0.375rem; cursor: pointer; transition: all 0.2s;"
+                                            onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 2px 8px rgba(59, 130, 246, 0.3)';"
+                                            onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';"
+                                            title="Analyze this log with AI">
                                     <i class="fas fa-brain"></i> Analyze
                                 </button>
                             ` : ''}
                         </div>
-                        <div style="color: var(--text-primary); word-wrap: break-word; font-size: 0.875rem; line-height: 1.5; padding-left: 0.25rem;">
-                            ${escapeHtml(log.message)}
-                        </div>
-                    </div>
+                        </td>
+                    </tr>
                 `;
             });
             
-            logsList.innerHTML = html;
+            tbody.innerHTML = html;
+            
+            // Update pagination
+            updateLogsPagination(totalPages, startIndex + 1, endIndex, filteredSystemLogs.length);
+        }
+
+        function updateLogsPagination(totalPages, start, end, total) {
+            const pagination = document.getElementById('logsPagination');
+            if (!pagination) return;
+            
+            if (totalPages <= 1) {
+                pagination.style.display = 'none';
+                return;
+            }
+            
+            pagination.style.display = 'flex';
+            document.getElementById('logsPageInfo').textContent = `${start}-${end} of ${total}`;
+            
+            // Update buttons
+            document.getElementById('logsPrevBtn').disabled = logsCurrentPage === 1;
+            document.getElementById('logsNextBtn').disabled = logsCurrentPage >= totalPages;
+            
+            // Update page numbers
+            const pageNumbers = document.getElementById('logsPageNumbers');
+            if (pageNumbers) {
+                let html = '';
+                const maxVisible = 5;
+                let startPage = Math.max(1, logsCurrentPage - Math.floor(maxVisible / 2));
+                let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+                
+                if (endPage - startPage < maxVisible - 1) {
+                    startPage = Math.max(1, endPage - maxVisible + 1);
+                }
+                
+                for (let i = startPage; i <= endPage; i++) {
+                    const isActive = i === logsCurrentPage;
+                    html += `
+                        <button class="btn ${isActive ? 'btn-primary' : ''}" 
+                                onclick="logsCurrentPage=${i}; displayLogs();" 
+                                style="padding: 0.5rem 0.875rem; font-size: 0.875rem; min-width: 2.75rem; font-weight: ${isActive ? '700' : '500'}; border-radius: 0.375rem; transition: all 0.2s; ${isActive ? 'box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);' : ''}">
+                            ${i}
+                        </button>
+                    `;
+                }
+                pageNumbers.innerHTML = html;
+            }
+        }
+
+        function changeLogsPage(direction) {
+            const totalPages = Math.ceil(filteredSystemLogs.length / logsPerPage);
+            logsCurrentPage += direction;
+            logsCurrentPage = Math.max(1, Math.min(logsCurrentPage, totalPages));
+            displayLogs();
+            // Scroll to top of table
+            document.getElementById('logsTableBody')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function clearFilters() {
+            document.getElementById('logSearchInput').value = '';
+            document.getElementById('serviceFilter').value = '';
+            document.getElementById('logLevelFilter').value = '';
+            document.getElementById('logSourceFilter').value = '';
+            filterLogs();
+        }
+
+        function toggleAutoRefresh() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+            const btn = document.getElementById('autoRefreshBtn');
+            
+            if (autoRefreshEnabled) {
+                if (btn) {
+                    btn.innerHTML = '<i class="fas fa-pause"></i> Stop Auto-Refresh';
+                    btn.classList.remove('btn-primary');
+                    btn.classList.add('btn-secondary');
+                }
+                autoRefreshInterval = setInterval(refreshSystemLogs, 5000); // Refresh every 5 seconds
+            } else {
+                if (btn) {
+                    btn.innerHTML = '<i class="fas fa-play"></i> Auto-Refresh';
+                    btn.classList.remove('btn-secondary');
+                    btn.classList.add('btn-primary');
+                }
+                if (autoRefreshInterval) {
+                    clearInterval(autoRefreshInterval);
+                    autoRefreshInterval = null;
+                }
+            }
+        }
+
+        function updateLogStats() {
+            const total = allSystemLogs.length;
+            const services = new Set(allSystemLogs.map(log => log.service)).size;
+            const errors = allSystemLogs.filter(log => {
+                const level = (log.level || 'INFO').toUpperCase();
+                return level === 'ERROR' || level === 'ERR' || level === 'CRITICAL' || level === 'CRIT';
+            }).length;
+            const warnings = allSystemLogs.filter(log => {
+                const level = (log.level || 'INFO').toUpperCase();
+                return level === 'WARNING' || level === 'WARN';
+            }).length;
+            
+            document.getElementById('totalLogsCount').textContent = total.toLocaleString();
+            document.getElementById('totalServicesCount').textContent = services.toLocaleString();
+            document.getElementById('errorLogsCount').textContent = errors.toLocaleString();
+            document.getElementById('warningLogsCount').textContent = warnings.toLocaleString();
+        }
+
+        function updateFilteredLogStats() {
+            const errors = filteredSystemLogs.filter(log => {
+                const level = (log.level || 'INFO').toUpperCase();
+                return level === 'ERROR' || level === 'ERR' || level === 'CRITICAL' || level === 'CRIT';
+            }).length;
+            const warnings = filteredSystemLogs.filter(log => {
+                const level = (log.level || 'INFO').toUpperCase();
+                return level === 'WARNING' || level === 'WARN';
+            }).length;
+            
+            document.getElementById('errorLogsCount').textContent = errors.toLocaleString();
+            document.getElementById('warningLogsCount').textContent = warnings.toLocaleString();
         }
 
         async function updateSystemLogStats() {
@@ -2601,33 +2983,6 @@
                 }
             } catch (error) {
                 console.error('Error loading system log stats:', error);
-            }
-        }
-
-        async function loadSystemLogSources() {
-            try {
-                const response = await fetch('/api/system-logs/sources');
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    const sources = data.sources;
-                    const sourcesList = document.getElementById('systemLogSourcesList');
-                    
-                    let html = '';
-                    sources.forEach(source => {
-                        const icon = source.enabled ? 'fa-check-circle' : 'fa-times-circle';
-                        const color = source.enabled ? 'var(--accent-green)' : 'var(--text-secondary)';
-                        html += `
-                            <span style="font-size: 0.75rem; padding: 0.25rem 0.5rem; background: var(--bg-primary); border-radius: 0.25rem; border: 1px solid var(--border-color);">
-                                <i class="fas ${icon}" style="color: ${color};"></i> ${source.name}
-                            </span>
-                        `;
-                    });
-                    
-                    sourcesList.innerHTML = html;
-                }
-            } catch (error) {
-                console.error('Error loading system log sources:', error);
             }
         }
 
@@ -3153,7 +3508,15 @@
         // Update statistics with animation
         async function updateStatistics() {
             try {
-                const statsResponse = await fetch('/api/blocked-ips/statistics');
+                const statsResponse = await fetch('/api/blocked-ips/statistics', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                });
+                if (!statsResponse.ok) {
+                    throw new Error(`Statistics API returned ${statsResponse.status}: ${statsResponse.statusText}`);
+                }
                 const statsData = await statsResponse.json();
                 
                 if (statsData.success) {
@@ -3174,7 +3537,13 @@
                     updateStatValue('statsHigh', stats.by_threat_level?.High || 0);
                 }
             } catch (error) {
+                // More detailed error logging
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    console.error('Error updating statistics: Network error - Server may be unreachable or CORS issue', error);
+                } else {
                 console.error('Error updating statistics:', error);
+                }
+                // Don't break the UI - errors are logged but don't stop updates
             }
         }
         
@@ -3649,7 +4018,7 @@
             refreshDDoSData();
             refreshBlockedIPsList();
             updateStatistics(); // Initial statistics load
-            refreshLogs(); // Initial system logs load
+            refreshSystemLogs(); // Initial system logs load
             
             // Refresh DDoS data every 5 seconds
             setInterval(refreshDDoSData, 5000);
@@ -3660,16 +4029,7 @@
             // Update statistics every 3 seconds for real-time feel
             setInterval(updateStatistics, 3000);
             
-            // Refresh centralized logs in real-time every 2 seconds (if on Centralized Logs tab)
-            setInterval(() => {
-                const activeTab = document.querySelector('.tab.active');
-                if (activeTab && activeTab.textContent.includes('Centralized Logs')) {
-                    loadCentralizedLogs();
-                }
-            }, 2000);
-            
-            // Refresh system logs every 15 seconds
-            setInterval(refreshLogs, 15000);
+            // Note: Auto-refresh is now controlled by the toggle button in the UI
             
             // Refresh anomalies every 30 seconds
             setInterval(loadAnomalies, 30000);

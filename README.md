@@ -43,12 +43,10 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
 
 **Complete ML Monitoring + System Healing Control Center:**
 
-```bash
-# Start the unified dashboard (combines both systems)
-./start-unified-dashboard.sh
-
-# Access at http://localhost:3001
-```
+   # Stop current server, then:
+   cd /home/cdrditgis/Documents/Healing-bot
+   source venv/bin/activate
+   python3 monitoring/server/healing_dashboard_api.py
 
 **Combined Features:**
 - 📊 ML Model Performance Metrics

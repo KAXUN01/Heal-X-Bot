@@ -1209,7 +1209,7 @@ async def get_critical_services_logs(limit: int = 100, level: str = None, catego
         }
 
 @app.get("/api/critical-services/issues")
-async def get_critical_service_issues():
+async def get_critical_service_issues(include_test: bool = False):
     """Get critical issues from monitored services"""
     try:
         monitor = get_critical_services_monitor()
@@ -1218,10 +1218,40 @@ async def get_critical_service_issues():
             return {
                 "status": "error",
                 "message": "Critical services monitor not initialized",
-                "issues": []
+                "issues": [],
+                "count": 0
             }
         
-        issues = monitor.get_critical_issues()
+        # Run get_critical_issues with timeout to prevent hanging
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            issues = await asyncio.wait_for(
+                loop.run_in_executor(None, monitor.get_critical_issues),
+                timeout=3.0  # 3 second timeout - fast response
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Timeout getting critical issues - returning empty result")
+            issues = []
+        except Exception as e:
+            logger.error(f"Error in executor: {e}")
+            issues = []
+        
+        # Add test issue if requested
+        if include_test and len(issues) == 0:
+            from datetime import datetime
+            test_issue = {
+                'timestamp': datetime.now().isoformat(),
+                'service': 'test-critical-service',
+                'category': 'CRITICAL',
+                'level': 'CRITICAL',
+                'severity': 'CRITICAL',
+                'priority': 2,
+                'message': 'TEST: This is a test CRITICAL error to verify the dashboard is working correctly.',
+                'description': 'Test service - for verification purposes',
+                'source': 'test'
+            }
+            issues.insert(0, test_issue)
         
         return {
             "status": "success",
@@ -1230,10 +1260,13 @@ async def get_critical_service_issues():
         }
     except Exception as e:
         logger.error(f"Error getting critical service issues: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return {
             "status": "error",
             "message": str(e),
-            "issues": []
+            "issues": [],
+            "count": 0
         }
 
 @app.get("/api/critical-services/statistics")

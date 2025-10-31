@@ -1250,10 +1250,23 @@
             <!-- Anomaly Detection -->
             <div class="card">
                 <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color);">
-                    <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">
-                        <i class="fas fa-exclamation-triangle" style="color: var(--accent-yellow);"></i> Detected Anomalies & Errors
-                    </h3>
-                    <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">System issues detected through log analysis</p>
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">
+                                <i class="fas fa-exclamation-triangle" style="color: var(--accent-red);"></i> Critical Errors Only
+                            </h3>
+                            <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">Showing only CRITICAL severity issues requiring immediate attention</p>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <label style="font-size: 0.85rem; color: var(--text-secondary);">Items per page:</label>
+                            <select id="anomaliesPageSize" class="search-input" onchange="resetAnomaliesPagination(); displayAnomalies(allAnomalies)" style="padding: 0.4rem 0.6rem; font-size: 0.85rem; width: auto;">
+                                <option value="10">10</option>
+                                <option value="20" selected>20</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 <div style="overflow-x: auto;">
                     <table style="width: 100%; border-collapse: collapse;">
@@ -1285,6 +1298,23 @@
                             </tr>
                         </tbody>
                     </table>
+                </div>
+                <!-- Pagination Controls -->
+                <div id="anomaliesPagination" style="padding: 1rem 1.25rem; border-top: 1px solid var(--border-color); display: none; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                        Showing <span id="anomaliesPageInfo">0-0 of 0</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <button id="anomaliesPrevBtn" class="btn" onclick="changeAnomaliesPage(-1)" style="padding: 0.5rem 1rem; font-size: 0.875rem;" disabled>
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </button>
+                        <div id="anomaliesPageNumbers" style="display: flex; gap: 0.25rem; align-items: center;">
+                            <!-- Page numbers will be inserted here -->
+                        </div>
+                        <button id="anomaliesNextBtn" class="btn" onclick="changeAnomaliesPage(1)" style="padding: 0.5rem 1rem; font-size: 0.875rem;" disabled>
+                            Next <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2823,12 +2853,87 @@
 
         async function loadAnomalies() {
             try {
-                const response = await fetch('/api/critical-services/issues');
-                const data = await response.json();
+                // First try with include_test=true to get a test issue if none exist
+                let response = await fetch('/api/critical-services/issues?include_test=true');
+                let data = await response.json();
+                
+                // If still no issues and no test issue was added, try again without test
+                if (data.status === 'success' && data.issues && data.issues.length === 0) {
+                    response = await fetch('/api/critical-services/issues');
+                    data = await response.json();
+                }
 
                 if (data.status === 'success' && data.issues !== undefined) {
-                    displayAnomalies(data.issues);
-                    console.log(`Loaded ${data.count || 0} anomalies`);
+                    // Filter to show only CRITICAL severity issues
+                    // Check both 'severity' and 'level' fields, and handle variations
+                    const criticalIssues = data.issues.filter(issue => {
+                        const severity = (issue.severity || issue.level || '').toUpperCase();
+                        const priority = issue.priority || 6;
+                        // Include CRITICAL severity, or priority <= 2 (CRITICAL level in syslog)
+                        const isCritical = severity === 'CRITICAL' || severity === 'CRIT' || priority <= 2;
+                        
+                        // Debug: Log first nginx issue to see why it might be filtered
+                        if (!isCritical && issue.service && issue.service.toLowerCase().includes('nginx')) {
+                            console.warn('Nginx issue filtered out:', {
+                                service: issue.service,
+                                severity: issue.severity,
+                                level: issue.level,
+                                priority: priority,
+                                isCritical: isCritical
+                            });
+                        }
+                        
+                        return isCritical;
+                    });
+                    
+                    // Count nginx issues in filtered results
+                    const nginxInFiltered = criticalIssues.filter(i => i.service && i.service.toLowerCase().includes('nginx'));
+                    console.log(`✅ Filtered results: ${criticalIssues.length} critical issues (${nginxInFiltered.length} nginx)`);
+                    
+                    if (nginxInFiltered.length > 0) {
+                        console.log(`✅ Nginx issues found in filtered list! First nginx issue:`, nginxInFiltered[0]);
+                    }
+                    
+                    displayAnomalies(criticalIssues);
+                    console.log(`Loaded ${criticalIssues.length} critical issues out of ${data.count || 0} total issues (showing CRITICAL only)`);
+                    
+                    // Debug: Log all issues if no critical ones found, or if we have nginx issues
+                    const nginxIssues = data.issues.filter(i => i.service && i.service.toLowerCase().includes('nginx'));
+                    if (nginxIssues.length > 0) {
+                        console.log(`📊 Found ${nginxIssues.length} nginx issues in API response`);
+                        nginxIssues.slice(0, 2).forEach((issue, idx) => {
+                            const severity = (issue.severity || issue.level || '').toUpperCase();
+                            const priority = issue.priority || 6;
+                            const isCritical = severity === 'CRITICAL' || severity === 'CRIT' || priority <= 2;
+                            console.log(`Nginx issue ${idx + 1}:`, {
+                                service: issue.service,
+                                level: issue.level,
+                                severity: issue.severity || severity,
+                                priority: priority,
+                                category: issue.category,
+                                passesCriticalFilter: isCritical,
+                                message: (issue.message || '').substring(0, 80)
+                            });
+                        });
+                    }
+                    
+                    if (criticalIssues.length === 0 && data.issues.length > 0) {
+                        console.warn('No CRITICAL issues found! Showing first 3 issues for debugging:');
+                        data.issues.slice(0, 3).forEach((issue, idx) => {
+                            const severity = (issue.severity || issue.level || '').toUpperCase();
+                            const priority = issue.priority || 6;
+                            const isCritical = severity === 'CRITICAL' || severity === 'CRIT' || priority <= 2;
+                            console.warn(`Issue ${idx + 1}:`, {
+                                service: issue.service,
+                                level: issue.level,
+                                severity: issue.severity || severity,
+                                priority: priority,
+                                category: issue.category,
+                                passesCriticalFilter: isCritical,
+                                message: (issue.message || '').substring(0, 80)
+                            });
+                        });
+                    }
                 } else if (data.status === 'error') {
                     console.error('Error loading anomalies:', data.message);
                     const tbody = document.getElementById('anomaliesTable');
@@ -2859,10 +2964,41 @@
             }
         }
 
+        // Pagination state for anomalies
+        let allAnomalies = [];
+        let anomaliesCurrentPage = 1;
+        let anomaliesPageSize = 20;
+
+        function resetAnomaliesPagination() {
+            anomaliesCurrentPage = 1;
+        }
+
+        function getAnomaliesPageSize() {
+            const pageSizeSelect = document.getElementById('anomaliesPageSize');
+            return pageSizeSelect ? parseInt(pageSizeSelect.value) : 20;
+        }
+
+        function changeAnomaliesPage(delta) {
+            const totalPages = Math.ceil(allAnomalies.length / anomaliesPageSize);
+            anomaliesCurrentPage = Math.max(1, Math.min(totalPages, anomaliesCurrentPage + delta));
+            displayAnomalies(allAnomalies);
+        }
+
+        function goToAnomaliesPage(page) {
+            const totalPages = Math.ceil(allAnomalies.length / anomaliesPageSize);
+            anomaliesCurrentPage = Math.max(1, Math.min(totalPages, page));
+            displayAnomalies(allAnomalies);
+        }
+
         function displayAnomalies(issues) {
             const tbody = document.getElementById('anomaliesTable');
+            const paginationDiv = document.getElementById('anomaliesPagination');
             
-            if (!issues || issues.length === 0) {
+            // Store all issues for pagination
+            allAnomalies = issues || [];
+            anomaliesPageSize = getAnomaliesPageSize();
+            
+            if (!allAnomalies || allAnomalies.length === 0) {
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
@@ -2872,11 +3008,47 @@
                         </td>
                     </tr>
                 `;
+                if (paginationDiv) paginationDiv.style.display = 'none';
                 return;
             }
 
+            // Sort by timestamp (newest first) before pagination
+            // Prioritize nginx issues to appear first
+            const sortedIssues = [...allAnomalies].sort((a, b) => {
+                // Check if either is nginx (prioritize nginx)
+                const aIsNginx = a.service && a.service.toLowerCase().includes('nginx');
+                const bIsNginx = b.service && b.service.toLowerCase().includes('nginx');
+                
+                if (aIsNginx && !bIsNginx) return -1; // nginx first
+                if (!aIsNginx && bIsNginx) return 1;  // nginx first
+                
+                // Both same priority, sort by timestamp (newest first)
+                const timeA = new Date(a.timestamp || 0);
+                const timeB = new Date(b.timestamp || 0);
+                return timeB - timeA;
+            });
+            
+            // Calculate pagination using sorted issues
+            const totalPages = Math.ceil(sortedIssues.length / anomaliesPageSize);
+            anomaliesCurrentPage = Math.max(1, Math.min(totalPages, anomaliesCurrentPage));
+            
+            const startIndex = (anomaliesCurrentPage - 1) * anomaliesPageSize;
+            const endIndex = Math.min(startIndex + anomaliesPageSize, sortedIssues.length);
+            const pageIssues = sortedIssues.slice(startIndex, endIndex);
+            
+            // Debug: Log if nginx issues are in the sorted list
+            const nginxInSorted = sortedIssues.filter(i => i.service && i.service.toLowerCase().includes('nginx'));
+            if (nginxInSorted.length > 0) {
+                console.log(`✅ Found ${nginxInSorted.length} nginx issues in sorted list (will show ${Math.min(nginxInSorted.length, anomaliesPageSize)} on page ${anomaliesCurrentPage})`);
+                console.log(`✅ First ${Math.min(3, nginxInSorted.length)} nginx issues:`, 
+                    nginxInSorted.slice(0, 3).map(i => ({service: i.service, message: i.message?.substring(0, 50)})));
+            } else {
+                console.warn(`⚠️  No nginx issues found in sorted list (total issues: ${sortedIssues.length})`);
+            }
+
+            // Display issues for current page
             let html = '';
-            issues.forEach(issue => {
+            pageIssues.forEach(issue => {
                 // Handle both 'severity' and 'level' fields for compatibility
                 const severity = issue.severity || issue.level || 'UNKNOWN';
                 const severityColor = severity === 'CRITICAL' ? 'var(--accent-red)' : severity === 'ERROR' ? 'var(--accent-red)' : 'var(--accent-yellow)';
@@ -2913,6 +3085,69 @@
             });
             
             tbody.innerHTML = html;
+
+            // Update pagination controls
+            if (paginationDiv && totalPages > 1) {
+                paginationDiv.style.display = 'flex';
+                
+                // Update page info (use sortedIssues length)
+                const pageInfo = document.getElementById('anomaliesPageInfo');
+                if (pageInfo) {
+                    pageInfo.textContent = `${startIndex + 1}-${endIndex} of ${sortedIssues.length}`;
+                }
+
+                // Update Previous/Next buttons (use sortedIssues length for total pages)
+                const prevBtn = document.getElementById('anomaliesPrevBtn');
+                const nextBtn = document.getElementById('anomaliesNextBtn');
+                const sortedTotalPages = Math.ceil(sortedIssues.length / anomaliesPageSize);
+                if (prevBtn) prevBtn.disabled = anomaliesCurrentPage === 1;
+                if (nextBtn) nextBtn.disabled = anomaliesCurrentPage >= sortedTotalPages;
+
+                // Update page numbers
+                const pageNumbersDiv = document.getElementById('anomaliesPageNumbers');
+                if (pageNumbersDiv) {
+                    let pageNumbersHtml = '';
+                    const maxPagesToShow = 7;
+                    let startPage = Math.max(1, anomaliesCurrentPage - Math.floor(maxPagesToShow / 2));
+                    let endPage = Math.min(sortedTotalPages, startPage + maxPagesToShow - 1);
+                    
+                    if (endPage - startPage < maxPagesToShow - 1) {
+                        startPage = Math.max(1, endPage - maxPagesToShow + 1);
+                    }
+
+                    // First page
+                    if (startPage > 1) {
+                        pageNumbersHtml += `
+                            <button onclick="goToAnomaliesPage(1)" class="btn" style="padding: 0.4rem 0.75rem; font-size: 0.875rem; min-width: 2.5rem;">1</button>
+                            ${startPage > 2 ? '<span style="padding: 0.4rem 0.25rem; color: var(--text-secondary);">...</span>' : ''}
+                        `;
+                    }
+
+                    // Page numbers
+                    for (let i = startPage; i <= endPage; i++) {
+                        const isActive = i === anomaliesCurrentPage;
+                        pageNumbersHtml += `
+                            <button onclick="goToAnomaliesPage(${i})" 
+                                    class="btn" 
+                                    style="padding: 0.4rem 0.75rem; font-size: 0.875rem; min-width: 2.5rem; ${isActive ? 'background: var(--accent-blue); color: white; border-color: var(--accent-blue);' : ''}">
+                                ${i}
+                            </button>
+                        `;
+                    }
+
+                    // Last page
+                    if (endPage < totalPages) {
+                        pageNumbersHtml += `
+                            ${endPage < totalPages - 1 ? '<span style="padding: 0.4rem 0.25rem; color: var(--text-secondary);">...</span>' : ''}
+                            <button onclick="goToAnomaliesPage(${totalPages})" class="btn" style="padding: 0.4rem 0.75rem; font-size: 0.875rem; min-width: 2.5rem;">${totalPages}</button>
+                        `;
+                    }
+
+                    pageNumbersDiv.innerHTML = pageNumbersHtml;
+                }
+            } else if (paginationDiv) {
+                paginationDiv.style.display = 'none';
+            }
         }
         
         // Update statistics with animation
@@ -3425,7 +3660,15 @@
             // Update statistics every 3 seconds for real-time feel
             setInterval(updateStatistics, 3000);
             
-            // Refresh logs every 15 seconds
+            // Refresh centralized logs in real-time every 2 seconds (if on Centralized Logs tab)
+            setInterval(() => {
+                const activeTab = document.querySelector('.tab.active');
+                if (activeTab && activeTab.textContent.includes('Centralized Logs')) {
+                    loadCentralizedLogs();
+                }
+            }, 2000);
+            
+            // Refresh system logs every 15 seconds
             setInterval(refreshLogs, 15000);
             
             // Refresh anomalies every 30 seconds

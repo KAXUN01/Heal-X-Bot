@@ -8,6 +8,7 @@ import time
 import json
 import logging
 import threading
+import hashlib
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any
@@ -50,6 +51,9 @@ class CentralizedLogger:
         
         # Index for quick search
         self.log_index = []
+        
+        # Track seen logs to prevent duplicates (using message hash + timestamp)
+        self.seen_logs = set()
         
     def discover_and_setup(self):
         """
@@ -169,6 +173,33 @@ class CentralizedLogger:
         """
         Write a log entry to the centralized log file
         """
+        # Use source file modification time + message content to create unique hash
+        # This prevents duplicates when the same log line appears multiple times
+        message_clean = log_line.strip()
+        
+        # Create a hash of message + service + source path (without timestamp to catch duplicates)
+        # Use file modification time if available to differentiate same message at different times
+        try:
+            source_path = source_info['path']
+            source_mtime = Path(source_path).stat().st_mtime if Path(source_path).exists() else 0
+            log_hash = hashlib.md5(f"{message_clean}|{source_info['service']}|{source_path}|{source_mtime}".encode()).hexdigest()
+        except:
+            # Fallback: use message + service
+            log_hash = hashlib.md5(f"{message_clean}|{source_info['service']}".encode()).hexdigest()
+        
+        # Skip if we've seen this exact log recently (within last 5 seconds)
+        # This prevents rapid-fire duplicates from the same source
+        if log_hash in self.seen_logs:
+            return  # Skip duplicate
+        
+        # Add to seen set (will be cleaned periodically)
+        self.seen_logs.add(log_hash)
+        
+        # Clean old hashes periodically (keep last 5000 to prevent memory bloat)
+        if len(self.seen_logs) > 5000:
+            # Remove oldest 1000 entries (simple cleanup)
+            self.seen_logs = set(list(self.seen_logs)[-4000:])
+        
         timestamp = datetime.now().isoformat()
         service_name = source_info['service']
         source_path = source_info['path']
@@ -178,12 +209,13 @@ class CentralizedLogger:
             'timestamp': timestamp,
             'service': service_name,
             'source_file': source_path,
-            'message': log_line.strip()
+            'message': message_clean,
+            'level': self._detect_log_level(message_clean)  # Auto-detect log level
         }
         
         # Write to text log file (human-readable)
         with open(self.central_log_file, 'a', encoding='utf-8') as f:
-            formatted_log = f"[{timestamp}] [{service_name}] {log_line}"
+            formatted_log = f"[{timestamp}] [{service_name}] {message_clean}"
             f.write(formatted_log)
             if not formatted_log.endswith('\n'):
                 f.write('\n')
@@ -200,6 +232,22 @@ class CentralizedLogger:
         self.log_index.append(log_entry)
         if len(self.log_index) > 10000:
             self.log_index.pop(0)
+    
+    def _detect_log_level(self, message: str) -> str:
+        """
+        Auto-detect log level from message content
+        """
+        msg_lower = message.lower()
+        if any(keyword in msg_lower for keyword in ['critical', 'fatal', 'emergency', 'panic']):
+            return 'CRITICAL'
+        elif any(keyword in msg_lower for keyword in ['error', 'err', 'failed', 'failure']):
+            return 'ERROR'
+        elif any(keyword in msg_lower for keyword in ['warn', 'warning', 'caution']):
+            return 'WARNING'
+        elif any(keyword in msg_lower for keyword in ['debug', 'dbg']):
+            return 'DEBUG'
+        else:
+            return 'INFO'
     
     def _save_source_mapping(self):
         """

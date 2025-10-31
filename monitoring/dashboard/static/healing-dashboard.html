@@ -1194,10 +1194,11 @@
                 </select>
                         <select id="logLevelFilter" class="search-input" onchange="filterLogsByService()" style="flex: 1; padding: 0.6rem;">
                             <option value="">All Levels</option>
-                            <option value="ERROR">ERROR</option>
-                            <option value="WARNING">WARNING</option>
-                            <option value="INFO">INFO</option>
                             <option value="DEBUG">DEBUG</option>
+                            <option value="INFO">INFO</option>
+                            <option value="WARNING">WARNING</option>
+                            <option value="ERROR">ERROR</option>
+                            <option value="CRITICAL">CRITICAL</option>
                         </select>
             </div>
             
@@ -2323,7 +2324,7 @@
             const selectedService = document.getElementById('serviceFilter').value;
             const levelFilter = document.getElementById('logLevelFilter').value;
             
-            let filtered = currentLogs;
+            let filtered = currentLogs || [];
             
             if (selectedService) {
                 filtered = filtered.filter(log => {
@@ -2337,17 +2338,25 @@
                     const logLevel = (log.level || 'INFO').toUpperCase();
                     const filterLevel = levelFilter.toUpperCase();
                     
-                    // Handle variations: WARN/WARNING, CRITICAL/CRIT, etc.
-                    if (filterLevel === 'WARNING') {
+                    // Handle common variations while keeping levels separate
+                    if (filterLevel === 'DEBUG') {
+                        return logLevel === 'DEBUG' || logLevel === 'DBG';
+                    } else if (filterLevel === 'INFO') {
+                        return logLevel === 'INFO' || logLevel === 'INFORMATION';
+                    } else if (filterLevel === 'WARNING') {
                         return logLevel === 'WARNING' || logLevel === 'WARN';
                     } else if (filterLevel === 'ERROR') {
-                        return logLevel === 'ERROR' || logLevel === 'ERR' || logLevel === 'CRITICAL' || logLevel === 'CRIT' || logLevel === 'FATAL';
+                        return logLevel === 'ERROR' || logLevel === 'ERR';
+                    } else if (filterLevel === 'CRITICAL') {
+                        return logLevel === 'CRITICAL' || logLevel === 'CRIT' || logLevel === 'FATAL';
                     } else {
+                        // Exact match for any other level
                         return logLevel === filterLevel;
                     }
                 });
             }
             
+            console.log(`Filtering: service=${selectedService || 'all'}, level=${levelFilter || 'all'}, found ${filtered.length} logs`);
             displaySystemLogs(filtered);
         }
 
@@ -2384,7 +2393,9 @@
                 if (data.status === 'success' && data.logs) {
                     currentLogs = data.logs;
                     console.log('Received logs:', currentLogs.length);
-                    displaySystemLogs(currentLogs);
+                    
+                    // Apply filters to loaded logs
+                    filterLogsByService();
                     updateSystemLogStats();
                     loadServices();
                     loadSystemLogSources();
@@ -2439,7 +2450,8 @@
                 }));
                 
                 console.log('Centralized logs loaded:', currentLogs.length);
-                displaySystemLogs(currentLogs);
+                // Apply filters to loaded logs
+                filterLogsByService();
                 loadServices();
                 
                 if (currentLogs.length > 0) {
@@ -2452,15 +2464,35 @@
 
         function displaySystemLogs(logs) {
             const logsList = document.getElementById('logsList');
+            const selectedService = document.getElementById('serviceFilter').value;
+            const levelFilter = document.getElementById('logLevelFilter').value;
+            const hasFilters = selectedService || levelFilter;
             
             if (!logs || logs.length === 0) {
-                logsList.innerHTML = `
-                    <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
-                        <i class="fas fa-inbox" style="font-size: 2.5rem; opacity: 0.3; margin-bottom: 1rem; display: block;"></i>
-                        <div style="font-size: 1rem; margin-bottom: 0.5rem;">No system logs collected yet</div>
-                        <div style="font-size: 0.85rem; opacity: 0.7;">Please wait while we gather logs from system services...</div>
-                    </div>
-                `;
+                if (hasFilters && currentLogs && currentLogs.length > 0) {
+                    logsList.innerHTML = `
+                        <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
+                            <i class="fas fa-filter" style="font-size: 2.5rem; opacity: 0.3; margin-bottom: 1rem; display: block;"></i>
+                            <div style="font-size: 1rem; margin-bottom: 0.5rem;">No logs match the current filters</div>
+                            <div style="font-size: 0.85rem; opacity: 0.7;">
+                                ${selectedService ? `Service: ${selectedService}<br>` : ''}
+                                ${levelFilter ? `Level: ${levelFilter}` : ''}
+                            </div>
+                            <button onclick="document.getElementById('serviceFilter').value=''; document.getElementById('logLevelFilter').value=''; filterLogsByService();" 
+                                    style="margin-top: 1rem; padding: 0.5rem 1rem; background: var(--accent-blue); color: white; border: none; border-radius: 0.25rem; cursor: pointer;">
+                                Clear Filters
+                            </button>
+                        </div>
+                    `;
+                } else {
+                    logsList.innerHTML = `
+                        <div style="text-align: center; color: var(--text-secondary); padding: 4rem 2rem;">
+                            <i class="fas fa-inbox" style="font-size: 2.5rem; opacity: 0.3; margin-bottom: 1rem; display: block;"></i>
+                            <div style="font-size: 1rem; margin-bottom: 0.5rem;">No system logs collected yet</div>
+                            <div style="font-size: 0.85rem; opacity: 0.7;">Please wait while we gather logs from system services...</div>
+                        </div>
+                    `;
+                }
                 return;
             }
 

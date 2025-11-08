@@ -8,7 +8,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
-from google import genai
+import google.generativeai as genai
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,18 +24,26 @@ class GeminiLogAnalyzer:
         
         if not self.api_key:
             logger.warning("No Gemini API key found. Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable")
-            self.client = None
+            self.model = None
         else:
             try:
-                # Initialize the modern Google GenAI client
-                self.client = genai.Client(api_key=self.api_key)
-                logger.info("Gemini client initialized successfully with gemini-2.5-flash")
+                # Configure the API key
+                genai.configure(api_key=self.api_key)
+                # Initialize the model
+                self.model = genai.GenerativeModel("gemini-2.0-flash-exp")
+                logger.info("Gemini client initialized successfully with gemini-2.0-flash-exp")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
-                self.client = None
+                # Try with alternative model name
+                try:
+                    self.model = genai.GenerativeModel("gemini-1.5-flash")
+                    logger.info("Gemini client initialized with gemini-1.5-flash (fallback)")
+                except Exception as e2:
+                    logger.error(f"Failed to initialize Gemini client with fallback model: {e2}")
+                    self.model = None
         
         # Use the modern model name
-        self.model_name = "gemini-2.5-flash"
+        self.model_name = "gemini-2.0-flash-exp"
         
         # Analysis cache to avoid re-analyzing same issues
         self.analysis_cache = {}
@@ -57,6 +65,13 @@ class GeminiLogAnalyzer:
                            '4. Restart the monitoring server\n\n' +
                            'Note: Make sure you\'re signed in with a Google account.',
                 'recommendation': 'Configure API key to enable AI-powered log analysis'
+            }
+        
+        if not self.model:
+            return {
+                'status': 'error',
+                'message': 'Gemini model not initialized. Check API key configuration.',
+                'analysis': 'Please set a valid GEMINI_API_KEY in your .env file and restart the server.'
             }
         
         # Check cache first
@@ -115,6 +130,12 @@ class GeminiLogAnalyzer:
                 'message': 'Gemini API key not configured'
             }
         
+        if not self.model:
+            return {
+                'status': 'error',
+                'message': 'Gemini model not initialized. Check API key configuration.'
+            }
+        
         # Limit number of logs to analyze
         logs_to_analyze = log_entries[:limit]
         
@@ -156,6 +177,12 @@ class GeminiLogAnalyzer:
             return {
                 'status': 'error',
                 'message': 'Gemini API key not configured'
+            }
+        
+        if not self.model:
+            return {
+                'status': 'error',
+                'message': 'Gemini model not initialized. Check API key configuration.'
             }
         
         prompt = f"""
@@ -288,7 +315,7 @@ Log #{i}:
         """
         Call Google Gemini API with the prompt using the modern SDK
         """
-        if not self.client:
+        if not self.model:
             return {
                 'status': 'error',
                 'message': 'Gemini client not initialized. Check API key configuration.'
@@ -296,10 +323,7 @@ Log #{i}:
         
         try:
             # Call Gemini using the modern SDK
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt
-            )
+            response = self.model.generate_content(prompt)
             
             if response and response.text:
                 return {
@@ -317,7 +341,7 @@ Log #{i}:
             logger.error(f"Gemini API call failed: {error_msg}")
             
             # Provide helpful error messages
-            if 'API key' in error_msg or 'authentication' in error_msg.lower() or '40' in error_msg:
+            if 'API key' in error_msg or 'authentication' in error_msg.lower() or '40' in error_msg or '401' in error_msg or '403' in error_msg:
                 return {
                     'status': 'error',
                     'message': 'Invalid or Expired API Key',

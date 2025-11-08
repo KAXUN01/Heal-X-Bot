@@ -1264,12 +1264,74 @@ async def get_fluent_bit_recent_logs(limit: int = 100, service: str = None, leve
                 logger.debug(f"Error refreshing Fluent Bit logs: {e}")
             
             if len(reader.log_cache) == 0:
-                return {
-                    "status": "success",
-                    "message": "Fluent Bit is running but no logs available yet. Fluent Bit may still be starting or no logs have been processed.",
-                    "logs": [],
-                    "count": 0
-                }
+                # Check if Fluent Bit container is running
+                import subprocess
+                fluent_bit_running = False
+                docker_available = False
+                docker_error = None
+                
+                try:
+                    result = subprocess.run(['docker', 'ps', '--filter', 'name=fluent-bit', '--format', '{{.Names}}'], 
+                                          capture_output=True, text=True, timeout=5)
+                    docker_available = True
+                    fluent_bit_running = 'fluent-bit' in result.stdout
+                except FileNotFoundError:
+                    docker_error = "Docker is not installed"
+                except PermissionError:
+                    docker_error = "Permission denied - user needs to be in docker group or use sudo"
+                except Exception as e:
+                    docker_error = f"Docker check failed: {str(e)}"
+                
+                # Check if log file exists (even if empty, it means Fluent Bit was running)
+                log_file_exists = reader.log_file_path.exists()
+                
+                if not docker_available or docker_error:
+                    # Docker not available or permission denied
+                    if log_file_exists:
+                        return {
+                            "status": "success",
+                            "message": f"Fluent Bit log file exists but is empty. {docker_error if docker_error else 'Docker may not be accessible'}. Please ensure Fluent Bit container is running: sudo ./scripts/start-fluent-bit.sh",
+                            "logs": [],
+                            "count": 0,
+                            "suggestion": "Switch to 'Centralized Logger' log source to view system logs without Docker."
+                        }
+                    else:
+                        return {
+                            "status": "success",
+                            "message": f"Fluent Bit is not running. {docker_error if docker_error else 'Docker may not be accessible'}. To start Fluent Bit: sudo ./scripts/start-fluent-bit.sh (requires Docker). Alternatively, switch to 'Centralized Logger' log source.",
+                            "logs": [],
+                            "count": 0,
+                            "suggestion": "Switch to 'Centralized Logger' log source in the dashboard to view system logs.",
+                            "docker_error": docker_error
+                        }
+                elif not fluent_bit_running:
+                    # Docker available but Fluent Bit not running
+                    if log_file_exists:
+                        return {
+                            "status": "success",
+                            "message": "Fluent Bit container is not running, but log file exists. Start Fluent Bit with: ./scripts/start-fluent-bit.sh",
+                            "logs": [],
+                            "count": 0,
+                            "suggestion": "Switch to 'Centralized Logger' log source to view system logs."
+                        }
+                    else:
+                        return {
+                            "status": "success",
+                            "message": "Fluent Bit container is not running. Please start it with: ./scripts/start-fluent-bit.sh",
+                            "logs": [],
+                            "count": 0,
+                            "suggestion": "Switch to 'Centralized Logger' log source in the dashboard to view system logs."
+                        }
+                else:
+                    # Fluent Bit is running but no logs yet
+                    return {
+                        "status": "success",
+                        "message": "Fluent Bit is running but no logs available yet. Fluent Bit may still be starting (wait 10-30 seconds) or no logs have been processed. The log file will be created at: " + str(reader.log_file_path),
+                        "logs": [],
+                        "count": 0,
+                        "log_file_path": str(reader.log_file_path),
+                        "suggestion": "Wait a moment and refresh, or switch to 'Centralized Logger' to view system logs immediately."
+                    }
         
         # Refresh logs to get latest
         try:
@@ -1610,41 +1672,70 @@ async def analyze_service_health(service_name: str, limit: int = 50):
 
 @app.get("/api/gemini/quick-analyze")
 async def quick_analyze_recent_errors():
-    """Quick analysis of recent errors from centralized logs"""
+    """Quick analysis of recent errors from centralized logs or Fluent Bit"""
     try:
         from gemini_log_analyzer import gemini_analyzer as _gemini_analyzer
-        from centralized_logger import centralized_logger as _centralized_logger
         
         if not _gemini_analyzer:
             return {
                 "status": "error",
-                "message": "Gemini analyzer not initialized"
+                "message": "Gemini analyzer not initialized. Please configure GEMINI_API_KEY."
             }
         
-        if not _centralized_logger:
-            return {
-                "status": "error",
-                "message": "Centralized logger not initialized"
-            }
+        # Try to get logs from centralized logger first
+        error_logs = []
+        try:
+            from centralized_logger import centralized_logger as _centralized_logger
+            if _centralized_logger:
+                logs = _centralized_logger.get_recent_logs(limit=50)
+                error_logs = [log for log in logs if log.get("level", "").upper() in ["ERROR", "CRITICAL", "FATAL", "ERR"]]
+        except Exception as e:
+            logger.debug(f"Could not get logs from centralized logger: {e}")
         
-        # Get recent error logs
-        logs = _centralized_logger.get_recent_logs(limit=20)
-        error_logs = [log for log in logs if log.get("level", "").upper() in ["ERROR", "CRITICAL", "FATAL"]]
+        # If no errors from centralized logger, try Fluent Bit
+        if not error_logs:
+            try:
+                import fluent_bit_reader
+                if fluent_bit_reader.fluent_bit_reader:
+                    reader = fluent_bit_reader.fluent_bit_reader
+                    reader.refresh_logs()
+                    all_logs = reader.get_recent_logs(limit=50)
+                    error_logs = [log for log in all_logs if log.get("level", "").upper() in ["ERROR", "CRITICAL", "FATAL", "ERR"]]
+            except Exception as e:
+                logger.debug(f"Could not get logs from Fluent Bit: {e}")
+        
+        # If still no errors, get any recent logs (warnings included)
+        if not error_logs:
+            try:
+                from centralized_logger import centralized_logger as _centralized_logger
+                if _centralized_logger:
+                    logs = _centralized_logger.get_recent_logs(limit=20)
+                    # Include warnings as well
+                    error_logs = [log for log in logs if log.get("level", "").upper() in ["ERROR", "CRITICAL", "FATAL", "ERR", "WARNING", "WARN"]]
+            except Exception as e:
+                logger.debug(f"Could not get logs for warnings: {e}")
         
         if not error_logs:
             return {
                 "status": "success",
-                "message": "No recent errors found",
-                "analysis": {}
+                "message": "No recent errors or warnings found to analyze",
+                "pattern_analysis": {
+                    "common_issues": "No issues detected in recent logs.",
+                    "timeline": "System appears to be running normally.",
+                    "correlation": "No error patterns detected.",
+                    "recommendations": "Continue monitoring system health.",
+                    "full_analysis": "No recent errors or warnings found in the logs."
+                },
+                "logs_analyzed": 0
             }
         
-        # Analyze errors
-        analysis = _gemini_analyzer.analyze_multiple_logs(error_logs, limit=10)
+        # Analyze errors (limit to 10 most recent)
+        analysis = _gemini_analyzer.analyze_multiple_logs(error_logs[:10], limit=10)
         
         return analysis
     
     except Exception as e:
-        logger.error(f"Error in quick analyze: {e}")
+        logger.error(f"Error in quick analyze: {e}", exc_info=True)
         return {
             "status": "error",
             "message": str(e)

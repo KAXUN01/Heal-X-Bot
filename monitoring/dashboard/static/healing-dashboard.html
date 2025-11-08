@@ -1334,7 +1334,10 @@
                                 <i class="fas fa-robot" style="font-size: 4rem; opacity: 0.2; color: var(--accent-purple);"></i>
                             </div>
                             <h4 style="margin: 0 0 0.5rem 0; color: var(--text-primary); font-weight: 600;">AI Analysis Ready</h4>
-                        <p style="margin: 0 0 1.5rem 0; font-size: 0.9rem;">Click "Analyze" button on any error, warning, or critical log row to get intelligent insights</p>
+                        <p style="margin: 0 0 1.5rem 0; font-size: 0.9rem;">
+                            🤖 AI Analysis: Click "Analyze" button on any log row to get intelligent insights. 
+                            Works with both <strong>Fluent Bit</strong> and <strong>Centralized Logger</strong> logs.
+                        </p>
                             <button class="btn btn-primary" onclick="quickAnalyzeErrors()" style="padding: 0.75rem 1.5rem;">
                                 <i class="fas fa-magic"></i> Quick Analyze Recent Errors
                             </button>
@@ -2439,18 +2442,25 @@
         let currentLogSource = 'fluent-bit'; // Default to Fluent Bit
 
         // Switch between log sources
-        function switchLogSource() {
+        function switchLogSource(source = null) {
             const selector = document.getElementById('logSourceSelector');
-            if (selector) {
-                currentLogSource = selector.value;
-                const desc = document.getElementById('logSourceDescription');
-                if (desc) {
-                    desc.textContent = currentLogSource === 'fluent-bit' 
-                        ? 'System logs collected by Fluent Bit from syslog, kernel, auth, and systemd'
-                        : 'All system logs aggregated from centralized logger';
+            if (source) {
+                // If source is provided as parameter, use it
+                currentLogSource = source;
+                if (selector) {
+                    selector.value = source;
                 }
-                refreshSystemLogs();
+            } else if (selector) {
+                // Otherwise use the selector value
+                currentLogSource = selector.value;
             }
+            const desc = document.getElementById('logSourceDescription');
+            if (desc) {
+                desc.textContent = currentLogSource === 'fluent-bit' 
+                    ? 'System logs collected by Fluent Bit from syslog, kernel, auth, and systemd'
+                    : 'All system logs aggregated from centralized logger';
+            }
+            refreshSystemLogs();
         }
 
         function escapeHtml(text) {
@@ -2542,7 +2552,7 @@
                     data = await response.json();
                     
                     if (data.status === 'success' && data.logs && data.logs.length > 0) {
-                        // Store Fluent Bit logs
+                        // Store Fluent Bit logs with all fields needed for AI analysis
                         allSystemLogs = data.logs.map(log => ({
                             timestamp: log.timestamp,
                             level: log.level || 'INFO',
@@ -2551,7 +2561,9 @@
                             source: 'fluent-bit',
                             source_file: log.source_file || log.tag || 'unknown',
                             tag: log.tag || 'unknown',
-                            priority: log.priority || 6
+                            priority: log.priority || 6,
+                            // Ensure all fields are present for AI analysis
+                            raw: log.raw || log
                         }));
                     } else if (data.status === 'error') {
                         // API returned an error
@@ -2602,11 +2614,32 @@
                     if (data) {
                         if (currentLogSource === 'fluent-bit') {
                             if (data.message) {
-                                message = 'Fluent Bit not available';
-                                helpText = data.message + '. Make sure Docker is running and Fluent Bit container is started. Run: ./scripts/start-fluent-bit.sh';
+                                message = data.message.includes('not running') ? 'Fluent Bit Not Running' : 
+                                         data.message.includes('no logs') ? 'Fluent Bit Running - No Logs Yet' :
+                                         'Fluent Bit Status';
+                                helpText = data.message;
+                                
+                                // Add suggestion if available
+                                if (data.suggestion) {
+                                    helpText += '\n\n💡 ' + data.suggestion;
+                                }
+                                
+                                // Add Docker error info if available
+                                if (data.docker_error) {
+                                    helpText += '\n\n⚠️ ' + data.docker_error;
+                                    helpText += '\n\nTo fix: sudo usermod -aG docker $USER (then logout/login)';
+                                }
+                                
+                                // Add log file path if available
+                                if (data.log_file_path) {
+                                    helpText += '\n\n📁 Log file location: ' + data.log_file_path;
+                                }
                             } else if (data.status === 'success' && (!data.logs || data.logs.length === 0)) {
                                 message = 'Fluent Bit is running but no logs yet';
                                 helpText = 'Fluent Bit may still be starting or no logs have been processed. Logs will appear here once they are collected.';
+                                if (data.suggestion) {
+                                    helpText += '\n\n💡 ' + data.suggestion;
+                                }
                             } else {
                                 message = 'Fluent Bit connection failed';
                                 helpText = 'Make sure Docker is running and Fluent Bit container is started. Run: ./scripts/start-fluent-bit.sh';
@@ -2642,6 +2675,16 @@
         function displayNoLogs(message, helpText = 'Try adjusting your filters or refresh to load new logs') {
             const tbody = document.getElementById('logsTableBody');
             if (tbody) {
+                // Convert newlines to HTML line breaks and escape HTML
+                const escapeHtml = (text) => {
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                };
+                const formatText = (text) => {
+                    return escapeHtml(text).replace(/\n/g, '<br>');
+                };
+                
                 tbody.innerHTML = `
                     <tr>
                         <td colspan="5" style="text-align: center; padding: 4rem 2rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(59, 130, 246, 0.02) 100%);">
@@ -2649,13 +2692,18 @@
                                 <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); display: flex; align-items: center; justify-content: center;">
                                     <i class="fas fa-inbox" style="font-size: 2.5rem; color: var(--accent-blue); opacity: 0.6;"></i>
                             </div>
-                                <div style="font-size: 1.125rem; font-weight: 600; color: var(--text-primary);">${message}</div>
-                                <div style="font-size: 0.875rem; color: var(--text-secondary); max-width: 500px; margin-top: 0.5rem; line-height: 1.5;">
-                                    ${helpText}
+                                <div style="font-size: 1.125rem; font-weight: 600; color: var(--text-primary);">${escapeHtml(message)}</div>
+                                <div style="font-size: 0.875rem; color: var(--text-secondary); max-width: 600px; margin-top: 0.5rem; line-height: 1.6; text-align: left; white-space: pre-wrap;">
+                                    ${formatText(helpText)}
                         </div>
-                                <button onclick="clearFilters(); refreshSystemLogs();" class="btn btn-primary" style="margin-top: 1rem; padding: 0.75rem 1.5rem;">
-                                    <i class="fas fa-sync-alt"></i> Refresh & Clear Filters
-                                </button>
+                                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                                    <button onclick="clearFilters(); refreshSystemLogs();" class="btn btn-primary" style="padding: 0.75rem 1.5rem;">
+                                        <i class="fas fa-sync-alt"></i> Refresh
+                                    </button>
+                                    <button onclick="switchLogSource('centralized'); refreshSystemLogs();" class="btn btn-secondary" style="padding: 0.75rem 1.5rem;">
+                                        <i class="fas fa-exchange-alt"></i> Switch to Centralized Logger
+                                    </button>
+                                </div>
                             </div>
                         </td>
                     </tr>
@@ -2988,11 +3036,13 @@
 
         async function analyzeLogWithAI(logEntry) {
             const panel = document.getElementById('aiAnalysisPanel');
+            const logSource = logEntry.source === 'fluent-bit' ? 'Fluent Bit' : 'Centralized Logger';
             panel.innerHTML = `
                 <div style="text-align: center; padding: 3rem;">
                     <div style="border: 3px solid var(--accent-blue); border-top-color: transparent; border-radius: 50%; width: 3rem; height: 3rem; margin: 0 auto 1rem; animation: spin 1s linear infinite;"></div>
-                    <p style="margin-top: 1rem;">Analyzing with Google Gemini AI...</p>
+                    <p style="margin-top: 1rem;">Analyzing ${logSource} log with Google Gemini AI...</p>
                     <small style="color: var(--text-secondary);">This may take a few seconds</small>
+                    ${logEntry.source === 'fluent-bit' ? '<div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 0.25rem; font-size: 0.8rem; color: var(--accent-blue);"><i class="fas fa-info-circle"></i> Analyzing Fluent Bit log entry</div>' : ''}
                 </div>
                 <style>
                     @keyframes spin {
@@ -3003,12 +3053,23 @@
             `;
 
             try {
+                // Ensure log entry has all required fields for AI analysis
+                const analysisPayload = {
+                    timestamp: logEntry.timestamp,
+                    service: logEntry.service || 'unknown',
+                    message: logEntry.message || '',
+                    level: logEntry.level || 'INFO',
+                    source_file: logEntry.source_file || logEntry.tag || 'unknown',
+                    source: logEntry.source || 'unknown',
+                    tag: logEntry.tag || null
+                };
+                
                 const response = await fetch('/api/gemini/analyze-log', {
                 method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(logEntry)
+                    body: JSON.stringify(analysisPayload)
                 });
 
                 const result = await response.json();
@@ -3129,10 +3190,12 @@
 
         async function quickAnalyzeErrors() {
             const panel = document.getElementById('aiAnalysisPanel');
+            const logSource = currentLogSource === 'fluent-bit' ? 'Fluent Bit' : 'Centralized Logger';
             panel.innerHTML = `
                 <div style="text-align: center; padding: 3rem;">
                     <div style="border: 3px solid var(--accent-blue); border-top-color: transparent; border-radius: 50%; width: 3rem; height: 3rem; margin: 0 auto 1rem; animation: spin 1s linear infinite;"></div>
-                    <p style="margin-top: 1rem;">Analyzing recent errors with Gemini AI...</p>
+                    <p style="margin-top: 1rem;">Analyzing recent errors from ${logSource} with Gemini AI...</p>
+                    <small style="color: var(--text-secondary);">This may take a few seconds</small>
                 </div>
             `;
 

@@ -55,13 +55,51 @@ if docker ps -a --format '{{.Names}}' | grep -q "^fluent-bit$"; then
     fi
 else
     echo "🐳 Starting Fluent Bit container..."
+    
+    # Pull Fluent Bit image first if not present
+    echo "📥 Checking for Fluent Bit image..."
+    if ! docker images | grep -q "fluent/fluent-bit"; then
+        echo "📥 Pulling Fluent Bit image (this may take a minute)..."
+        docker pull fluent/fluent-bit:latest
+    else
+        echo "✅ Fluent Bit image already exists"
+    fi
+    
     cd "$CONFIG_DIR"
     
-    # Use docker-compose if available, otherwise docker compose
+    # Use docker-compose if available, otherwise try docker compose
     if command -v docker-compose &> /dev/null; then
+        echo "🔧 Using docker-compose..."
         docker-compose -f docker-compose-fluent-bit.yml up -d
-    else
+    elif docker compose version &> /dev/null; then
+        echo "🔧 Using docker compose..."
         docker compose -f docker-compose-fluent-bit.yml up -d
+    else
+        echo "❌ Error: Neither docker-compose nor 'docker compose' is available"
+        echo "💡 Installing docker-compose..."
+        echo "   Option 1: Install docker-compose: sudo apt install docker-compose"
+        echo "   Option 2: Upgrade Docker to a version that supports 'docker compose'"
+        echo ""
+        echo "🔄 Trying to start container manually with docker run..."
+        
+        # Try to start manually with docker run
+        OUTPUT_DIR="$PROJECT_ROOT/logs/fluent-bit"
+        mkdir -p "$OUTPUT_DIR"
+        
+        docker run -d \
+            --name fluent-bit \
+            --restart unless-stopped \
+            --network healing-network \
+            -v "$CONFIG_DIR/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro" \
+            -v "$CONFIG_DIR/fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro" \
+            -v /var/log:/var/log:ro \
+            -v /var/lib/docker/containers:/var/lib/docker/containers:ro \
+            -v "$OUTPUT_DIR:/fluent-bit-output" \
+            -v /run/journal:/run/journal:ro \
+            -v /var/run/docker.sock:/var/run/docker.sock:ro \
+            -p 8888:8888 \
+            fluent/fluent-bit:latest \
+            /fluent-bit/bin/fluent-bit -c /fluent-bit/etc/fluent-bit.conf
     fi
 fi
 

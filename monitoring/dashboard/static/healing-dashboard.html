@@ -773,6 +773,42 @@
             color: var(--text-secondary);
             font-size: 0.9rem;
         }
+        
+        /* Responsive Design for Logs and AI Analysis */
+        @media (max-width: 1400px) {
+            #logsAIGrid {
+                grid-template-columns: 1fr !important;
+            }
+            
+            #logsAIGrid > div:first-child {
+                margin-bottom: 1.5rem;
+            }
+        }
+        
+        @media (max-width: 1200px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .summary-cards {
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 1rem;
+            }
+            
+            #logsAIGrid .card {
+                min-height: auto !important;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            #logsAIGrid {
+                gap: 1rem;
+            }
+            
+            #logsAIGrid .card {
+                min-height: 400px !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1282,9 +1318,9 @@
             </div>
 
             <!-- Log Viewer and AI Analysis - Split View -->
-            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+            <div id="logsAIGrid" style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; align-items: start;">
                 <!-- Main Log Viewer -->
-                <div class="card" style="grid-column: span 1; display: flex; flex-direction: column;">
+                <div class="card" style="grid-column: span 1; display: flex; flex-direction: column; min-height: 600px;">
                     <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                         <div>
                             <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">
@@ -1344,19 +1380,19 @@
                     <table style="width: 100%; border-collapse: separate; border-spacing: 0;">
                         <thead>
                             <tr style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); color: white;">
-                                <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 160px; border-top-left-radius: 0.5rem;">
+                                <th style="padding: 0.875rem 1rem; text-align: left; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 140px; border-top-left-radius: 0.5rem;">
                                     <i class="fas fa-clock" style="margin-right: 0.5rem;"></i>Timestamp
                                 </th>
-                                <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 180px;">
+                                <th style="padding: 0.875rem 1rem; text-align: left; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 120px;">
                                     <i class="fas fa-server" style="margin-right: 0.5rem;"></i>Service
                                 </th>
-                                <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 120px;">
+                                <th style="padding: 0.875rem 1rem; text-align: left; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 80px;">
                                     <i class="fas fa-shield-alt" style="margin-right: 0.5rem;"></i>Level
                                 </th>
-                                <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 150px;">
+                                <th style="padding: 0.875rem 1rem; text-align: left; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; min-width: 110px;">
                                     <i class="fas fa-file-alt" style="margin-right: 0.5rem;"></i>Source
                                 </th>
-                                <th style="padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.5px; border-top-right-radius: 0.5rem; min-width: 400px;">
+                                <th style="padding: 0.875rem 1rem; text-align: left; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; border-top-right-radius: 0.5rem; min-width: 200px;">
                                     <i class="fas fa-comment-alt" style="margin-right: 0.5rem;"></i>Message
                                 </th>
                             </tr>
@@ -1391,8 +1427,8 @@
                     </div>
                 </div>
 
-                <!-- AI Analysis Panel - Wider section -->
-                <div class="card" style="grid-column: span 1; display: flex; flex-direction: column;">
+                <!-- AI Analysis Panel -->
+                <div class="card" style="grid-column: span 1; display: flex; flex-direction: column; min-height: 600px;">
                     <div style="padding: 1.25rem; border-bottom: 1px solid var(--border-color);">
                         <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600;">
                             <i class="fas fa-brain" style="color: var(--accent-purple);"></i> Gemini AI Analysis
@@ -1400,7 +1436,7 @@
                         <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">AI-powered log analysis and insights</p>
                     </div>
 
-                    <div id="aiAnalysisPanel" style="flex: 1; padding: 2rem; display: flex; flex-direction: column; justify-content: center; min-height: 400px; overflow-y: auto;">
+                    <div id="aiAnalysisPanel" style="flex: 1; padding: 1.5rem; display: flex; flex-direction: column; justify-content: flex-start; min-height: 500px; max-height: 800px; overflow-y: auto;">
                         <div style="text-align: center; color: var(--text-secondary);">
                             <div style="margin-bottom: 1.5rem;">
                                 <i class="fas fa-robot" style="font-size: 4rem; opacity: 0.2; color: var(--accent-purple);"></i>

@@ -3329,72 +3329,28 @@
                     // Check both 'severity' and 'level' fields, and handle variations
                     const criticalIssues = data.issues.filter(issue => {
                         const severity = (issue.severity || issue.level || '').toUpperCase();
-                        const priority = issue.priority || 6;
-                        // Include CRITICAL severity, or priority <= 2 (CRITICAL level in syslog)
-                        const isCritical = severity === 'CRITICAL' || severity === 'CRIT' || priority <= 2;
+                        const level = (issue.level || '').toUpperCase();
+                        const priority = issue.priority !== undefined ? issue.priority : 6;
+                        const category = (issue.category || '').toUpperCase();
                         
-                        // Debug: Log first nginx issue to see why it might be filtered
-                        if (!isCritical && issue.service && issue.service.toLowerCase().includes('nginx')) {
-                            console.warn('Nginx issue filtered out:', {
-                                service: issue.service,
-                                severity: issue.severity,
-                                level: issue.level,
-                                priority: priority,
-                                isCritical: isCritical
-                            });
-                        }
+                        // Include CRITICAL severity issues:
+                        // 1. Severity is CRITICAL or CRIT
+                        // 2. Level is CRITICAL or CRIT
+                        // 3. Priority <= 2 (CRITICAL level in syslog: 0=emerg, 1=alert, 2=crit)
+                        // 4. Category is CRITICAL (from critical services)
+                        const isCritical = 
+                            severity === 'CRITICAL' || 
+                            severity === 'CRIT' ||
+                            level === 'CRITICAL' ||
+                            level === 'CRIT' ||
+                            priority <= 2 ||
+                            category === 'CRITICAL';
                         
                         return isCritical;
                     });
                     
-                    // Count nginx issues in filtered results
-                    const nginxInFiltered = criticalIssues.filter(i => i.service && i.service.toLowerCase().includes('nginx'));
-                    console.log(`✅ Filtered results: ${criticalIssues.length} critical issues (${nginxInFiltered.length} nginx)`);
-                    
-                    if (nginxInFiltered.length > 0) {
-                        console.log(`✅ Nginx issues found in filtered list! First nginx issue:`, nginxInFiltered[0]);
-                    }
-                    
                     displayAnomalies(criticalIssues);
-                    console.log(`Loaded ${criticalIssues.length} critical issues out of ${data.count || 0} total issues (showing CRITICAL only)`);
-                    
-                    // Debug: Log all issues if no critical ones found, or if we have nginx issues
-                    const nginxIssues = data.issues.filter(i => i.service && i.service.toLowerCase().includes('nginx'));
-                    if (nginxIssues.length > 0) {
-                        console.log(`📊 Found ${nginxIssues.length} nginx issues in API response`);
-                        nginxIssues.slice(0, 2).forEach((issue, idx) => {
-                            const severity = (issue.severity || issue.level || '').toUpperCase();
-                            const priority = issue.priority || 6;
-                            const isCritical = severity === 'CRITICAL' || severity === 'CRIT' || priority <= 2;
-                            console.log(`Nginx issue ${idx + 1}:`, {
-                                service: issue.service,
-                                level: issue.level,
-                                severity: issue.severity || severity,
-                                priority: priority,
-                                category: issue.category,
-                                passesCriticalFilter: isCritical,
-                                message: (issue.message || '').substring(0, 80)
-                            });
-                        });
-                    }
-                    
-                    if (criticalIssues.length === 0 && data.issues.length > 0) {
-                        console.warn('No CRITICAL issues found! Showing first 3 issues for debugging:');
-                        data.issues.slice(0, 3).forEach((issue, idx) => {
-                            const severity = (issue.severity || issue.level || '').toUpperCase();
-                            const priority = issue.priority || 6;
-                            const isCritical = severity === 'CRITICAL' || severity === 'CRIT' || priority <= 2;
-                            console.warn(`Issue ${idx + 1}:`, {
-                                service: issue.service,
-                                level: issue.level,
-                                severity: issue.severity || severity,
-                                priority: priority,
-                                category: issue.category,
-                                passesCriticalFilter: isCritical,
-                                message: (issue.message || '').substring(0, 80)
-                            });
-                        });
-                    }
+                    console.log(`✅ Loaded ${criticalIssues.length} CRITICAL issues out of ${data.count || 0} total issues`);
                 } else if (data.status === 'error') {
                     console.error('Error loading anomalies:', data.message);
                     const tbody = document.getElementById('anomaliesTable');

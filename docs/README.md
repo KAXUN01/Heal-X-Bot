@@ -10,13 +10,23 @@ Welcome to the Healing-Bot documentation! This directory contains comprehensive 
 docs/
 ├── README.md (this file)
 ├── guides/                      # User and setup guides
-├── api/                         # API documentation
-└── development/                 # Development guides
+├── changelog/                   # Change logs and feature summaries
+├── quick-reference/             # Quick reference materials
+├── api/                         # API documentation (to be added)
+└── development/                 # Development guides (to be added)
 ```
 
 ---
 
 ## 🗂️ Documentation Categories
+
+### 📝 Changelog (`changelog/`)
+
+Change logs, feature summaries, and fix documentation:
+- Feature completion summaries
+- Bug fix documentation
+- Implementation notes
+- Quick start guides for specific features
 
 ### 📖 Guides (`guides/`)
 

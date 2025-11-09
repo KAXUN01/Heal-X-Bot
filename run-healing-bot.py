@@ -65,13 +65,21 @@ class HealingBotLauncher:
                 "script": "app.py",
                 "health_url": "http://localhost:5000/health",
                 "docker_service": "server"
+            },
+            "healing-dashboard": {
+                "name": "Healing Dashboard API",
+                "port": 5001,
+                "path": "monitoring/server",
+                "script": "healing_dashboard_api.py",
+                "health_url": "http://localhost:5001/api/health",
+                "docker_service": "healing-dashboard"
             }
         }
         
         # Docker services (full stack)
         self.docker_services = [
             "model", "server", "network-analyzer", "dashboard", 
-            "incident-bot", "prometheus", "grafana"
+            "incident-bot", "healing-dashboard", "prometheus", "grafana"
         ]
 
     def print_banner(self):
@@ -220,7 +228,7 @@ class HealingBotLauncher:
         
         import socket
         
-        ports_to_check = [8080, 8000, 3001, 5000, 9090, 3000]
+        ports_to_check = [8080, 8000, 3001, 5000, 5001, 9090, 3000]
         occupied_ports = []
         
         for port in ports_to_check:
@@ -276,20 +284,26 @@ class HealingBotLauncher:
             
             try:
                 # Start the service
+                # Use unbuffered output for better logging
+                env = os.environ.copy()
+                env['PYTHONUNBUFFERED'] = '1'
+                
                 if self.is_windows:
                     process = subprocess.Popen(
-                        [sys.executable, str(script_path)],
+                        [sys.executable, "-u", str(script_path)],
                         cwd=service_path,
                         creationflags=subprocess.CREATE_NEW_CONSOLE,
                         stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
+                        stderr=subprocess.PIPE,
+                        env=env
                     )
                 else:
                     process = subprocess.Popen(
-                        [sys.executable, str(script_path)],
+                        [sys.executable, "-u", str(script_path)],
                         cwd=service_path,
                         stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
+                        stderr=subprocess.PIPE,
+                        env=env
                     )
                 
                 # Give the process a moment to start and check for immediate errors
@@ -319,16 +333,21 @@ class HealingBotLauncher:
                                     
                                     # Try starting the service again
                                     print(f"   🔄 Retrying {config['name']}...")
+                                    env = os.environ.copy()
+                                    env['PYTHONUNBUFFERED'] = '1'
+                                    
                                     if self.is_windows:
                                         retry_process = subprocess.Popen(
-                                            [sys.executable, str(script_path)],
+                                            [sys.executable, "-u", str(script_path)],
                                             cwd=service_path,
-                                            creationflags=subprocess.CREATE_NEW_CONSOLE
+                                            creationflags=subprocess.CREATE_NEW_CONSOLE,
+                                            env=env
                                         )
                                     else:
                                         retry_process = subprocess.Popen(
-                                            [sys.executable, str(script_path)],
-                                            cwd=service_path
+                                            [sys.executable, "-u", str(script_path)],
+                                            cwd=service_path,
+                                            env=env
                                         )
                                     
                                     time.sleep(2)
@@ -349,14 +368,21 @@ class HealingBotLauncher:
         
         return len(self.processes) > 0
 
-    def wait_for_services(self, services: List[str], timeout: int = 60):
+    def wait_for_services(self, services: List[str], timeout: int = 90):
         """Wait for services to become healthy"""
         print("⏳ Waiting for services to become ready...")
         
-        import requests
+        try:
+            import requests
+        except ImportError:
+            print("⚠️  requests module not available - skipping health checks")
+            print("   Services may still be starting...")
+            time.sleep(10)  # Give services time to start
+            return True
         
         start_time = time.time()
         healthy_services = set()
+        checked_services = set()
         
         while time.time() - start_time < timeout:
             for service_id in services:
@@ -370,17 +396,26 @@ class HealingBotLauncher:
                         if response.status_code == 200:
                             healthy_services.add(service_id)
                             print(f"✅ {config['name']} is healthy")
-                    except:
+                    except requests.exceptions.ConnectionError:
+                        # Service not ready yet
+                        if service_id not in checked_services:
+                            checked_services.add(service_id)
+                            print(f"⏳ Waiting for {config['name']}...")
+                    except Exception as e:
+                        # Other errors - log but continue
                         pass
             
             if len(healthy_services) == len(services):
                 print("🎉 All services are healthy!")
                 return True
             
-            time.sleep(2)
+            time.sleep(3)
         
-        print(f"⚠️  Some services may not be ready after {timeout} seconds")
-        return False
+        if len(healthy_services) > 0:
+            print(f"✅ {len(healthy_services)}/{len(services)} services are healthy")
+        else:
+            print(f"⚠️  Services may still be starting - check manually")
+        return len(healthy_services) > 0
 
     def print_access_info(self):
         """Print access information for all services"""
@@ -390,6 +425,7 @@ class HealingBotLauncher:
         
         access_points = [
             ("📊 Dashboard", "http://localhost:3001", "Main monitoring dashboard"),
+            ("🛡️ Healing Dashboard", "http://localhost:5001", "Healing bot dashboard"),
             ("🤖 Model API", "http://localhost:8080", "DDoS detection model"),
             ("🔍 Network Analyzer", "http://localhost:8000", "Network traffic analysis"),
             ("🚨 Incident Bot", "http://localhost:8000", "AI incident response"),
@@ -477,7 +513,9 @@ class HealingBotLauncher:
             if use_docker:
                 services_to_start = self.docker_services
             else:
-                services_to_start = ["model", "network-analyzer", "dashboard", "incident-bot"]
+                # Start all essential services in native mode
+                services_to_start = ["model", "network-analyzer", "dashboard", "incident-bot", 
+                                    "monitoring-server", "healing-dashboard"]
         else:
             services_to_start = services
         

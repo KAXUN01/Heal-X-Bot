@@ -23,6 +23,7 @@ import requests
 from pathlib import Path
 import signal
 import random
+import hashlib
 from dotenv import load_dotenv
 from blocked_ips_db import BlockedIPsDatabase
 
@@ -160,6 +161,9 @@ ssh_attempts = defaultdict(list)
 blocked_ips = set()
 command_history = []
 log_buffer = []
+
+# Track notified critical errors to avoid duplicates
+notified_critical_errors = set()  # Set of (timestamp, service, message_hash) tuples
 
 # DDoS Detection Storage
 ddos_statistics = {
@@ -717,8 +721,8 @@ def update_ddos_statistics(attack_data: Dict[str, Any]):
 # Discord Integration
 # ============================================================================
 
-def send_discord_alert(message: str, severity: str = "info"):
-    """Send alert to Discord"""
+def send_discord_alert(message: str, severity: str = "info", embed_data: Dict[str, Any] = None):
+    """Send alert to Discord with optional detailed embed data"""
     if not CONFIG["discord_webhook"]:
         return
     
@@ -732,25 +736,219 @@ def send_discord_alert(message: str, severity: str = "info"):
         }
         
         color_map = {
-            "info": 3447003,
-            "success": 3066993,
-            "warning": 16776960,
-            "error": 15158332,
-            "critical": 10038562
+            "info": 3447003,      # Blue
+            "success": 3066993,   # Green
+            "warning": 16776960,  # Yellow
+            "error": 15158332,    # Red
+            "critical": 10038562  # Dark Red
         }
         
+        # Build embed
+        embed = {
+            "title": f"{emoji_map.get(severity, 'ℹ️')} Healing Bot Alert",
+            "color": color_map.get(severity, 3447003),
+            "timestamp": datetime.utcnow().isoformat(),
+            "footer": {
+                "text": "Healing Bot Dashboard",
+                "icon_url": "https://cdn.discordapp.com/emojis/🛡️.png"
+            }
+        }
+        
+        # If detailed embed data is provided, use it
+        if embed_data:
+            # Copy all embed_data fields to embed (title, description, fields, etc.)
+            for key in ["title", "description", "fields", "thumbnail", "footer", "url", "timestamp", "color"]:
+                if key in embed_data:
+                    embed[key] = embed_data[key]
+        else:
+            # Simple message format
+            embed["description"] = message
+        
         payload = {
-            "embeds": [{
-                "title": f"{emoji_map.get(severity, 'ℹ️')} Healing Bot Alert",
-                "description": message,
-                "color": color_map.get(severity, 3447003),
-                "timestamp": datetime.utcnow().isoformat()
-            }]
+            "embeds": [embed]
         }
         
         requests.post(CONFIG["discord_webhook"], json=payload, timeout=5)
     except Exception as e:
         logger.error(f"Error sending Discord alert: {e}")
+
+def send_detailed_critical_alert(issue: Dict[str, Any], system_metrics: Dict[str, Any] = None):
+    """Send detailed Discord alert for critical errors"""
+    if not CONFIG["discord_webhook"]:
+        return
+    
+    try:
+        # Get issue details
+        service_name = issue.get('service', 'Unknown Service')
+        error_message = issue.get('message', 'No message available')
+        error_level = issue.get('level', 'CRITICAL')
+        error_category = issue.get('category', 'CRITICAL')
+        priority = issue.get('priority', 2)
+        timestamp = issue.get('timestamp', datetime.now().isoformat())
+        source = issue.get('source', 'unknown')
+        source_file = issue.get('source_file', issue.get('tag', 'unknown'))
+        
+        # Format timestamp
+        try:
+            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+            relative_time = dt.strftime('%H:%M:%S')
+        except:
+            formatted_time = timestamp
+            relative_time = "Unknown"
+        
+        # Get system metrics if not provided
+        if system_metrics is None:
+            try:
+                system_metrics = get_system_metrics()
+            except:
+                system_metrics = {
+                    'cpu': 0,
+                    'memory': 0,
+                    'disk': 0
+                }
+        
+        # Get hostname for multi-server identification
+        try:
+            hostname = os.uname().nodename
+        except:
+            hostname = "unknown"
+        
+        # Determine priority description
+        priority_desc = {
+            0: "Emergency - System unusable",
+            1: "Alert - Immediate action required",
+            2: "Critical - Critical condition",
+            3: "Error - Error condition",
+            4: "Warning - Warning condition"
+        }.get(priority, f"Priority {priority}")
+        
+        # Determine impact level
+        impact_level = "🔴 CRITICAL" if priority <= 2 else "🟠 HIGH" if priority == 3 else "🟡 MEDIUM"
+        
+        # Get service status
+        service_status = "❓ Unknown"
+        try:
+            monitor = get_critical_services_monitor()
+            if monitor:
+                status = monitor.service_status.get(service_name, {})
+                if status.get('active', False):
+                    service_status = "✅ Active"
+                else:
+                    service_status = "❌ Inactive"
+        except:
+            pass
+        
+        # Analyze error message for key information
+        error_lower = error_message.lower()
+        error_type = "Unknown Error"
+        if any(kw in error_lower for kw in ['crash', 'abort', 'terminated', 'killed']):
+            error_type = "💀 Service Crash"
+        elif any(kw in error_lower for kw in ['timeout', 'timed out']):
+            error_type = "⏱️ Timeout"
+        elif any(kw in error_lower for kw in ['connection', 'connect', 'refused']):
+            error_type = "🔌 Connection Error"
+        elif any(kw in error_lower for kw in ['permission', 'denied', 'unauthorized']):
+            error_type = "🔐 Permission Error"
+        elif any(kw in error_lower for kw in ['memory', 'oom', 'out of memory']):
+            error_type = "💾 Memory Error"
+        elif any(kw in error_lower for kw in ['disk', 'space', 'full', 'no space']):
+            error_type = "💿 Disk Space Error"
+        elif any(kw in error_lower for kw in ['failed', 'failure', 'fail']):
+            error_type = "❌ Operation Failed"
+        
+        # Truncate long messages
+        display_message = error_message
+        if len(display_message) > 1000:
+            display_message = display_message[:1000] + "\n... (truncated)"
+        
+        # Determine CPU/Memory/Disk status with emojis
+        cpu = system_metrics.get('cpu', 0)
+        memory = system_metrics.get('memory', 0)
+        disk = system_metrics.get('disk', 0)
+        
+        cpu_status = "🟢 Normal" if cpu < 80 else "🟡 High" if cpu < 95 else "🔴 Critical"
+        memory_status = "🟢 Normal" if memory < 80 else "🟡 High" if memory < 95 else "🔴 Critical"
+        disk_status = "🟢 Normal" if disk < 80 else "🟡 High" if disk < 95 else "🔴 Critical"
+        
+        # Build Discord embed with fields
+        fields = [
+            {
+                "name": "🔴 Service Information",
+                "value": f"**Service:** `{service_name}`\n**Status:** {service_status}\n**Category:** `{error_category}`\n**Source:** `{source}`\n**Host:** `{hostname}`",
+                "inline": True
+            },
+            {
+                "name": "📊 Error Details",
+                "value": f"**Type:** {error_type}\n**Level:** `{error_level}`\n**Priority:** `{priority}` ({priority_desc})\n**Impact:** {impact_level}",
+                "inline": True
+            },
+            {
+                "name": "⏰ Timing & Location",
+                "value": f"**Detected:** {formatted_time}\n**Time:** {relative_time}\n**Source File:** `{source_file}`",
+                "inline": True
+            },
+            {
+                "name": "💻 System Resources",
+                "value": f"**CPU:** {cpu:.1f}% {cpu_status}\n**Memory:** {memory:.1f}% {memory_status}\n**Disk:** {disk:.1f}% {disk_status}",
+                "inline": True
+            }
+        ]
+        
+        # Add recommended actions based on error type
+        recommendations = []
+        if 'crash' in error_lower or 'abort' in error_lower:
+            recommendations.append("🔄 **Restart the service** - Service may have crashed")
+        if 'timeout' in error_lower:
+            recommendations.append("⏱️ **Check service response time** - Service may be overloaded")
+        if 'connection' in error_lower or 'refused' in error_lower:
+            recommendations.append("🔌 **Check network connectivity** - Service may be unreachable")
+        if 'permission' in error_lower or 'denied' in error_lower:
+            recommendations.append("🔐 **Check file permissions** - Service may lack required permissions")
+        if 'memory' in error_lower or 'oom' in error_lower:
+            recommendations.append("💾 **Check memory usage** - System may be out of memory")
+        if 'disk' in error_lower or 'space' in error_lower:
+            recommendations.append("💿 **Check disk space** - Disk may be full")
+        if not recommendations:
+            recommendations.append("📋 **Review logs** - Check dashboard for more details")
+            recommendations.append("🔍 **Analyze with AI** - Use AI analysis feature in dashboard")
+        
+        if recommendations:
+            fields.append({
+                "name": "💡 Recommended Actions",
+                "value": "\n".join(recommendations),
+                "inline": False
+            })
+        
+        # Get dashboard URL from config or use default
+        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:5001")
+        dashboard_link = f"{dashboard_url}/static/healing-dashboard.html#logs"
+        
+        # Build embed
+        embed_data = {
+            "title": f"🚨 CRITICAL ERROR DETECTED - {service_name}",
+            "description": f"```\n{display_message}\n```",
+            "color": 10038562,  # Dark red for critical
+            "fields": fields,
+            "footer": {
+                "text": f"Healing Bot Dashboard • {dashboard_url}",
+            },
+            "timestamp": timestamp,
+            "url": dashboard_link
+        }
+        
+        send_discord_alert("", "critical", embed_data)
+        logger.info(f"Detailed Discord notification sent for CRITICAL error: {service_name}")
+        
+    except Exception as e:
+        logger.error(f"Error sending detailed Discord alert: {e}")
+        # Fallback to simple alert
+        try:
+            service_name = issue.get('service', 'Unknown Service')
+            error_message = issue.get('message', 'No message')[:500]
+            send_discord_alert(f"🚨 CRITICAL ERROR: {service_name}\n\n{error_message}", "critical")
+        except:
+            pass
 
 # ============================================================================
 # AI Log Analysis (TF-IDF)
@@ -1523,6 +1721,56 @@ async def get_critical_service_issues(include_test: bool = False):
                 'source': 'test'
             }
             issues.insert(0, test_issue)
+        
+        # Check for new CRITICAL errors and send Discord notifications
+        new_critical_count = 0
+        
+        for issue in issues:
+            # Only notify for CRITICAL severity issues
+            severity = (issue.get('severity') or issue.get('level') or '').upper()
+            priority = issue.get('priority', 6)
+            
+            if severity in ['CRITICAL', 'CRIT'] or priority <= 2:
+                # Create unique identifier for this error
+                timestamp = issue.get('timestamp', '')
+                service = issue.get('service', 'unknown')
+                message = issue.get('message', '')
+                message_hash = hashlib.md5(message.encode()).hexdigest()[:8]
+                error_id = (timestamp, service, message_hash)
+                
+                # Check if we've already notified about this error
+                if error_id not in notified_critical_errors:
+                    # Mark as notified
+                    notified_critical_errors.add(error_id)
+                    new_critical_count += 1
+                    
+                    # Get system metrics for context
+                    try:
+                        system_metrics = get_system_metrics()
+                    except:
+                        system_metrics = None
+                    
+                    # Send detailed Discord notification
+                    send_detailed_critical_alert(issue, system_metrics)
+                    service_name = issue.get('service', 'Unknown Service')
+                    error_message = issue.get('message', 'No message')
+                    logger.info(f"Detailed Discord notification sent for new CRITICAL error: {service_name} - {error_message[:50]}")
+        
+        # Clean up old notified errors (keep last 1000 to prevent memory growth)
+        if len(notified_critical_errors) > 1000:
+            # Keep only the most recent 500
+            notified_critical_errors.clear()
+            # Re-add current issues
+            for issue in issues[:500]:
+                timestamp = issue.get('timestamp', '')
+                service = issue.get('service', 'unknown')
+                message = issue.get('message', '')
+                message_hash = hashlib.md5(message.encode()).hexdigest()[:8]
+                error_id = (timestamp, service, message_hash)
+                notified_critical_errors.add(error_id)
+        
+        if new_critical_count > 0:
+            logger.info(f"Sent Discord notifications for {new_critical_count} new CRITICAL error(s)")
         
         return {
             "status": "success",

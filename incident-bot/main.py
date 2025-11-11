@@ -400,13 +400,13 @@ async def receive_alert(request: Request):
 
 def validate_environment():
     """Validate that all required environment variables are set"""
+    # Make all variables optional; warn instead of failing
     required_vars = ["GEMINI_API_KEY", "SLACK_WEBHOOK"]
     missing_vars = [var for var in required_vars if not os.getenv(var)]
-    
+
     if missing_vars:
-        logger.error(f"Missing required environment variables: {', '.join(missing_vars)}")
-        logger.error("Please set them in your .env file or environment")
-        return False
+        logger.warning(f"Missing optional environment variables: {', '.join(missing_vars)}")
+        logger.warning("AI suggestions and/or Slack notifications may be disabled.")
     
     # Check for S3 configuration - these are optional but should be checked as a group
     s3_vars = ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "S3_BUCKET_NAME"]
@@ -419,10 +419,8 @@ def validate_environment():
     return len(missing_vars) == 0
 
 if __name__ == "__main__":
-    if not validate_environment():
-        # Exit with error code
-        import sys
-        sys.exit(1)
+    # Validate environment but do not exit if optional vars are missing
+    validate_environment()
     
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")

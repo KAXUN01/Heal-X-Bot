@@ -33,9 +33,15 @@ cleanup() {
     done
     
     # Stop Fluent Bit Docker container
-    if docker ps | grep -q "fluent-bit"; then
-        echo -e "${YELLOW}   Stopping Fluent Bit container...${NC}"
-        docker-compose -f config/docker-compose-fluent-bit.yml down 2>/dev/null || true
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        if docker ps 2>/dev/null | grep -q "fluent-bit"; then
+            echo -e "${YELLOW}   Stopping Fluent Bit container...${NC}"
+            if docker compose version >/dev/null 2>&1; then
+                docker compose -f config/docker-compose-fluent-bit.yml down 2>/dev/null || true
+            elif command -v docker-compose >/dev/null 2>&1; then
+                docker-compose -f config/docker-compose-fluent-bit.yml down 2>/dev/null || true
+            fi
+        fi
     fi
     
     # Wait a bit for processes to terminate
@@ -83,28 +89,84 @@ fi
 
 # Check Docker for Fluent Bit
 echo -e "${YELLOW}🔍 Checking Docker for Fluent Bit...${NC}"
+DOCKER_OK=1
+COMPOSE_CMD=""
 if ! command -v docker &> /dev/null; then
     echo -e "${RED}❌ ERROR: Docker is not installed (required for Fluent Bit)${NC}"
-    exit 1
-fi
-
-if ! command -v docker-compose &> /dev/null; then
-    echo -e "${RED}❌ ERROR: Docker Compose is not installed (required for Fluent Bit)${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}✅ Docker and Docker Compose detected${NC}"
-
-# Check for virtual environment
-if [ -d "venv" ] || [ -d ".venv" ]; then
-    echo -e "${YELLOW}📦 Virtual environment detected${NC}"
-    if [ -d "venv" ]; then
-        source venv/bin/activate
-    else
-        source .venv/bin/activate
+    DOCKER_OK=0
+else
+    # Verify Docker daemon access/permissions
+    if ! docker info >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  WARNING: Docker is installed but not accessible by this user or daemon isn't running${NC}"
+        echo -e "${YELLOW}   Try:${NC}"
+        echo -e "${YELLOW}   - Start daemon: sudo systemctl start docker${NC}"
+        echo -e "${YELLOW}   - Add your user: sudo usermod -aG docker $USER && newgrp docker${NC}"
+        DOCKER_OK=0
     fi
-    echo -e "${GREEN}✅ Virtual environment activated${NC}"
 fi
+
+if [ "$DOCKER_OK" -eq 1 ]; then
+    if docker compose version >/dev/null 2>&1; then
+        COMPOSE_CMD="docker compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        COMPOSE_CMD="docker-compose"
+    else
+        echo -e "${YELLOW}⚠️  WARNING: Docker Compose not found (v2 or legacy). Fluent Bit will be skipped.${NC}"
+        DOCKER_OK=0
+    fi
+fi
+
+if [ "$DOCKER_OK" -eq 1 ]; then
+    echo -e "${GREEN}✅ Docker and Docker Compose detected${NC}"
+else
+    echo -e "${YELLOW}⚠️  Proceeding without Fluent Bit due to Docker/Compose issue${NC}"
+fi
+
+# Ensure and activate virtual environment, then install Python deps
+VENV_DIR=""
+if [ -d ".venv" ]; then
+    VENV_DIR=".venv"
+elif [ -d "venv" ]; then
+    VENV_DIR="venv"
+else
+    VENV_DIR=".venv"
+fi
+
+if [ ! -f "$VENV_DIR/bin/activate" ]; then
+    echo -e "${YELLOW}📦 Creating virtual environment (${VENV_DIR})...${NC}"
+    python3 -m venv "$VENV_DIR"
+fi
+
+if [ -f "$VENV_DIR/bin/activate" ]; then
+    # shellcheck disable=SC1090
+    source "$VENV_DIR/bin/activate"
+    echo -e "${GREEN}✅ Virtual environment activated (${VENV_DIR})${NC}"
+else
+    echo -e "${RED}❌ ERROR: Failed to prepare virtual environment at ${VENV_DIR}${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}📦 Installing Python dependencies...${NC}"
+python3 -m pip install --upgrade pip >/dev/null
+if [ -f "requirements.txt" ]; then
+    python3 -m pip install -r requirements.txt
+fi
+# Install per-service requirements if present
+if [ -f "model/requirements.txt" ]; then
+    python3 -m pip install -r model/requirements.txt
+fi
+if [ -f "monitoring/server/requirements.txt" ]; then
+    python3 -m pip install -r monitoring/server/requirements.txt
+fi
+if [ -f "monitoring/dashboard/requirements.txt" ]; then
+    python3 -m pip install -r monitoring/dashboard/requirements.txt
+fi
+if [ -f "incident-bot/requirements.txt" ]; then
+    python3 -m pip install -r incident-bot/requirements.txt
+fi
+# Ensure protobuf is compatible with TensorFlow
+python3 -m pip install --upgrade "protobuf>=4.25.3,<5" googleapis-common-protos >/dev/null || true
+echo -e "${GREEN}✅ Virtual environment ready${NC}"
 
 # Check if .env file exists
 if [ ! -f ".env" ]; then
@@ -152,25 +214,31 @@ if [ ${#OCCUPIED_PORTS[@]} -gt 0 ]; then
 fi
 
 # Create Docker network for Fluent Bit if it doesn't exist
-echo -e "${YELLOW}🔍 Setting up Docker network for Fluent Bit...${NC}"
-if ! docker network ls | grep -q "healing-network"; then
-    echo -e "${YELLOW}   Creating healing-network...${NC}"
-    docker network create healing-network 2>/dev/null || true
-    echo -e "${GREEN}✅ Docker network created${NC}"
-else
-    echo -e "${GREEN}✅ Docker network already exists${NC}"
+if [ "$DOCKER_OK" -eq 1 ]; then
+    echo -e "${YELLOW}🔍 Setting up Docker network for Fluent Bit...${NC}"
+    if ! docker network ls | grep -q "healing-network"; then
+        echo -e "${YELLOW}   Creating healing-network...${NC}"
+        docker network create healing-network 2>/dev/null || true
+        echo -e "${GREEN}✅ Docker network created${NC}"
+    else
+        echo -e "${GREEN}✅ Docker network already exists${NC}"
+    fi
 fi
 
-# Start Fluent Bit with Docker
-echo -e "${YELLOW}🐳 Starting Fluent Bit with Docker...${NC}"
-cd config
-if docker-compose -f docker-compose-fluent-bit.yml up -d; then
-    echo -e "${GREEN}✅ Fluent Bit started${NC}"
+# Start Fluent Bit with Docker (only if Docker/Compose available)
+if [ "$DOCKER_OK" -eq 1 ]; then
+    echo -e "${YELLOW}🐳 Starting Fluent Bit with Docker...${NC}"
+    cd config
+    if $COMPOSE_CMD -f docker-compose-fluent-bit.yml up -d; then
+        echo -e "${GREEN}✅ Fluent Bit started${NC}"
+    else
+        echo -e "${RED}❌ ERROR: Failed to start Fluent Bit${NC}"
+        exit 1
+    fi
+    cd "$SCRIPT_DIR"
 else
-    echo -e "${RED}❌ ERROR: Failed to start Fluent Bit${NC}"
-    exit 1
+    echo -e "${YELLOW}⏭️  Skipping Fluent Bit startup (Docker/Compose unavailable)${NC}"
 fi
-cd "$SCRIPT_DIR"
 
 # Start Python services natively
 echo ""
@@ -200,13 +268,13 @@ start_service() {
         # Export variables for this service (will be used by the python process)
         eval "export PYTHONUNBUFFERED=1; export $env_vars"
         cd "$service_path"
-        python3 -u "$script_name" > "../../logs/${service_name}.log" 2>&1 &
+        python3 -u "$script_name" > "$SCRIPT_DIR/logs/${service_name}.log" 2>&1 &
         pid=$!
         cd "$SCRIPT_DIR"
     else
         export PYTHONUNBUFFERED=1
         cd "$service_path"
-        python3 -u "$script_name" > "../../logs/${service_name}.log" 2>&1 &
+        python3 -u "$script_name" > "$SCRIPT_DIR/logs/${service_name}.log" 2>&1 &
         pid=$!
         cd "$SCRIPT_DIR"
     fi

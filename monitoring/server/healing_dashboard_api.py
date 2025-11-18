@@ -2103,6 +2103,133 @@ async def get_attack_metrics():
             "top_source_ips": {}
         }
 
+# ============================================================================
+# Predictive Maintenance Endpoints
+# ============================================================================
+
+def load_predictive_model():
+    """Load predictive maintenance model if available"""
+    try:
+        model_path = Path(__file__).parent.parent.parent / "model" / "artifacts" / "latest" / "model_loader.py"
+        if model_path.exists():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("model_loader", model_path)
+            model_loader = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(model_loader)
+            return model_loader
+        return None
+    except Exception as e:
+        logger.warning(f"Could not load predictive model: {e}")
+        return None
+
+predictive_model = load_predictive_model()
+
+@app.get("/api/predict-failure-risk")
+async def predict_failure_risk():
+    """Get current failure risk score based on system metrics"""
+    try:
+        if predictive_model is None:
+            return {
+                "error": "Predictive model not available",
+                "risk_score": 0.0,
+                "message": "Train model first using model/train_xgboost_model.py"
+            }
+        
+        # Get current system metrics
+        metrics = get_system_metrics()
+        
+        # Add log pattern metrics
+        metrics['error_count'] = 0  # Would be calculated from logs
+        metrics['warning_count'] = 0
+        metrics['service_failures'] = 0
+        
+        # Predict risk
+        result = predictive_model.predict_failure_risk(metrics)
+        return result
+    except Exception as e:
+        logger.error(f"Error predicting failure risk: {e}")
+        return {
+            "error": str(e),
+            "risk_score": 0.0
+        }
+
+@app.get("/api/get-early-warnings")
+async def get_early_warnings():
+    """Get list of active early warning indicators"""
+    try:
+        if predictive_model is None:
+            return {
+                "error": "Predictive model not available",
+                "warnings": [],
+                "has_warnings": False
+            }
+        
+        # Get current system metrics
+        metrics = get_system_metrics()
+        metrics['error_count'] = 0
+        metrics['warning_count'] = 0
+        metrics['service_failures'] = 0
+        
+        # Get warnings
+        result = predictive_model.get_early_warnings(metrics)
+        return result
+    except Exception as e:
+        logger.error(f"Error getting early warnings: {e}")
+        return {
+            "error": str(e),
+            "warnings": [],
+            "has_warnings": False
+        }
+
+@app.get("/api/predict-time-to-failure")
+async def predict_time_to_failure():
+    """Predict estimated hours until next failure"""
+    try:
+        if predictive_model is None:
+            return {
+                "error": "Predictive model not available",
+                "hours_until_failure": None
+            }
+        
+        # Get current system metrics
+        metrics = get_system_metrics()
+        metrics['error_count'] = 0
+        metrics['warning_count'] = 0
+        metrics['service_failures'] = 0
+        
+        # Predict time to failure
+        result = predictive_model.predict_time_to_failure(metrics)
+        return result
+    except Exception as e:
+        logger.error(f"Error predicting time to failure: {e}")
+        return {
+            "error": str(e),
+            "hours_until_failure": None
+        }
+
+@app.post("/api/predict-anomaly")
+async def predict_anomaly(request: Request):
+    """Real-time anomaly detection from provided metrics"""
+    try:
+        if predictive_model is None:
+            return {
+                "error": "Predictive model not available",
+                "is_anomaly": False
+            }
+        
+        data = await request.json()
+        metrics = data.get('metrics', {})
+        
+        # Predict anomaly
+        result = predictive_model.predict_anomaly(metrics)
+        return result
+    except Exception as e:
+        logger.error(f"Error predicting anomaly: {e}")
+        return {
+            "error": str(e),
+            "is_anomaly": False
+        }
+
 @app.get("/api/history/ml")
 async def get_ml_history():
     """Get ML model performance history"""

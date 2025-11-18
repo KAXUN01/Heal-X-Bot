@@ -908,6 +908,7 @@
             <button class="tab" onclick="switchTab('ssh')">🔐 SSH Security</button>
             <button class="tab" onclick="switchTab('disk')">💿 Disk Management</button>
             <button class="tab" onclick="switchTab('logs')">📝 Logs & AI</button>
+            <button class="tab" onclick="switchTab('predictive')">🔮 Predictive Maintenance</button>
             <button class="tab" onclick="switchTab('alerts')">🔔 Alerts</button>
             <button class="tab" onclick="switchTab('cli')">⚡ CLI Terminal</button>
         </div>
@@ -1116,6 +1117,73 @@
                             <option value="100">100</option>
                         </select>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="predictive" class="tab-content">
+            <h2 style="margin-bottom: 1.5rem;">🔮 Predictive Maintenance & Proactive Intelligence</h2>
+            
+            <!-- Risk Score Card -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="card" style="border-left: 4px solid #ef4444;">
+                    <h4 style="margin-top: 0;">Failure Risk Score</h4>
+                    <div style="font-size: 3rem; font-weight: bold; color: #ef4444;" id="predictive_riskScore">0%</div>
+                    <div style="margin-top: 1rem;">
+                        <div class="progress-bar" style="height: 20px; background: #f3f4f6; border-radius: 10px; overflow: hidden;">
+                            <div id="predictive_riskBar" style="height: 100%; background: linear-gradient(90deg, #10b981 0%, #f59e0b 50%, #ef4444 100%); width: 0%; transition: width 0.5s;"></div>
+                        </div>
+                    </div>
+                    <small style="color: var(--text-secondary);" id="predictive_riskLevel">Calculating...</small>
+                </div>
+                
+                <div class="card" style="border-left: 4px solid #3b82f6;">
+                    <h4 style="margin-top: 0;">Time to Failure</h4>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: #3b82f6;" id="predictive_timeToFailure">--</div>
+                    <small style="color: var(--text-secondary);" id="predictive_failureTime">No failure predicted</small>
+                </div>
+                
+                <div class="card" style="border-left: 4px solid #f59e0b;">
+                    <h4 style="margin-top: 0;">Early Warnings</h4>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: #f59e0b;" id="predictive_warningCount">0</div>
+                    <small style="color: var(--text-secondary);">Active indicators</small>
+                </div>
+            </div>
+            
+            <!-- Early Warnings List -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-top: 0;">⚠️ Early Warning Indicators</h3>
+                <div id="predictive_warningsList" style="min-height: 100px;">
+                    <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                        Loading warnings...
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Prediction Timeline Chart -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-top: 0;">Prediction Timeline</h3>
+                <div style="position: relative; height: 300px; width: 100%;">
+                    <canvas id="predictive_timelineChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Model Status -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+                <div class="card">
+                    <h5>Model Status</h5>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #10b981;" id="predictive_modelStatus">Active</div>
+                    <small style="color: var(--text-secondary);">Predictive maintenance model</small>
+                </div>
+                <div class="card">
+                    <h5>Last Update</h5>
+                    <div style="font-size: 1.2rem; font-weight: bold;" id="predictive_lastUpdate">--</div>
+                    <small style="color: var(--text-secondary);">Prediction refresh time</small>
+                </div>
+                <div class="card">
+                    <h5>Early Detection Rate</h5>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #3b82f6;" id="predictive_detectionRate">--</div>
+                    <small style="color: var(--text-secondary);">Failures predicted >1h ahead</small>
                 </div>
             </div>
         </div>
@@ -2066,6 +2134,106 @@
                 console.error('Error refreshing DDoS data:', error);
                 }
                 // Don't break the UI - errors are logged but don't stop updates
+            }
+        }
+        
+        // Refresh Predictive Maintenance Data
+        async function refreshPredictiveMaintenance() {
+            try {
+                // Fetch failure risk
+                const riskResponse = await fetch('/api/predict-failure-risk');
+                if (riskResponse.ok) {
+                    const riskData = await riskResponse.json();
+                    if (riskData.risk_score !== undefined) {
+                        const riskPercent = (riskData.risk_score * 100).toFixed(1);
+                        document.getElementById('predictive_riskScore').textContent = riskPercent + '%';
+                        document.getElementById('predictive_riskBar').style.width = riskPercent + '%';
+                        
+                        // Set risk level
+                        const riskLevel = riskData.risk_level || 'Unknown';
+                        document.getElementById('predictive_riskLevel').textContent = 'Risk Level: ' + riskLevel;
+                        
+                        // Color code
+                        const riskElement = document.getElementById('predictive_riskScore');
+                        if (riskData.is_high_risk) {
+                            riskElement.style.color = '#ef4444';
+                        } else if (riskData.has_early_warning) {
+                            riskElement.style.color = '#f59e0b';
+                        } else {
+                            riskElement.style.color = '#10b981';
+                        }
+                    }
+                }
+                
+                // Fetch time to failure
+                const timeResponse = await fetch('/api/predict-time-to-failure');
+                if (timeResponse.ok) {
+                    const timeData = await timeResponse.json();
+                    if (timeData.hours_until_failure) {
+                        document.getElementById('predictive_timeToFailure').textContent = 
+                            timeData.hours_until_failure.toFixed(1) + 'h';
+                        if (timeData.predicted_failure_time) {
+                            const failureTime = new Date(timeData.predicted_failure_time);
+                            document.getElementById('predictive_failureTime').textContent = 
+                                'Predicted: ' + failureTime.toLocaleString();
+                        }
+                    } else {
+                        document.getElementById('predictive_timeToFailure').textContent = '--';
+                        document.getElementById('predictive_failureTime').textContent = 
+                            timeData.message || 'No failure predicted';
+                    }
+                }
+                
+                // Fetch early warnings
+                const warningsResponse = await fetch('/api/get-early-warnings');
+                if (warningsResponse.ok) {
+                    const warningsData = await warningsResponse.json();
+                    const warningsList = document.getElementById('predictive_warningsList');
+                    const warningCount = warningsData.warning_count || 0;
+                    
+                    document.getElementById('predictive_warningCount').textContent = warningCount;
+                    
+                    if (warningsData.has_warnings && warningsData.warnings) {
+                        warningsList.innerHTML = warningsData.warnings.map((warning, idx) => {
+                            const severityColor = warning.severity === 'high' ? '#ef4444' : 
+                                                 warning.severity === 'medium' ? '#f59e0b' : '#3b82f6';
+                            return `
+                                <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(239, 68, 68, 0.1); 
+                                            border-left: 4px solid ${severityColor}; border-radius: 4px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <strong style="color: ${severityColor}; text-transform: uppercase;">
+                                                ${warning.severity}
+                                            </strong>
+                                            <div style="margin-top: 0.25rem; color: var(--text-primary);">
+                                                ${warning.message}
+                                            </div>
+                                        </div>
+                                        <span style="font-size: 1.5rem;">⚠️</span>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    } else {
+                        warningsList.innerHTML = `
+                            <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                                ✅ No active warnings - System operating normally
+                            </div>
+                        `;
+                    }
+                }
+                
+                // Update last update time
+                document.getElementById('predictive_lastUpdate').textContent = 
+                    new Date().toLocaleTimeString();
+                    
+            } catch (error) {
+                console.error('Error refreshing predictive maintenance data:', error);
+                const statusElement = document.getElementById('predictive_modelStatus');
+                if (statusElement) {
+                    statusElement.textContent = 'Error';
+                    statusElement.style.color = '#ef4444';
+                }
             }
         }
         
@@ -4095,6 +4263,11 @@
             
             // Refresh anomalies every 30 seconds
             setInterval(loadAnomalies, 30000);
+            
+            // Refresh predictive maintenance data every 30 seconds
+            setInterval(refreshPredictiveMaintenance, 30000);
+            // Initial load
+            refreshPredictiveMaintenance();
             
             // Load anomalies on initial load
             loadAnomalies();

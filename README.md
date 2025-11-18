@@ -10,6 +10,14 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
 - **Threat Level Assessment**: Automatic risk scoring (Low/Medium/High/Critical)
 - **Pattern Recognition**: Detects HTTP Flood, SYN Flood, Bot Activity, and more
 
+### 🔮 **Predictive Maintenance & Proactive Intelligence** (NEW)
+- **Failure Prediction**: Predicts system failures 1-24 hours before they occur
+- **Early Warning System**: Real-time risk scoring and early warning indicators
+- **Time-to-Failure Estimation**: Forecasts when failures will occur
+- **XGBoost Models**: Dual model approach (classification + regression)
+- **Dashboard Integration**: Real-time predictions in monitoring dashboard
+- **Automated Retraining**: Scheduled model updates with new data
+
 ### 🚫 **Automatic IP Blocking**
 - **Auto-blocking**: Automatically blocks IPs when threat level ≥ 80%
 - **Manual Management**: Admin interface for manual IP blocking/unblocking
@@ -311,8 +319,10 @@ Healing-bot/
 
 4. **ML Model** (`model/`)
    - TensorFlow-based DDoS detection
+   - XGBoost-based Predictive Maintenance (NEW)
    - Feature extraction and analysis
    - Prediction and confidence scoring
+   - Failure prediction and early warnings
 
 ## 🚨 Troubleshooting
 

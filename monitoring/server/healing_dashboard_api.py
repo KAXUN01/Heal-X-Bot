@@ -29,6 +29,7 @@ from blocked_ips_db import BlockedIPsDatabase
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
+env_path_abs = env_path.resolve()
 load_dotenv(dotenv_path=env_path)
 from system_log_collector import initialize_system_log_collector, get_system_log_collector
 from centralized_logger import initialize_centralized_logging, centralized_logger
@@ -54,6 +55,13 @@ app.add_middleware(
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Log .env file status
+logger.info(f"Loading .env file from: {env_path_abs}")
+if env_path_abs.exists():
+    logger.info(f"✅ .env file found")
+else:
+    logger.warning(f"⚠️  .env file not found at {env_path_abs}")
 
 # Initialize log collectors (must be after logger is defined)
 system_log_collector = None
@@ -144,15 +152,36 @@ def initialize_log_services():
 initialize_log_services()
 
 # Global configuration
-CONFIG = {
-    "auto_restart": True,
-    "cpu_threshold": 90.0,
-    "memory_threshold": 85.0,
-    "disk_threshold": 80.0,
-    "discord_webhook": os.getenv("DISCORD_WEBHOOK", ""),
-    "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
-    "model_service_url": os.getenv("MODEL_SERVICE_URL", "http://localhost:8080"),
-}
+def load_config():
+    """Load configuration from environment variables"""
+    discord_webhook = os.getenv("DISCORD_WEBHOOK", "").strip()
+    # Remove quotes if present
+    if discord_webhook.startswith('"') and discord_webhook.endswith('"'):
+        discord_webhook = discord_webhook[1:-1]
+    if discord_webhook.startswith("'") and discord_webhook.endswith("'"):
+        discord_webhook = discord_webhook[1:-1]
+    
+    return {
+        "auto_restart": True,
+        "cpu_threshold": 90.0,
+        "memory_threshold": 85.0,
+        "disk_threshold": 80.0,
+        "discord_webhook": discord_webhook,
+        "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
+        "model_service_url": os.getenv("MODEL_SERVICE_URL", "http://localhost:8080"),
+    }
+
+CONFIG = load_config()
+
+# Log Discord webhook status on startup
+if CONFIG["discord_webhook"]:
+    # Mask the webhook URL for security (show only first and last few chars)
+    webhook_display = CONFIG["discord_webhook"]
+    if len(webhook_display) > 50:
+        webhook_display = webhook_display[:30] + "..." + webhook_display[-20:]
+    logger.info(f"✅ Discord webhook loaded: {webhook_display}")
+else:
+    logger.warning("⚠️  Discord webhook not configured. Set DISCORD_WEBHOOK in .env file to enable notifications.")
 
 # Service status cache
 service_cache = {}
@@ -724,7 +753,8 @@ def update_ddos_statistics(attack_data: Dict[str, Any]):
 def send_discord_alert(message: str, severity: str = "info", embed_data: Dict[str, Any] = None):
     """Send alert to Discord with optional detailed embed data"""
     if not CONFIG["discord_webhook"]:
-        return
+        logger.warning("Discord webhook not configured. Notification not sent.")
+        return False
     
     try:
         emoji_map = {
@@ -768,14 +798,54 @@ def send_discord_alert(message: str, severity: str = "info", embed_data: Dict[st
             "embeds": [embed]
         }
         
-        requests.post(CONFIG["discord_webhook"], json=payload, timeout=5)
+        # Send request with proper headers and response checking
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.post(
+            CONFIG["discord_webhook"], 
+            json=payload, 
+            headers=headers,
+            timeout=10
+        )
+        
+        # Check response status
+        if response.status_code == 204:
+            logger.debug(f"Discord notification sent successfully (severity: {severity})")
+            return True
+        elif response.status_code in [200, 201]:
+            logger.debug(f"Discord notification sent successfully (severity: {severity})")
+            return True
+        else:
+            error_msg = f"Discord webhook returned status {response.status_code}"
+            try:
+                error_body = response.text
+                if error_body:
+                    error_msg += f": {error_body[:200]}"
+            except:
+                pass
+            logger.error(f"Failed to send Discord alert: {error_msg}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        logger.error("Discord webhook request timed out after 10 seconds")
+        return False
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Discord webhook connection error: {e}")
+        return False
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Discord webhook request error: {e}")
+        return False
     except Exception as e:
-        logger.error(f"Error sending Discord alert: {e}")
+        logger.error(f"Error sending Discord alert: {e}", exc_info=True)
+        return False
 
 def send_detailed_critical_alert(issue: Dict[str, Any], system_metrics: Dict[str, Any] = None):
     """Send detailed Discord alert for critical errors"""
     if not CONFIG["discord_webhook"]:
-        return
+        logger.warning("Discord webhook not configured. Critical alert not sent.")
+        return False
     
     try:
         # Get issue details
@@ -937,18 +1007,22 @@ def send_detailed_critical_alert(issue: Dict[str, Any], system_metrics: Dict[str
             "url": dashboard_link
         }
         
-        send_discord_alert("", "critical", embed_data)
-        logger.info(f"Detailed Discord notification sent for CRITICAL error: {service_name}")
+        success = send_discord_alert("", "critical", embed_data)
+        if success:
+            logger.info(f"Detailed Discord notification sent for CRITICAL error: {service_name}")
+        else:
+            logger.warning(f"Failed to send detailed Discord notification for CRITICAL error: {service_name}")
+        return success
         
     except Exception as e:
-        logger.error(f"Error sending detailed Discord alert: {e}")
+        logger.error(f"Error sending detailed Discord alert: {e}", exc_info=True)
         # Fallback to simple alert
         try:
             service_name = issue.get('service', 'Unknown Service')
             error_message = issue.get('message', 'No message')[:500]
-            send_discord_alert(f"🚨 CRITICAL ERROR: {service_name}\n\n{error_message}", "critical")
+            return send_discord_alert(f"🚨 CRITICAL ERROR: {service_name}\n\n{error_message}", "critical")
         except:
-            pass
+            return False
 
 # ============================================================================
 # AI Log Analysis (TF-IDF)
@@ -1195,16 +1269,97 @@ async def test_discord_endpoint(data: dict):
     """Test Discord webhook"""
     webhook = data.get("webhook")
     if webhook:
+        webhook = webhook.strip()
+        # Remove quotes if present
+        if webhook.startswith('"') and webhook.endswith('"'):
+            webhook = webhook[1:-1]
+        if webhook.startswith("'") and webhook.endswith("'"):
+            webhook = webhook[1:-1]
         CONFIG["discord_webhook"] = webhook
     
-    send_discord_alert("Test notification from Healing Bot Dashboard", "info")
-    return {"success": True}
+    if not CONFIG["discord_webhook"]:
+        return {"success": False, "error": "Discord webhook not configured"}
+    
+    success = send_discord_alert("Test notification from Healing Bot Dashboard", "info")
+    if success:
+        return {"success": True, "message": "Test notification sent successfully"}
+    else:
+        return {"success": False, "error": "Failed to send test notification. Check server logs for details."}
+
+@app.get("/api/discord/status")
+async def get_discord_status():
+    """Get Discord webhook configuration status"""
+    webhook = CONFIG.get("discord_webhook", "")
+    is_configured = bool(webhook)
+    
+    # Check if webhook is in environment
+    env_webhook = os.getenv("DISCORD_WEBHOOK", "").strip()
+    if env_webhook.startswith('"') and env_webhook.endswith('"'):
+        env_webhook = env_webhook[1:-1]
+    if env_webhook.startswith("'") and env_webhook.endswith("'"):
+        env_webhook = env_webhook[1:-1]
+    
+    return {
+        "configured": is_configured,
+        "has_env_var": bool(env_webhook),
+        "webhook_length": len(webhook) if webhook else 0,
+        "env_file_path": str(env_path_abs),
+        "env_file_exists": env_path_abs.exists()
+    }
 
 @app.post("/api/discord/configure")
 async def configure_discord(data: dict):
     """Configure Discord webhook"""
-    CONFIG["discord_webhook"] = data.get("webhook", "")
-    return {"success": True}
+    webhook = data.get("webhook", "").strip()
+    # Remove quotes if present
+    if webhook.startswith('"') and webhook.endswith('"'):
+        webhook = webhook[1:-1]
+    if webhook.startswith("'") and webhook.endswith("'"):
+        webhook = webhook[1:-1]
+    
+    CONFIG["discord_webhook"] = webhook
+    
+    if webhook:
+        # Mask the webhook URL for security
+        webhook_display = webhook
+        if len(webhook_display) > 50:
+            webhook_display = webhook_display[:30] + "..." + webhook_display[-20:]
+        logger.info(f"Discord webhook configured: {webhook_display}")
+    else:
+        logger.info("Discord webhook cleared")
+    
+    return {"success": True, "message": "Discord webhook configured" if webhook else "Discord webhook cleared"}
+
+@app.post("/api/discord/reload")
+async def reload_discord_config():
+    """Reload Discord webhook from environment variables"""
+    # Reload .env file
+    load_dotenv(dotenv_path=env_path, override=True)
+    
+    # Reload config
+    new_config = load_config()
+    old_webhook = CONFIG.get("discord_webhook", "")
+    CONFIG["discord_webhook"] = new_config["discord_webhook"]
+    
+    if CONFIG["discord_webhook"]:
+        webhook_display = CONFIG["discord_webhook"]
+        if len(webhook_display) > 50:
+            webhook_display = webhook_display[:30] + "..." + webhook_display[-20:]
+        logger.info(f"Discord webhook reloaded from .env: {webhook_display}")
+        return {
+            "success": True, 
+            "message": "Discord webhook reloaded from .env file",
+            "was_configured": bool(old_webhook),
+            "now_configured": True
+        }
+    else:
+        logger.warning("Discord webhook not found in .env file after reload")
+        return {
+            "success": False,
+            "message": "DISCORD_WEBHOOK not found in .env file",
+            "was_configured": bool(old_webhook),
+            "now_configured": False
+        }
 
 @app.get("/api/logs")
 async def get_logs(limit: int = 100):
@@ -2354,6 +2509,10 @@ async def predict_anomaly(request: Request):
         data = await request.json()
         metrics = data.get('metrics', {})
         
+        # Store for dashboard demo mode
+        global _last_demo_metrics
+        _last_demo_metrics = metrics
+        
         # Predict anomaly
         result = predictive_model.predict_anomaly(metrics)
         return result
@@ -2362,6 +2521,96 @@ async def predict_anomaly(request: Request):
         return {
             "error": str(e),
             "is_anomaly": False
+        }
+
+# Store last demo metrics for dashboard polling
+_last_demo_metrics = None
+
+@app.get("/api/get-last-demo-metrics")
+async def get_last_demo_metrics():
+    """Get last demo metrics sent (for dashboard demo mode)"""
+    global _last_demo_metrics
+    if _last_demo_metrics:
+        return {"metrics": _last_demo_metrics, "timestamp": datetime.now().isoformat()}
+    return {"metrics": None}
+
+@app.post("/api/predict-failure-risk-custom")
+async def predict_failure_risk_custom(request: Request):
+    """Get failure risk score from custom metrics (for demonstrations)"""
+    try:
+        if predictive_model is None or not hasattr(predictive_model, 'model') or predictive_model.model is None:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Predictive model not available",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown"
+            }
+        
+        if not hasattr(predictive_model, 'predict_failure_risk'):
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Model functions not available",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown"
+            }
+        
+        data = await request.json()
+        metrics = data.get('metrics', {})
+        
+        # Store for dashboard demo mode
+        global _last_demo_metrics
+        _last_demo_metrics = metrics
+        
+        # Ensure all required metrics are present
+        if not metrics:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "No metrics provided",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown"
+            }
+        
+        # Predict risk with custom metrics
+        result = predictive_model.predict_failure_risk(metrics)
+        
+        # Ensure all required fields are present
+        if 'timestamp' not in result:
+            result['timestamp'] = datetime.now().isoformat()
+        if 'risk_percentage' not in result:
+            result['risk_percentage'] = result.get('risk_score', 0.0) * 100
+        if 'risk_level' not in result:
+            risk_score = result.get('risk_score', 0.0)
+            if risk_score > 0.7:
+                result['risk_level'] = 'High'
+            elif risk_score > 0.5:
+                result['risk_level'] = 'Medium'
+            elif risk_score > 0.3:
+                result['risk_level'] = 'Low'
+            else:
+                result['risk_level'] = 'Very Low'
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error predicting failure risk with custom metrics: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "risk_score": 0.0,
+            "risk_percentage": 0.0,
+            "has_early_warning": False,
+            "is_high_risk": False,
+            "risk_level": "Unknown"
         }
 
 @app.get("/api/history/ml")

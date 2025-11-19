@@ -1122,7 +1122,18 @@
         </div>
 
         <div id="predictive" class="tab-content">
-            <h2 style="margin-bottom: 1.5rem;">🔮 Predictive Maintenance & Proactive Intelligence</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 style="margin: 0;">🔮 Predictive Maintenance & Proactive Intelligence</h2>
+                <div style="display: flex; gap: 0.5rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
+                        <input type="checkbox" id="demoModeToggle" onchange="toggleDemoMode()" style="cursor: pointer;">
+                        <span style="font-size: 0.9rem;">Demo Mode</span>
+                    </label>
+                    <button onclick="refreshPredictiveMaintenance(); showNotification('🔄 Refreshing predictions...', 'info');" style="padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                        🔄 Refresh Now
+                    </button>
+                </div>
+            </div>
             
             <!-- Risk Score Card -->
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
@@ -1670,7 +1681,24 @@
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             
             event.target.classList.add('active');
-            document.getElementById(tabName).classList.add('active');
+            const tabContent = document.getElementById(tabName);
+            if (tabContent) {
+                tabContent.classList.add('active');
+            }
+            
+            // Refresh predictive maintenance data when tab is opened
+            if (tabName === 'predictive') {
+                console.log('🔮 Predictive Maintenance tab opened - refreshing data...');
+                // Force immediate refresh when tab becomes visible
+                setTimeout(() => {
+                    if (document.getElementById('predictive_riskScore')) {
+                        console.log('✅ Predictive tab elements found, refreshing...');
+                        refreshPredictiveMaintenance();
+                    } else {
+                        console.error('❌ Predictive tab elements not found!');
+                    }
+                }, 200);
+            }
         }
         
         function updateDashboard(data) {
@@ -2137,75 +2165,206 @@
             }
         }
         
+        // Demo mode state
+        let demoMode = false;
+        let lastDemoMetrics = null;
+        
+        function toggleDemoMode() {
+            const toggle = document.getElementById('demoModeToggle');
+            demoMode = toggle.checked;
+            console.log('🎭 Demo mode:', demoMode ? 'ON' : 'OFF');
+            if (demoMode) {
+                showNotification('🎭 Demo mode enabled - Will use test scenarios', 'info');
+            } else {
+                showNotification('📊 Demo mode disabled - Using real system metrics', 'info');
+            }
+            refreshPredictiveMaintenance();
+        }
+        
+        // Listen for demo metrics from external scripts
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'demo_metrics') {
+                lastDemoMetrics = event.data.metrics;
+                if (demoMode) {
+                    console.log('📥 Received demo metrics, refreshing...');
+                    refreshPredictiveMaintenance();
+                }
+            }
+        });
+        
+        // Also check for demo metrics via polling (for demo scripts)
+        let demoMetricsCheckInterval = null;
+        function startDemoMetricsPolling() {
+            if (demoMetricsCheckInterval) return;
+            demoMetricsCheckInterval = setInterval(async () => {
+                if (!demoMode) return;
+                try {
+                    // Try to get last sent metrics from a test endpoint
+                    const response = await fetch('/api/get-last-demo-metrics', { cache: 'no-cache' });
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.metrics) {
+                            lastDemoMetrics = data.metrics;
+                            refreshPredictiveMaintenance();
+                        }
+                    }
+                } catch (e) {
+                    // Ignore errors
+                }
+            }, 2000);
+        }
+        
         // Refresh Predictive Maintenance Data
         async function refreshPredictiveMaintenance() {
+            console.log('🔄 Refreshing predictive maintenance data...', demoMode ? '(Demo Mode)' : '(Real Mode)');
+            
+            // Get elements - check if they exist
+            const riskScoreEl = document.getElementById('predictive_riskScore');
+            const riskBarEl = document.getElementById('predictive_riskBar');
+            const riskLevelEl = document.getElementById('predictive_riskLevel');
+            
+            // Verify elements exist
+            if (!riskScoreEl || !riskBarEl || !riskLevelEl) {
+                console.error('❌ Predictive maintenance elements not found!', {
+                    riskScoreEl: !!riskScoreEl,
+                    riskBarEl: !!riskBarEl,
+                    riskLevelEl: !!riskLevelEl
+                });
+                return;
+            }
+            
+            // Show loading state
+            riskScoreEl.textContent = 'Loading...';
+            riskLevelEl.textContent = 'Loading...';
+            
             try {
-                // Fetch failure risk
-                const riskResponse = await fetch('/api/predict-failure-risk');
+                let riskResponse;
+                
+                if (demoMode && lastDemoMetrics) {
+                    // Use custom metrics for demo
+                    console.log('🎭 Using demo metrics for prediction...');
+                    riskResponse = await fetch('/api/predict-failure-risk-custom', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Cache-Control': 'no-cache'
+                        },
+                        body: JSON.stringify({ metrics: lastDemoMetrics }),
+                        cache: 'no-cache'
+                    });
+                } else {
+                    // Fetch failure risk (uses current system metrics)
+                    console.log('📡 Fetching /api/predict-failure-risk...');
+                    riskResponse = await fetch('/api/predict-failure-risk', {
+                        cache: 'no-cache',
+                        headers: {
+                            'Cache-Control': 'no-cache'
+                        }
+                    });
+                }
+                
+                console.log('✅ Risk response status:', riskResponse.status);
+                
                 if (riskResponse.ok) {
                     const riskData = await riskResponse.json();
+                    console.log('📊 Risk data received:', riskData);
                     
                     // Check for errors
                     if (riskData.error) {
-                        console.warn('Predictive model error:', riskData.error);
-                        document.getElementById('predictive_riskScore').textContent = 'N/A';
-                        document.getElementById('predictive_riskBar').style.width = '0%';
-                        document.getElementById('predictive_riskLevel').textContent = 'Model not available';
-                        document.getElementById('predictive_riskScore').style.color = '#6b7280';
+                        console.warn('⚠️ Predictive model error:', riskData.error);
+                        if (riskScoreEl) {
+                            riskScoreEl.textContent = 'N/A';
+                            riskScoreEl.style.color = '#6b7280';
+                        }
+                        if (riskBarEl) riskBarEl.style.width = '0%';
+                        if (riskLevelEl) riskLevelEl.textContent = 'Model not available';
                     } else if (riskData.risk_score !== undefined) {
                         const riskPercent = (riskData.risk_score * 100).toFixed(1);
-                        document.getElementById('predictive_riskScore').textContent = riskPercent + '%';
-                        document.getElementById('predictive_riskBar').style.width = riskPercent + '%';
+                        console.log('📈 Updating risk score to:', riskPercent + '%');
                         
-                        // Set risk level
-                        const riskLevel = riskData.risk_level || 'Unknown';
-                        document.getElementById('predictive_riskLevel').textContent = 'Risk Level: ' + riskLevel;
+                        // Update risk score text
+                        riskScoreEl.textContent = riskPercent + '%';
                         
-                        // Color code
-                        const riskElement = document.getElementById('predictive_riskScore');
-                        if (riskData.is_high_risk) {
-                            riskElement.style.color = '#ef4444';
-                        } else if (riskData.has_early_warning) {
-                            riskElement.style.color = '#f59e0b';
+                        // Color code based on risk level
+                        const riskScore = riskData.risk_score;
+                        if (riskScore > 0.7 || riskData.is_high_risk) {
+                            riskScoreEl.style.color = '#ef4444'; // Red
+                        } else if (riskScore > 0.5 || riskData.has_early_warning) {
+                            riskScoreEl.style.color = '#f59e0b'; // Orange
+                        } else if (riskScore > 0.3) {
+                            riskScoreEl.style.color = '#eab308'; // Yellow
                         } else {
-                            riskElement.style.color = '#10b981';
+                            riskScoreEl.style.color = '#10b981'; // Green
                         }
+                        
+                        // Update progress bar
+                        riskBarEl.style.width = riskPercent + '%';
+                        console.log('📊 Progress bar updated to:', riskPercent + '%');
+                        
+                        // Update risk level
+                        const riskLevel = riskData.risk_level || 'Unknown';
+                        riskLevelEl.textContent = 'Risk Level: ' + riskLevel;
+                        console.log('🏷️ Risk level updated to:', riskLevel);
+                        
+                        console.log('✅ Risk score updated successfully:', riskPercent + '%');
+                        
+                        // Force a repaint to ensure visual update
+                        riskScoreEl.offsetHeight; // Trigger reflow
+                        riskBarEl.offsetHeight; // Trigger reflow
+                    } else {
+                        console.warn('⚠️ No risk_score in response:', riskData);
                     }
                 } else {
-                    console.error('Failed to fetch risk data:', riskResponse.status);
+                    console.error('❌ Failed to fetch risk data:', riskResponse.status, riskResponse.statusText);
+                    if (riskScoreEl) riskScoreEl.textContent = 'Error';
+                    if (riskLevelEl) riskLevelEl.textContent = 'Failed to load';
                 }
                 
                 // Fetch time to failure
-                const timeResponse = await fetch('/api/predict-time-to-failure');
+                console.log('📡 Fetching /api/predict-time-to-failure...');
+                const timeResponse = await fetch('/api/predict-time-to-failure', {
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
+                });
                 if (timeResponse.ok) {
                     const timeData = await timeResponse.json();
+                    const timeToFailureEl = document.getElementById('predictive_timeToFailure');
+                    const failureTimeEl = document.getElementById('predictive_failureTime');
+                    
                     if (timeData.error) {
-                        document.getElementById('predictive_timeToFailure').textContent = '--';
-                        document.getElementById('predictive_failureTime').textContent = 
-                            timeData.message || 'Model not available';
+                        if (timeToFailureEl) timeToFailureEl.textContent = '--';
+                        if (failureTimeEl) failureTimeEl.textContent = timeData.message || 'Model not available';
                     } else if (timeData.hours_until_failure !== null && timeData.hours_until_failure !== undefined) {
-                        document.getElementById('predictive_timeToFailure').textContent = 
-                            timeData.hours_until_failure.toFixed(1) + 'h';
-                        if (timeData.predicted_failure_time) {
+                        if (timeToFailureEl) timeToFailureEl.textContent = timeData.hours_until_failure.toFixed(1) + 'h';
+                        if (failureTimeEl && timeData.predicted_failure_time) {
                             const failureTime = new Date(timeData.predicted_failure_time);
-                            document.getElementById('predictive_failureTime').textContent = 
-                                'Predicted: ' + failureTime.toLocaleString();
+                            failureTimeEl.textContent = 'Predicted: ' + failureTime.toLocaleString();
                         }
                     } else {
-                        document.getElementById('predictive_timeToFailure').textContent = '--';
-                        document.getElementById('predictive_failureTime').textContent = 
-                            timeData.message || 'No failure predicted';
+                        if (timeToFailureEl) timeToFailureEl.textContent = '--';
+                        if (failureTimeEl) failureTimeEl.textContent = timeData.message || 'No failure predicted';
                     }
                 }
                 
                 // Fetch early warnings
-                const warningsResponse = await fetch('/api/get-early-warnings');
+                console.log('📡 Fetching /api/get-early-warnings...');
+                const warningsResponse = await fetch('/api/get-early-warnings', {
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
+                });
                 if (warningsResponse.ok) {
                     const warningsData = await warningsResponse.json();
                     const warningsList = document.getElementById('predictive_warningsList');
+                    const warningCountEl = document.getElementById('predictive_warningCount');
                     const warningCount = warningsData.warning_count || 0;
                     
-                    document.getElementById('predictive_warningCount').textContent = warningCount;
+                    console.log('⚠️ Warnings received:', warningCount);
+                    
+                    if (warningCountEl) warningCountEl.textContent = warningCount;
                     
                     if (warningsData.has_warnings && warningsData.warnings) {
                         warningsList.innerHTML = warningsData.warnings.map((warning, idx) => {
@@ -2238,8 +2397,19 @@
                 }
                 
                 // Update last update time
-                document.getElementById('predictive_lastUpdate').textContent = 
-                    new Date().toLocaleTimeString();
+                const lastUpdateElement = document.getElementById('predictive_lastUpdate');
+                if (lastUpdateElement) {
+                    lastUpdateElement.textContent = new Date().toLocaleTimeString();
+                }
+                
+                // Update model status
+                const statusElement = document.getElementById('predictive_modelStatus');
+                if (statusElement) {
+                    statusElement.textContent = 'Active';
+                    statusElement.style.color = '#10b981';
+                }
+                
+                console.log('Predictive maintenance data refreshed successfully');
                     
             } catch (error) {
                 console.error('Error refreshing predictive maintenance data:', error);
@@ -4279,9 +4449,40 @@
             setInterval(loadAnomalies, 30000);
             
             // Refresh predictive maintenance data every 30 seconds
-            setInterval(refreshPredictiveMaintenance, 30000);
-            // Initial load
-            refreshPredictiveMaintenance();
+            setInterval(() => {
+                // Only refresh if predictive tab is active
+                const predictiveTab = document.getElementById('predictive');
+                if (predictiveTab && predictiveTab.classList.contains('active')) {
+                    console.log('⏰ Auto-refreshing predictive maintenance data...');
+                    refreshPredictiveMaintenance();
+                }
+            }, 30000);
+            
+            // Initial load - wait for DOM to be ready
+            setTimeout(() => {
+                console.log('🚀 Initial load of predictive maintenance data...');
+                // Check if predictive tab is already active
+                const predictiveTab = document.getElementById('predictive');
+                if (predictiveTab && predictiveTab.classList.contains('active')) {
+                    refreshPredictiveMaintenance();
+                }
+                // Start demo metrics polling if demo mode is on
+                startDemoMetricsPolling();
+            }, 2000);
+            
+            // Also refresh when predictive tab becomes visible (using IntersectionObserver)
+            const predictiveTabContent = document.getElementById('predictive');
+            if (predictiveTabContent) {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            console.log('👁️ Predictive tab is now visible, refreshing...');
+                            setTimeout(() => refreshPredictiveMaintenance(), 100);
+                        }
+                    });
+                }, { threshold: 0.1 });
+                observer.observe(predictiveTabContent);
+            }
             
             // Load anomalies on initial load
             loadAnomalies();

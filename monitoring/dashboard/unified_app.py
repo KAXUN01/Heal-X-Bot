@@ -59,7 +59,7 @@ CONFIG = {
     "cpu_threshold": 90.0,
     "memory_threshold": 85.0,
     "disk_threshold": 80.0,
-    "discord_webhook": os.getenv("DISCORD_WEBHOOK", ""),
+    "discord_webhook": os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL", ""),
     "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
 }
 

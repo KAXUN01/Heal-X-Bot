@@ -155,7 +155,12 @@ initialize_log_services()
 # Global configuration
 def load_config():
     """Load configuration from environment variables"""
-    discord_webhook = os.getenv("DISCORD_WEBHOOK", "").strip()
+    # Reload .env to ensure we have the latest values
+    load_dotenv(dotenv_path=str(env_path_abs), override=True)
+    
+    # Check for both DISCORD_WEBHOOK and DISCORD_WEBHOOK_URL (for backward compatibility)
+    discord_webhook = os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL", "")
+    discord_webhook = discord_webhook.strip() if discord_webhook else ""
     # Remove quotes if present
     if discord_webhook.startswith('"') and discord_webhook.endswith('"'):
         discord_webhook = discord_webhook[1:-1]
@@ -1502,8 +1507,9 @@ async def get_discord_status():
     webhook = CONFIG.get("discord_webhook", "")
     is_configured = bool(webhook)
     
-    # Check if webhook is in environment
-    env_webhook = os.getenv("DISCORD_WEBHOOK", "").strip()
+    # Check if webhook is in environment (check both variable names)
+    env_webhook = os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL", "")
+    env_webhook = env_webhook.strip() if env_webhook else ""
     if env_webhook.startswith('"') and env_webhook.endswith('"'):
         env_webhook = env_webhook[1:-1]
     if env_webhook.startswith("'") and env_webhook.endswith("'"):
@@ -1544,7 +1550,7 @@ async def configure_discord(data: dict):
 async def reload_discord_config():
     """Reload Discord webhook from environment variables"""
     # Reload .env file
-    load_dotenv(dotenv_path=env_path, override=True)
+    load_dotenv(dotenv_path=str(env_path_abs), override=True)
     
     # Reload config
     new_config = load_config()

@@ -30,7 +30,8 @@ from blocked_ips_db import BlockedIPsDatabase
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
 env_path_abs = env_path.resolve()
-load_dotenv(dotenv_path=env_path)
+# Convert Path to string for load_dotenv and override existing env vars
+load_dotenv(dotenv_path=str(env_path_abs), override=True)
 from system_log_collector import initialize_system_log_collector, get_system_log_collector
 from centralized_logger import initialize_centralized_logging, centralized_logger
 from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
@@ -193,6 +194,13 @@ log_buffer = []
 
 # Track notified critical errors to avoid duplicates
 notified_critical_errors = set()  # Set of (timestamp, service, message_hash) tuples
+
+# Track last sent warnings and time-to-failure for Discord notifications
+_last_sent_warnings = set()  # Set of warning types that were sent
+_last_sent_warning_count = 0  # Last warning count sent
+_last_sent_time_to_failure = None  # Last time-to-failure value sent
+_last_warning_notification_time = None  # Last time warnings were sent
+_last_time_to_failure_notification_time = None  # Last time time-to-failure was sent
 
 # DDoS Detection Storage
 ddos_statistics = {
@@ -839,6 +847,208 @@ def send_discord_alert(message: str, severity: str = "info", embed_data: Dict[st
         return False
     except Exception as e:
         logger.error(f"Error sending Discord alert: {e}", exc_info=True)
+        return False
+
+def send_early_warnings_discord_notification(warnings: List[Dict[str, Any]], warning_count: int, metrics: Dict[str, Any] = None):
+    """Send Discord notification for early warnings"""
+    if not CONFIG["discord_webhook"]:
+        return False
+    
+    try:
+        # Build warning list text
+        warning_texts = []
+        high_severity_count = 0
+        medium_severity_count = 0
+        
+        for warning in warnings:
+            severity = warning.get('severity', 'medium')
+            message = warning.get('message', 'Unknown warning')
+            wtype = warning.get('type', 'unknown')
+            
+            emoji = "🔴" if severity == 'high' else "🟡"
+            warning_texts.append(f"{emoji} **{wtype.replace('_', ' ').title()}**: {message}")
+            
+            if severity == 'high':
+                high_severity_count += 1
+            elif severity == 'medium':
+                medium_severity_count += 1
+        
+        # Determine notification severity
+        if high_severity_count > 0:
+            notif_severity = "critical" if high_severity_count >= 3 else "error"
+        elif medium_severity_count > 0:
+            notif_severity = "warning"
+        else:
+            notif_severity = "info"
+        
+        # Get system metrics if provided
+        cpu = metrics.get('cpu_percent', metrics.get('cpu', 0)) if metrics else 0
+        memory = metrics.get('memory_percent', metrics.get('memory', 0)) if metrics else 0
+        disk = metrics.get('disk_percent', metrics.get('disk', 0)) if metrics else 0
+        
+        # Build embed
+        fields = [
+            {
+                "name": "⚠️ Active Warnings",
+                "value": f"**Total:** {warning_count}\n**High Severity:** {high_severity_count}\n**Medium Severity:** {medium_severity_count}",
+                "inline": True
+            },
+            {
+                "name": "💻 System Metrics",
+                "value": f"**CPU:** {cpu:.1f}%\n**Memory:** {memory:.1f}%\n**Disk:** {disk:.1f}%",
+                "inline": True
+            }
+        ]
+        
+        # Add warning details (limit to 10 most important)
+        warning_details = "\n".join(warning_texts[:10])
+        if len(warnings) > 10:
+            warning_details += f"\n... and {len(warnings) - 10} more warning(s)"
+        
+        fields.append({
+            "name": "📋 Warning Details",
+            "value": warning_details[:1024],  # Discord field limit
+            "inline": False
+        })
+        
+        # Get dashboard URL
+        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:5001")
+        dashboard_link = f"{dashboard_url}/static/healing-dashboard.html#predictive"
+        
+        embed_data = {
+            "title": f"⚠️ Early Warning Indicators Detected ({warning_count} Active)",
+            "description": f"**{warning_count}** early warning{'s' if warning_count != 1 else ''} detected by predictive maintenance system.",
+            "color": 15158332 if high_severity_count > 0 else 16776960,  # Red if high severity, yellow otherwise
+            "fields": fields,
+            "footer": {
+                "text": f"Healing Bot Dashboard • {dashboard_url}",
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+            "url": dashboard_link
+        }
+        
+        success = send_discord_alert("", notif_severity, embed_data)
+        if success:
+            logger.info(f"Discord notification sent for {warning_count} early warnings")
+        return success
+        
+    except Exception as e:
+        logger.error(f"Error sending early warnings Discord notification: {e}", exc_info=True)
+        return False
+
+def send_time_to_failure_discord_notification(hours_until_failure: float, predicted_time: str = None, risk_percentage: float = None, metrics: Dict[str, Any] = None):
+    """Send Discord notification for time-to-failure prediction"""
+    if not CONFIG["discord_webhook"]:
+        return False
+    
+    try:
+        # Determine severity based on hours until failure
+        if hours_until_failure < 1:
+            severity = "critical"
+            emoji = "🚨"
+            urgency = "IMMEDIATE ACTION REQUIRED"
+            color = 10038562  # Dark red
+        elif hours_until_failure < 6:
+            severity = "error"
+            emoji = "🔴"
+            urgency = "URGENT"
+            color = 15158332  # Red
+        elif hours_until_failure < 24:
+            severity = "warning"
+            emoji = "🟠"
+            urgency = "HIGH PRIORITY"
+            color = 16753920  # Orange
+        else:
+            severity = "warning"
+            emoji = "🟡"
+            urgency = "MONITORING"
+            color = 16776960  # Yellow
+        
+        # Format predicted time
+        predicted_time_str = "N/A"
+        if predicted_time:
+            try:
+                dt = datetime.fromisoformat(predicted_time.replace('Z', '+00:00'))
+                predicted_time_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+            except:
+                predicted_time_str = predicted_time
+        
+        # Format hours
+        if hours_until_failure < 1:
+            time_str = f"{hours_until_failure * 60:.1f} minutes"
+        elif hours_until_failure < 24:
+            time_str = f"{hours_until_failure:.1f} hours"
+        else:
+            days = hours_until_failure / 24
+            time_str = f"{days:.1f} days ({hours_until_failure:.1f} hours)"
+        
+        # Get system metrics if provided
+        cpu = metrics.get('cpu_percent', metrics.get('cpu', 0)) if metrics else 0
+        memory = metrics.get('memory_percent', metrics.get('memory', 0)) if metrics else 0
+        disk = metrics.get('disk_percent', metrics.get('disk', 0)) if metrics else 0
+        
+        # Build embed
+        fields = [
+            {
+                "name": f"{emoji} Time to Failure",
+                "value": f"**Estimated:** {time_str}\n**Predicted Time:** {predicted_time_str}\n**Urgency:** {urgency}",
+                "inline": False
+            }
+        ]
+        
+        if risk_percentage is not None:
+            fields.append({
+                "name": "📊 Risk Assessment",
+                "value": f"**Risk Score:** {risk_percentage:.1f}%\n**Level:** {'High' if risk_percentage > 70 else 'Medium' if risk_percentage > 50 else 'Low'}",
+                "inline": True
+            })
+        
+        fields.append({
+            "name": "💻 System Metrics",
+            "value": f"**CPU:** {cpu:.1f}%\n**Memory:** {memory:.1f}%\n**Disk:** {disk:.1f}%",
+            "inline": True
+        })
+        
+        # Add recommended actions
+        recommendations = []
+        if hours_until_failure < 6:
+            recommendations.append("🔴 **Immediate action required** - System failure predicted soon")
+            recommendations.append("📋 **Review system logs** - Check for error patterns")
+            recommendations.append("🔄 **Consider preventive measures** - Restart services if needed")
+        else:
+            recommendations.append("📋 **Monitor system closely** - Watch for warning indicators")
+            recommendations.append("🔍 **Review metrics** - Check dashboard for details")
+        
+        if recommendations:
+            fields.append({
+                "name": "💡 Recommended Actions",
+                "value": "\n".join(recommendations),
+                "inline": False
+            })
+        
+        # Get dashboard URL
+        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:5001")
+        dashboard_link = f"{dashboard_url}/static/healing-dashboard.html#predictive"
+        
+        embed_data = {
+            "title": f"{emoji} Predictive Failure Detection - {time_str} Until Failure",
+            "description": f"Predictive maintenance model estimates system failure in **{time_str}**.",
+            "color": color,
+            "fields": fields,
+            "footer": {
+                "text": f"Healing Bot Dashboard • {dashboard_url}",
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+            "url": dashboard_link
+        }
+        
+        success = send_discord_alert("", severity, embed_data)
+        if success:
+            logger.info(f"Discord notification sent for time-to-failure: {hours_until_failure:.1f} hours")
+        return success
+        
+    except Exception as e:
+        logger.error(f"Error sending time-to-failure Discord notification: {e}", exc_info=True)
         return False
 
 def send_detailed_critical_alert(issue: Dict[str, Any], system_metrics: Dict[str, Any] = None):
@@ -2503,15 +2713,161 @@ async def get_early_warnings():
             }
         
         # Get warnings using model function
-        result = predictive_model.get_early_warnings(metrics)
+        try:
+            # Log metrics being sent to model
+            logger.debug(f"Calling get_early_warnings with metrics: CPU={metrics.get('cpu_percent', 0)}%, Memory={metrics.get('memory_percent', 0)}%, Disk={metrics.get('disk_percent', 0)}%, Errors={metrics.get('error_count', 0)}")
+            result = predictive_model.get_early_warnings(metrics)
+            logger.info(f"Model get_early_warnings returned {result.get('warning_count', 0)} warnings: {result}")
+            # Ensure result is a dict
+            if not isinstance(result, dict):
+                logger.error(f"Model get_early_warnings returned non-dict: {type(result)}")
+                raise ValueError(f"Model function returned {type(result)}, expected dict")
+        except Exception as e:
+            logger.error(f"Error calling model get_early_warnings: {e}")
+            # If model function fails, use fallback warnings
+            warnings = []
+            cpu = metrics.get('cpu_percent', 0)
+            memory = metrics.get('memory_percent', 0)
+            disk = metrics.get('disk_percent', 0)
+            error_count = metrics.get('error_count', 0)
+            warning_count = metrics.get('warning_count', 0)
+            service_failures = metrics.get('service_failures', 0)
+            
+            if cpu > 90:
+                warnings.append({'type': 'cpu_high', 'severity': 'high', 'message': f"CPU usage at {cpu:.1f}% - Critical threshold exceeded"})
+            elif cpu > 75:
+                warnings.append({'type': 'cpu_elevated', 'severity': 'medium', 'message': f"CPU usage at {cpu:.1f}% - Elevated load detected"})
+            
+            if memory > 90:
+                warnings.append({'type': 'memory_high', 'severity': 'high', 'message': f"Memory usage at {memory:.1f}% - Critical threshold exceeded"})
+            elif memory > 80:
+                warnings.append({'type': 'memory_elevated', 'severity': 'medium', 'message': f"Memory usage at {memory:.1f}% - Elevated usage detected"})
+            
+            if disk > 95:
+                warnings.append({'type': 'disk_high', 'severity': 'high', 'message': f"Disk usage at {disk:.1f}% - Critical threshold exceeded"})
+            elif disk > 85:
+                warnings.append({'type': 'disk_elevated', 'severity': 'medium', 'message': f"Disk usage at {disk:.1f}% - Elevated usage detected"})
+            
+            if error_count > 10:
+                warnings.append({'type': 'error_spike', 'severity': 'high', 'message': f"High error count: {error_count} errors detected"})
+            elif error_count > 5:
+                warnings.append({'type': 'error_elevated', 'severity': 'medium', 'message': f"Elevated error count: {error_count} errors"})
+            
+            if warning_count > 20:
+                warnings.append({'type': 'warning_spike', 'severity': 'medium', 'message': f"High warning count: {warning_count} warnings"})
+            
+            if service_failures > 0:
+                warnings.append({'type': 'service_failure', 'severity': 'high', 'message': f"Service failures detected: {service_failures} service(s) failed"})
+            
+            result = {
+                "timestamp": datetime.now().isoformat(),
+                "warnings": warnings,
+                "has_warnings": len(warnings) > 0,
+                "warning_count": len(warnings)
+            }
         
         # Ensure all required fields are present
         if 'timestamp' not in result:
             result['timestamp'] = datetime.now().isoformat()
-        if 'warning_count' not in result:
-            result['warning_count'] = len(result.get('warnings', []))
-        if 'has_warnings' not in result:
-            result['has_warnings'] = result['warning_count'] > 0
+        
+        # Ensure warnings list exists
+        if 'warnings' not in result:
+            result['warnings'] = []
+        
+        # Recalculate counts to ensure they match
+        warning_count = len(result.get('warnings', []))
+        result['warning_count'] = warning_count
+        result['has_warnings'] = warning_count > 0
+        
+        # If no warnings from model but metrics indicate issues, add fallback warnings
+        if warning_count == 0:
+            cpu = metrics.get('cpu_percent', 0)
+            memory = metrics.get('memory_percent', 0)
+            disk = metrics.get('disk_percent', 0)
+            error_count = metrics.get('error_count', 0)
+            warning_count_val = metrics.get('warning_count', 0)
+            service_failures = metrics.get('service_failures', 0)
+            
+            # Add warnings if thresholds are exceeded (even if model didn't catch them)
+            fallback_warnings = []
+            if cpu > 90:
+                fallback_warnings.append({'type': 'cpu_high', 'severity': 'high', 'message': f"CPU usage at {cpu:.1f}% - Critical threshold exceeded"})
+            elif cpu > 75:
+                fallback_warnings.append({'type': 'cpu_elevated', 'severity': 'medium', 'message': f"CPU usage at {cpu:.1f}% - Elevated load detected"})
+            
+            if memory > 90:
+                fallback_warnings.append({'type': 'memory_high', 'severity': 'high', 'message': f"Memory usage at {memory:.1f}% - Critical threshold exceeded"})
+            elif memory > 80:
+                fallback_warnings.append({'type': 'memory_elevated', 'severity': 'medium', 'message': f"Memory usage at {memory:.1f}% - Elevated usage detected"})
+            
+            if disk > 95:
+                fallback_warnings.append({'type': 'disk_high', 'severity': 'high', 'message': f"Disk usage at {disk:.1f}% - Critical threshold exceeded"})
+            elif disk > 85:
+                fallback_warnings.append({'type': 'disk_elevated', 'severity': 'medium', 'message': f"Disk usage at {disk:.1f}% - Elevated usage detected"})
+            
+            if error_count > 10:
+                fallback_warnings.append({'type': 'error_spike', 'severity': 'high', 'message': f"High error count: {error_count} errors detected"})
+            elif error_count > 5:
+                fallback_warnings.append({'type': 'error_elevated', 'severity': 'medium', 'message': f"Elevated error count: {error_count} errors"})
+            
+            if warning_count_val > 20:
+                fallback_warnings.append({'type': 'warning_spike', 'severity': 'medium', 'message': f"High warning count: {warning_count_val} warnings"})
+            
+            if service_failures > 0:
+                fallback_warnings.append({'type': 'service_failure', 'severity': 'high', 'message': f"Service failures detected: {service_failures} service(s) failed"})
+            
+            if fallback_warnings:
+                logger.warning(f"Model returned no warnings but metrics indicate issues. Adding {len(fallback_warnings)} fallback warnings: CPU={cpu}%, Memory={memory}%, Disk={disk}%, Errors={error_count}, Failures={service_failures}")
+                # Use fallback warnings
+                result['warnings'] = fallback_warnings
+                result['warning_count'] = len(fallback_warnings)
+                result['has_warnings'] = True
+        
+        logger.debug(f"Final warnings result: {result}")
+        
+        # Send Discord notification for new/changed warnings (rate-limited)
+        warning_count = result.get('warning_count', 0)
+        current_warning_types = set(w.get('type', '') for w in result.get('warnings', []))
+        
+        # Only send notification if:
+        # 1. There are warnings AND
+        # 2. (Warning count changed OR warning types changed) AND
+        # 3. Not sent in last 5 minutes (rate limiting)
+        should_send_notification = False
+        global _last_sent_warnings, _last_sent_warning_count, _last_warning_notification_time
+        
+        if warning_count > 0:
+            current_time = datetime.now()
+            time_since_last = None
+            if _last_warning_notification_time:
+                time_since_last = (current_time - _last_warning_notification_time).total_seconds() / 60
+            
+            # Check if warnings changed significantly
+            warnings_changed = (
+                warning_count != _last_sent_warning_count or
+                current_warning_types != _last_sent_warnings
+            )
+            
+            # Send if warnings changed and (never sent before OR 5+ minutes since last)
+            if warnings_changed and (time_since_last is None or time_since_last >= 5):
+                should_send_notification = True
+                _last_sent_warnings = current_warning_types.copy()
+                _last_sent_warning_count = warning_count
+                _last_warning_notification_time = current_time
+        elif warning_count == 0 and _last_sent_warning_count > 0:
+            # Warnings cleared - reset tracking
+            _last_sent_warnings = set()
+            _last_sent_warning_count = 0
+        
+        if should_send_notification:
+            try:
+                send_early_warnings_discord_notification(
+                    result.get('warnings', []),
+                    warning_count,
+                    metrics
+                )
+            except Exception as e:
+                logger.error(f"Error sending Discord notification for warnings: {e}")
         
         return result
     except Exception as e:
@@ -2597,6 +2953,67 @@ async def predict_time_to_failure():
         # Ensure timestamp is present
         if 'timestamp' not in result:
             result['timestamp'] = datetime.now().isoformat()
+        
+        # Send Discord notification for significant time-to-failure changes
+        hours_until_failure = result.get('hours_until_failure')
+        if hours_until_failure is not None:
+            global _last_sent_time_to_failure, _last_time_to_failure_notification_time
+            
+            current_time = datetime.now()
+            should_send_notification = False
+            
+            # Determine if notification should be sent
+            if _last_sent_time_to_failure is None:
+                # First prediction with a value - send if < 48 hours
+                if hours_until_failure < 48:
+                    should_send_notification = True
+            else:
+                # Check if time-to-failure changed significantly
+                time_diff = abs(hours_until_failure - _last_sent_time_to_failure)
+                time_since_last = None
+                if _last_time_to_failure_notification_time:
+                    time_since_last = (current_time - _last_time_to_failure_notification_time).total_seconds() / 3600  # in hours
+                
+                # Send notification if:
+                # 1. Time-to-failure decreased significantly (>25% or <6 hours difference) OR
+                # 2. Time-to-failure is <24 hours and changed by >2 hours AND
+                # 3. Not sent in last 30 minutes (rate limiting for urgent cases) OR 2 hours (for less urgent)
+                if hours_until_failure < 24:
+                    # Urgent: send if changed by >2 hours and not sent in last 30 minutes
+                    if time_diff > 2 and (time_since_last is None or time_since_last >= 0.5):
+                        should_send_notification = True
+                elif hours_until_failure < 48:
+                    # Moderate: send if changed significantly and not sent in last 2 hours
+                    if (time_diff > max(6, _last_sent_time_to_failure * 0.25)) and (time_since_last is None or time_since_last >= 2):
+                        should_send_notification = True
+                else:
+                    # Less urgent: send if changed significantly and not sent in last 6 hours
+                    if (time_diff > max(12, _last_sent_time_to_failure * 0.3)) and (time_since_last is None or time_since_last >= 6):
+                        should_send_notification = True
+            
+            if should_send_notification:
+                try:
+                    # Get risk percentage if available from last prediction
+                    risk_percentage = None
+                    try:
+                        risk_response = predictive_model.predict_failure_risk(metrics)
+                        risk_percentage = risk_response.get('risk_percentage')
+                    except:
+                        pass
+                    
+                    send_time_to_failure_discord_notification(
+                        hours_until_failure,
+                        result.get('predicted_failure_time'),
+                        risk_percentage,
+                        metrics
+                    )
+                    _last_sent_time_to_failure = hours_until_failure
+                    _last_time_to_failure_notification_time = current_time
+                except Exception as e:
+                    logger.error(f"Error sending Discord notification for time-to-failure: {e}")
+        elif _last_sent_time_to_failure is not None:
+            # Time-to-failure cleared (no failure predicted) - reset tracking
+            _last_sent_time_to_failure = None
         
         return result
     except Exception as e:

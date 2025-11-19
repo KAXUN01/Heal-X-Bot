@@ -2381,29 +2381,120 @@ async def get_early_warnings():
             # Still return warnings based on system metrics even if model isn't loaded
             pass
         
+        # Check if demo metrics are available (for demo mode)
+        global _last_demo_metrics
+        if _last_demo_metrics and isinstance(_last_demo_metrics, dict) and len(_last_demo_metrics) > 0:
+            # Use demo metrics for warnings
+            metrics = _last_demo_metrics.copy()
+            logger.debug(f"Using demo metrics for early warnings: {metrics}")
+        else:
+            # Get current system metrics
+            system_metrics = get_system_metrics()
+            # Normalize field names to match model expectations
+            metrics = {
+                'cpu_percent': system_metrics.get('cpu', system_metrics.get('cpu_percent', 0)),
+                'memory_percent': system_metrics.get('memory', system_metrics.get('memory_percent', 0)),
+                'disk_percent': system_metrics.get('disk', system_metrics.get('disk_percent', 0)),
+                'error_count': system_metrics.get('error_count', 0),
+                'warning_count': system_metrics.get('warning_count', 0),
+                'service_failures': system_metrics.get('service_failures', 0),
+                'network_in_mbps': system_metrics.get('network_in_mbps', 0),
+                'network_out_mbps': system_metrics.get('network_out_mbps', 0)
+            }
+        
+        # Ensure all required fields are present and normalize field names
+        if 'cpu_percent' not in metrics:
+            metrics['cpu_percent'] = metrics.get('cpu', 0)
+        if 'memory_percent' not in metrics:
+            metrics['memory_percent'] = metrics.get('memory', 0)
+        if 'disk_percent' not in metrics:
+            metrics['disk_percent'] = metrics.get('disk', 0)
+        if 'error_count' not in metrics:
+            metrics['error_count'] = 0
+        if 'warning_count' not in metrics:
+            metrics['warning_count'] = 0
+        if 'service_failures' not in metrics:
+            metrics['service_failures'] = 0
+        
         # Check if model functions exist
         if not hasattr(predictive_model, 'get_early_warnings'):
-            # Return basic warnings based on system metrics
-            metrics = get_system_metrics()
+            # Return basic warnings based on metrics (demo or real)
             warnings = []
-            if metrics.get('cpu_percent', 0) > 90:
+            cpu = metrics.get('cpu_percent', metrics.get('cpu', 0))
+            memory = metrics.get('memory_percent', metrics.get('memory', 0))
+            disk = metrics.get('disk_percent', metrics.get('disk', 0))
+            
+            if cpu > 90:
                 warnings.append({
                     'type': 'cpu_high',
                     'severity': 'high',
-                    'message': f"CPU usage at {metrics.get('cpu_percent', 0):.1f}%"
+                    'message': f"CPU usage at {cpu:.1f}% - Critical threshold exceeded"
                 })
-            if metrics.get('memory_percent', 0) > 85:
+            elif cpu > 75:
+                warnings.append({
+                    'type': 'cpu_elevated',
+                    'severity': 'medium',
+                    'message': f"CPU usage at {cpu:.1f}% - Elevated load detected"
+                })
+            
+            if memory > 90:
                 warnings.append({
                     'type': 'memory_high',
                     'severity': 'high',
-                    'message': f"Memory usage at {metrics.get('memory_percent', 0):.1f}%"
+                    'message': f"Memory usage at {memory:.1f}% - Critical threshold exceeded"
                 })
-            if metrics.get('disk_percent', 0) > 90:
+            elif memory > 80:
+                warnings.append({
+                    'type': 'memory_elevated',
+                    'severity': 'medium',
+                    'message': f"Memory usage at {memory:.1f}% - Elevated usage detected"
+                })
+            
+            if disk > 95:
                 warnings.append({
                     'type': 'disk_high',
                     'severity': 'high',
-                    'message': f"Disk usage at {metrics.get('disk_percent', 0):.1f}%"
+                    'message': f"Disk usage at {disk:.1f}% - Critical threshold exceeded"
                 })
+            elif disk > 85:
+                warnings.append({
+                    'type': 'disk_elevated',
+                    'severity': 'medium',
+                    'message': f"Disk usage at {disk:.1f}% - Elevated usage detected"
+                })
+            
+            # Check error and warning counts
+            error_count = metrics.get('error_count', 0)
+            warning_count = metrics.get('warning_count', 0)
+            service_failures = metrics.get('service_failures', 0)
+            
+            if error_count > 10:
+                warnings.append({
+                    'type': 'error_spike',
+                    'severity': 'high',
+                    'message': f"High error count: {error_count} errors detected"
+                })
+            elif error_count > 5:
+                warnings.append({
+                    'type': 'error_elevated',
+                    'severity': 'medium',
+                    'message': f"Elevated error count: {error_count} errors"
+                })
+            
+            if warning_count > 20:
+                warnings.append({
+                    'type': 'warning_spike',
+                    'severity': 'medium',
+                    'message': f"High warning count: {warning_count} warnings"
+                })
+            
+            if service_failures > 0:
+                warnings.append({
+                    'type': 'service_failure',
+                    'severity': 'high',
+                    'message': f"Service failures detected: {service_failures} service(s) failed"
+                })
+            
             return {
                 "timestamp": datetime.now().isoformat(),
                 "warnings": warnings,
@@ -2411,13 +2502,7 @@ async def get_early_warnings():
                 "warning_count": len(warnings)
             }
         
-        # Get current system metrics
-        metrics = get_system_metrics()
-        metrics['error_count'] = 0
-        metrics['warning_count'] = 0
-        metrics['service_failures'] = 0
-        
-        # Get warnings
+        # Get warnings using model function
         result = predictive_model.get_early_warnings(metrics)
         
         # Ensure all required fields are present
@@ -2471,11 +2556,40 @@ async def predict_time_to_failure():
                 "message": "No failure predicted"
             }
         
-        # Get current system metrics
-        metrics = get_system_metrics()
-        metrics['error_count'] = 0
-        metrics['warning_count'] = 0
-        metrics['service_failures'] = 0
+        # Check if demo metrics are available (for demo mode)
+        global _last_demo_metrics
+        if _last_demo_metrics and isinstance(_last_demo_metrics, dict) and len(_last_demo_metrics) > 0:
+            # Use demo metrics for time-to-failure prediction
+            metrics = _last_demo_metrics.copy()
+            logger.debug(f"Using demo metrics for time-to-failure: {metrics}")
+        else:
+            # Get current system metrics
+            system_metrics = get_system_metrics()
+            # Normalize field names to match model expectations
+            metrics = {
+                'cpu_percent': system_metrics.get('cpu', system_metrics.get('cpu_percent', 0)),
+                'memory_percent': system_metrics.get('memory', system_metrics.get('memory_percent', 0)),
+                'disk_percent': system_metrics.get('disk', system_metrics.get('disk_percent', 0)),
+                'error_count': system_metrics.get('error_count', 0),
+                'warning_count': system_metrics.get('warning_count', 0),
+                'service_failures': system_metrics.get('service_failures', 0),
+                'network_in_mbps': system_metrics.get('network_in_mbps', 0),
+                'network_out_mbps': system_metrics.get('network_out_mbps', 0)
+            }
+        
+        # Ensure all required fields are present and normalize field names
+        if 'cpu_percent' not in metrics:
+            metrics['cpu_percent'] = metrics.get('cpu', 0)
+        if 'memory_percent' not in metrics:
+            metrics['memory_percent'] = metrics.get('memory', 0)
+        if 'disk_percent' not in metrics:
+            metrics['disk_percent'] = metrics.get('disk', 0)
+        if 'error_count' not in metrics:
+            metrics['error_count'] = 0
+        if 'warning_count' not in metrics:
+            metrics['warning_count'] = 0
+        if 'service_failures' not in metrics:
+            metrics['service_failures'] = 0
         
         # Predict time to failure
         result = predictive_model.predict_time_to_failure(metrics)

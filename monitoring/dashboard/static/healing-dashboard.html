@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🛡️ Healing Bot Dashboard</title>
+    <title>🛡️ Heal-X Dashboard</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
@@ -1124,7 +1124,7 @@
         <div id="predictive" class="tab-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                 <h2 style="margin: 0;">🔮 Predictive Maintenance & Proactive Intelligence</h2>
-                <div style="display: flex; gap: 0.5rem;">
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                     <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
                         <input type="checkbox" id="demoModeToggle" onchange="toggleDemoMode()" style="cursor: pointer;">
                         <span style="font-size: 0.9rem;">Demo Mode</span>
@@ -1132,6 +1132,9 @@
                     <button onclick="refreshPredictiveMaintenance(); showNotification('🔄 Refreshing predictions...', 'info');" style="padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
                         🔄 Refresh Now
                     </button>
+                    <div id="demoScenarioInfo" style="padding: 0.5rem 1rem; background: rgba(139, 92, 246, 0.2); border-radius: 4px; font-size: 0.85rem; display: none; color: #a78bfa; font-weight: 500;">
+                        <span id="demoScenarioName">No active scenario</span>
+                    </div>
                 </div>
             </div>
             
@@ -1180,7 +1183,7 @@
             </div>
             
             <!-- Model Status -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
                 <div class="card">
                     <h5>Model Status</h5>
                     <div style="font-size: 1.5rem; font-weight: bold; color: #10b981;" id="predictive_modelStatus">Active</div>
@@ -1195,6 +1198,60 @@
                     <h5>Early Detection Rate</h5>
                     <div style="font-size: 1.5rem; font-weight: bold; color: #3b82f6;" id="predictive_detectionRate">--</div>
                     <small style="color: var(--text-secondary);">Failures predicted >1h ahead</small>
+                </div>
+            </div>
+
+            <!-- Model Details & API Responses -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">🔍 Model Details & API Responses</h3>
+                    <button onclick="toggleModelDetails()" style="padding: 0.5rem 1rem; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">
+                        <span id="modelDetailsToggle">▼ Show Details</span>
+                    </button>
+                </div>
+                <div id="modelDetailsSection" style="display: none;">
+                    <!-- Model Information -->
+                    <div style="margin-bottom: 2rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">Model Information</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                            <div>
+                                <strong style="color: var(--text-secondary); font-size: 0.875rem;">Model Status:</strong>
+                                <div id="modelDetails_status" style="font-family: monospace; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem;">--</div>
+                            </div>
+                            <div>
+                                <strong style="color: var(--text-secondary); font-size: 0.875rem;">Model Loaded:</strong>
+                                <div id="modelDetails_loaded" style="font-family: monospace; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem;">--</div>
+                            </div>
+                            <div>
+                                <strong style="color: var(--text-secondary); font-size: 0.875rem;">Prediction Mode:</strong>
+                                <div id="modelDetails_mode" style="font-family: monospace; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem;">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- System Metrics Used -->
+                    <div style="margin-bottom: 2rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">System Metrics Used for Prediction</h4>
+                        <pre id="modelDetails_metrics" style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 200px; overflow-y: auto;">Loading metrics...</pre>
+                    </div>
+
+                    <!-- API Response: Risk Prediction -->
+                    <div style="margin-bottom: 2rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">📊 Risk Prediction API Response</h4>
+                        <pre id="modelDetails_riskResponse" style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 250px; overflow-y: auto;">Waiting for data...</pre>
+                    </div>
+
+                    <!-- API Response: Time to Failure -->
+                    <div style="margin-bottom: 2rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">⏱️ Time to Failure API Response</h4>
+                        <pre id="modelDetails_timeResponse" style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 250px; overflow-y: auto;">Waiting for data...</pre>
+                    </div>
+
+                    <!-- API Response: Early Warnings -->
+                    <div style="margin-bottom: 1rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">⚠️ Early Warnings API Response</h4>
+                        <pre id="modelDetails_warningsResponse" style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 250px; overflow-y: auto;">Waiting for data...</pre>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1585,7 +1642,11 @@
     <script>
         // WebSocket connection for real-time updates
         let ws = null;
-        let metricsChart, mlPerformanceChart, attackTypesChart;
+        let metricsChart, mlPerformanceChart, attackTypesChart, predictiveTimelineChart;
+        
+        // Risk score history for timeline chart
+        let riskScoreHistory = [];
+        const MAX_HISTORY_POINTS = 30;
         
         // Recent Activity tracking
         let recentActivities = [];
@@ -2072,6 +2133,92 @@
                 });
             }
             
+            // Initialize Predictive Timeline Chart
+            if (predictiveTimelineChart) predictiveTimelineChart.destroy();
+            const timelineCanvas = document.getElementById('predictive_timelineChart');
+            if (timelineCanvas) {
+                const timelineCtx = timelineCanvas.getContext('2d');
+                predictiveTimelineChart = new Chart(timelineCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Risk Score %',
+                            data: [],
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            pointBackgroundColor: '#ef4444',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 300 },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: { 
+                                    color: '#e8eaed',
+                                    padding: 15,
+                                    font: { size: 12, weight: 'bold' }
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                titleColor: '#e8eaed',
+                                bodyColor: '#e8eaed',
+                                borderColor: '#ef4444',
+                                borderWidth: 1,
+                                callbacks: {
+                                    label: function(context) {
+                                        return 'Risk: ' + context.parsed.y.toFixed(2) + '%';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100,
+                                ticks: { 
+                                    color: '#9aa0a6',
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
+                                },
+                                grid: { color: '#374151' },
+                                title: {
+                                    display: true,
+                                    text: 'Risk Score (%)',
+                                    color: '#9aa0a6',
+                                    font: { size: 12 }
+                                }
+                            },
+                            x: {
+                                ticks: { 
+                                    color: '#9aa0a6',
+                                    maxTicksLimit: 10
+                                },
+                                grid: { color: '#374151' },
+                                title: {
+                                    display: true,
+                                    text: 'Time',
+                                    color: '#9aa0a6',
+                                    font: { size: 12 }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
         }
         
         // Fetch and update DDoS detection data
@@ -2168,17 +2315,33 @@
         // Demo mode state
         let demoMode = false;
         let lastDemoMetrics = null;
+        let currentDemoScenario = null;
         
         function toggleDemoMode() {
             const toggle = document.getElementById('demoModeToggle');
             demoMode = toggle.checked;
             console.log('🎭 Demo mode:', demoMode ? 'ON' : 'OFF');
+            
             if (demoMode) {
                 showNotification('🎭 Demo mode enabled - Will use test scenarios', 'info');
+                // Start polling for demo metrics
+                startDemoMetricsPolling();
+                // Try to fetch metrics immediately
+                setTimeout(() => refreshPredictiveMaintenance(), 500);
             } else {
                 showNotification('📊 Demo mode disabled - Using real system metrics', 'info');
+                // Stop polling
+                stopDemoMetricsPolling();
+                lastDemoMetrics = null;
+                currentDemoScenario = null;
+                // Hide scenario info
+                const scenarioInfo = document.getElementById('demoScenarioInfo');
+                if (scenarioInfo) {
+                    scenarioInfo.style.display = 'none';
+                }
+                // Refresh with real metrics
+                refreshPredictiveMaintenance();
             }
-            refreshPredictiveMaintenance();
         }
         
         // Listen for demo metrics from external scripts
@@ -2195,23 +2358,53 @@
         // Also check for demo metrics via polling (for demo scripts)
         let demoMetricsCheckInterval = null;
         function startDemoMetricsPolling() {
-            if (demoMetricsCheckInterval) return;
-            demoMetricsCheckInterval = setInterval(async () => {
+            // Clear existing interval
+            if (demoMetricsCheckInterval) {
+                clearInterval(demoMetricsCheckInterval);
+                demoMetricsCheckInterval = null;
+            }
+            
+            // Start polling immediately and then every 1 second when demo mode is on
+            const pollDemoMetrics = async () => {
                 if (!demoMode) return;
                 try {
-                    // Try to get last sent metrics from a test endpoint
-                    const response = await fetch('/api/get-last-demo-metrics', { cache: 'no-cache' });
+                    console.log('🔍 Polling for demo metrics...');
+                    const response = await fetch('/api/get-last-demo-metrics', { 
+                        cache: 'no-cache',
+                        headers: { 'Cache-Control': 'no-cache' }
+                    });
                     if (response.ok) {
                         const data = await response.json();
-                        if (data.metrics) {
+                        if (data.metrics && Object.keys(data.metrics).length > 0) {
+                            console.log('✅ Demo metrics received:', data.metrics);
                             lastDemoMetrics = data.metrics;
-                            refreshPredictiveMaintenance();
+                            // Only refresh if demo mode is already enabled by user
+                            if (demoMode) {
+                                refreshPredictiveMaintenance();
+                            } else {
+                                console.log('ℹ️ Demo metrics available, but demo mode is disabled. Enable demo mode to use them.');
+                            }
+                        } else {
+                            console.log('⚠️ No demo metrics available yet');
                         }
                     }
                 } catch (e) {
-                    // Ignore errors
+                    console.error('❌ Error polling demo metrics:', e);
                 }
-            }, 2000);
+            };
+            
+            // Poll immediately
+            pollDemoMetrics();
+            
+            // Then poll every 1 second
+            demoMetricsCheckInterval = setInterval(pollDemoMetrics, 1000);
+        }
+        
+        function stopDemoMetricsPolling() {
+            if (demoMetricsCheckInterval) {
+                clearInterval(demoMetricsCheckInterval);
+                demoMetricsCheckInterval = null;
+            }
         }
         
         // Refresh Predictive Maintenance Data
@@ -2240,9 +2433,34 @@
             try {
                 let riskResponse;
                 
-                if (demoMode && lastDemoMetrics) {
+                // ALWAYS check for demo metrics first (even if demo mode not explicitly enabled)
+            // This allows the script to work without requiring checkbox toggle
+            try {
+                const metricsResponse = await fetch('/api/get-last-demo-metrics', { 
+                    cache: 'no-cache',
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                if (metricsResponse.ok) {
+                    const metricsData = await metricsResponse.json();
+                    if (metricsData.metrics && Object.keys(metricsData.metrics).length > 0) {
+                        lastDemoMetrics = metricsData.metrics;
+                        console.log('✅ Demo metrics available:', lastDemoMetrics);
+                        // Only use demo metrics if demo mode is manually enabled
+                        // Don't auto-enable - user must check the checkbox
+                        if (!demoMode) {
+                            console.log('ℹ️ Demo metrics available, but demo mode is disabled. Check the "Demo Mode" checkbox to use them.');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log('⚠️ Could not fetch demo metrics:', e);
+            }
+            
+                // Use demo metrics if available AND demo mode is manually enabled
+            if (demoMode && lastDemoMetrics && Object.keys(lastDemoMetrics).length > 0) {
                     // Use custom metrics for demo
-                    console.log('🎭 Using demo metrics for prediction...');
+                    console.log('🎭 Using demo metrics for prediction:', lastDemoMetrics);
+                    console.log('📡 POST /api/predict-failure-risk-custom with demo metrics...');
                     riskResponse = await fetch('/api/predict-failure-risk-custom', {
                         method: 'POST',
                         headers: {
@@ -2254,7 +2472,11 @@
                     });
                 } else {
                     // Fetch failure risk (uses current system metrics)
-                    console.log('📡 Fetching /api/predict-failure-risk...');
+                    if (demoMode) {
+                        console.log('⚠️ Demo mode ON but no demo metrics available, using system metrics');
+                    } else {
+                        console.log('📡 Fetching /api/predict-failure-risk (system metrics)...');
+                    }
                     riskResponse = await fetch('/api/predict-failure-risk', {
                         cache: 'no-cache',
                         headers: {
@@ -2268,6 +2490,68 @@
                 if (riskResponse.ok) {
                     const riskData = await riskResponse.json();
                     console.log('📊 Risk data received:', riskData);
+                    
+                    // Store for model details
+                    lastRiskData = riskData;
+                    
+                    // Detect and display scenario in demo mode
+                    if (demoMode && lastDemoMetrics) {
+                        // Determine scenario based on metrics
+                        const cpu = lastDemoMetrics.cpu_percent || 0;
+                        const mem = lastDemoMetrics.memory_percent || 0;
+                        const disk = lastDemoMetrics.disk_percent || 0;
+                        
+                        if (cpu > 95 || mem > 95 || disk > 95) {
+                            currentDemoScenario = 'Extreme Risk - Near Failure';
+                        } else if (cpu > 85 || mem > 90 || disk > 90) {
+                            currentDemoScenario = 'High Risk - Critical Conditions';
+                        } else if (cpu > 60 || mem > 70 || disk > 75) {
+                            currentDemoScenario = 'Medium Risk - Elevated Load';
+                        } else {
+                            currentDemoScenario = 'Low Risk - Healthy System';
+                        }
+                        
+                        // Update scenario display
+                        const scenarioInfo = document.getElementById('demoScenarioInfo');
+                        const scenarioName = document.getElementById('demoScenarioName');
+                        if (scenarioInfo && scenarioName) {
+                            scenarioInfo.style.display = 'block';
+                            scenarioName.textContent = `🎭 Demo: ${currentDemoScenario}`;
+                        }
+                    } else if (!demoMode) {
+                        // Hide scenario info when not in demo mode
+                        const scenarioInfo = document.getElementById('demoScenarioInfo');
+                        if (scenarioInfo) {
+                            scenarioInfo.style.display = 'none';
+                        }
+                        currentDemoScenario = null;
+                    }
+                    
+                    // Get system metrics for display - use the metrics that were used for prediction
+                    try {
+                        // Use demo metrics if available, otherwise fetch from API
+                        if (demoMode && lastDemoMetrics) {
+                            lastSystemMetrics = lastDemoMetrics;
+                        } else {
+                            // Try to get from health endpoint or use what we can infer
+                            const healthResponse = await fetch('/api/predict-failure-risk', { cache: 'no-cache' });
+                            if (healthResponse.ok) {
+                                // Note: The API uses get_system_metrics() internally
+                                // We'll construct a basic metrics object based on what we know
+                                lastSystemMetrics = {
+                                    note: 'Metrics are fetched internally by the prediction API',
+                                    source: 'Real-time system metrics via get_system_metrics()',
+                                    prediction_mode: 'Real Mode'
+                                };
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Could not fetch system metrics:', e);
+                        lastSystemMetrics = {
+                            note: 'Metrics are retrieved internally by the prediction model',
+                            error: e.message
+                        };
+                    }
                     
                     // Check for errors
                     if (riskData.error) {
@@ -2308,6 +2592,9 @@
                         
                         console.log('✅ Risk score updated successfully:', riskPercent + '%');
                         
+                        // Update timeline chart with new risk score
+                        updatePredictiveTimelineChart(riskPercent, riskData.timestamp);
+                        
                         // Force a repaint to ensure visual update
                         riskScoreEl.offsetHeight; // Trigger reflow
                         riskBarEl.offsetHeight; // Trigger reflow
@@ -2322,6 +2609,23 @@
                 
                 // Fetch time to failure
                 console.log('📡 Fetching /api/predict-time-to-failure...');
+                // If in demo mode, first ensure metrics are sent, then get prediction
+                if (demoMode && lastDemoMetrics && Object.keys(lastDemoMetrics).length > 0) {
+                    // Send demo metrics first so time-to-failure uses them
+                    try {
+                        await fetch('/api/predict-failure-risk-custom', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ metrics: lastDemoMetrics }),
+                            cache: 'no-cache'
+                        });
+                        // Small delay to ensure metrics are processed
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    } catch (e) {
+                        console.warn('Could not send demo metrics for time-to-failure:', e);
+                    }
+                }
+                
                 const timeResponse = await fetch('/api/predict-time-to-failure', {
                     cache: 'no-cache',
                     headers: {
@@ -2330,6 +2634,10 @@
                 });
                 if (timeResponse.ok) {
                     const timeData = await timeResponse.json();
+                    
+                    // Store for model details
+                    lastTimeData = timeData;
+                    
                     const timeToFailureEl = document.getElementById('predictive_timeToFailure');
                     const failureTimeEl = document.getElementById('predictive_failureTime');
                     
@@ -2337,19 +2645,66 @@
                         if (timeToFailureEl) timeToFailureEl.textContent = '--';
                         if (failureTimeEl) failureTimeEl.textContent = timeData.message || 'Model not available';
                     } else if (timeData.hours_until_failure !== null && timeData.hours_until_failure !== undefined) {
-                        if (timeToFailureEl) timeToFailureEl.textContent = timeData.hours_until_failure.toFixed(1) + 'h';
+                        const hours = timeData.hours_until_failure;
+                        if (timeToFailureEl) {
+                            timeToFailureEl.textContent = hours.toFixed(1) + 'h';
+                            // Color code based on hours
+                            if (hours < 1) {
+                                timeToFailureEl.style.color = '#ef4444'; // Red - critical
+                            } else if (hours < 12) {
+                                timeToFailureEl.style.color = '#f59e0b'; // Orange - urgent
+                            } else if (hours < 24) {
+                                timeToFailureEl.style.color = '#eab308'; // Yellow - warning
+                            } else {
+                                timeToFailureEl.style.color = '#10b981'; // Green - stable
+                            }
+                        }
                         if (failureTimeEl && timeData.predicted_failure_time) {
                             const failureTime = new Date(timeData.predicted_failure_time);
                             failureTimeEl.textContent = 'Predicted: ' + failureTime.toLocaleString();
                         }
+                        
+                        // Update Early Detection Rate based on prediction
+                        updateEarlyDetectionRate(hours);
                     } else {
-                        if (timeToFailureEl) timeToFailureEl.textContent = '--';
-                        if (failureTimeEl) failureTimeEl.textContent = timeData.message || 'No failure predicted';
+                        if (timeToFailureEl) {
+                            timeToFailureEl.textContent = '--';
+                            timeToFailureEl.style.color = '#3b82f6'; // Default blue
+                        }
+                        if (failureTimeEl) {
+                            failureTimeEl.textContent = timeData.message || 'No failure predicted';
+                        }
+                        // No failure predicted means high detection rate (no failures = good)
+                        updateEarlyDetectionRate(null);
                     }
+                } else {
+                    console.warn('⚠️ Failed to fetch time-to-failure:', timeResponse.status);
+                    // Update with default values
+                    const timeToFailureEl = document.getElementById('predictive_timeToFailure');
+                    const failureTimeEl = document.getElementById('predictive_failureTime');
+                    if (timeToFailureEl) timeToFailureEl.textContent = '--';
+                    if (failureTimeEl) failureTimeEl.textContent = 'Unable to fetch prediction';
                 }
                 
                 // Fetch early warnings
                 console.log('📡 Fetching /api/get-early-warnings...');
+                // If in demo mode, first ensure metrics are sent, then get warnings
+                if (demoMode && lastDemoMetrics && Object.keys(lastDemoMetrics).length > 0) {
+                    // Send demo metrics first so warnings use them
+                    try {
+                        await fetch('/api/predict-failure-risk-custom', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ metrics: lastDemoMetrics }),
+                            cache: 'no-cache'
+                        });
+                        // Small delay to ensure metrics are processed
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    } catch (e) {
+                        console.warn('Could not send demo metrics for warnings:', e);
+                    }
+                }
+                
                 const warningsResponse = await fetch('/api/get-early-warnings', {
                     cache: 'no-cache',
                     headers: {
@@ -2358,13 +2713,29 @@
                 });
                 if (warningsResponse.ok) {
                     const warningsData = await warningsResponse.json();
+                    
+                    // Store for model details
+                    lastWarningsData = warningsData;
+                    
                     const warningsList = document.getElementById('predictive_warningsList');
                     const warningCountEl = document.getElementById('predictive_warningCount');
                     const warningCount = warningsData.warning_count || 0;
                     
                     console.log('⚠️ Warnings received:', warningCount);
                     
-                    if (warningCountEl) warningCountEl.textContent = warningCount;
+                    if (warningCountEl) {
+                        warningCountEl.textContent = warningCount;
+                        // Color code based on count
+                        if (warningCount === 0) {
+                            warningCountEl.style.color = '#10b981'; // Green - no warnings
+                        } else if (warningCount < 5) {
+                            warningCountEl.style.color = '#eab308'; // Yellow - low warnings
+                        } else if (warningCount < 10) {
+                            warningCountEl.style.color = '#f59e0b'; // Orange - medium warnings
+                        } else {
+                            warningCountEl.style.color = '#ef4444'; // Red - high warnings
+                        }
+                    }
                     
                     if (warningsData.has_warnings && warningsData.warnings) {
                         warningsList.innerHTML = warningsData.warnings.map((warning, idx) => {
@@ -2388,9 +2759,25 @@
                             `;
                         }).join('');
                     } else {
+                        // No warnings - show empty state
+                        if (warningsList) {
+                            warningsList.innerHTML = `
+                                <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                                    ✅ No active warnings - System operating normally
+                                </div>
+                            `;
+                        }
+                    }
+                } else {
+                    console.warn('⚠️ Failed to fetch early warnings:', warningsResponse.status);
+                    // Show error or empty state
+                    const warningsList = document.getElementById('predictive_warningsList');
+                    const warningCountEl = document.getElementById('predictive_warningCount');
+                    if (warningCountEl) warningCountEl.textContent = '--';
+                    if (warningsList) {
                         warningsList.innerHTML = `
                             <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
-                                ✅ No active warnings - System operating normally
+                                ⚠️ Unable to fetch warnings
                             </div>
                         `;
                     }
@@ -2410,6 +2797,9 @@
                 }
                 
                 console.log('Predictive maintenance data refreshed successfully');
+                
+                // Update model details section if visible
+                updateModelDetails();
                     
             } catch (error) {
                 console.error('Error refreshing predictive maintenance data:', error);
@@ -2418,6 +2808,270 @@
                     statusElement.textContent = 'Error';
                     statusElement.style.color = '#ef4444';
                 }
+            }
+        }
+        
+        // Store last API responses for display
+        let lastRiskData = null;
+        let lastTimeData = null;
+        let lastWarningsData = null;
+        let lastSystemMetrics = null;
+        
+        // Early Detection Rate tracking
+        let detectionRateHistory = [];
+        const MAX_DETECTION_HISTORY = 100;
+        
+        // Update Early Detection Rate
+        function updateEarlyDetectionRate(hoursUntilFailure) {
+            const detectionRateEl = document.getElementById('predictive_detectionRate');
+            if (!detectionRateEl) return;
+            
+            // If no failure predicted or prediction is >1 hour ahead, count as successful detection
+            const isDetectedEarly = hoursUntilFailure === null || hoursUntilFailure > 1;
+            
+            // Add to history
+            detectionRateHistory.push({
+                timestamp: new Date(),
+                detectedEarly: isDetectedEarly
+            });
+            
+            // Keep only last MAX_DETECTION_HISTORY entries
+            if (detectionRateHistory.length > MAX_DETECTION_HISTORY) {
+                detectionRateHistory.shift();
+            }
+            
+            // Calculate rate based on history
+            if (detectionRateHistory.length > 0) {
+                const earlyDetections = detectionRateHistory.filter(h => h.detectedEarly).length;
+                const rate = (earlyDetections / detectionRateHistory.length) * 100;
+                
+                detectionRateEl.textContent = rate.toFixed(1) + '%';
+                
+                // Color code based on rate
+                if (rate >= 80) {
+                    detectionRateEl.style.color = '#10b981'; // Green - excellent
+                } else if (rate >= 60) {
+                    detectionRateEl.style.color = '#3b82f6'; // Blue - good
+                } else if (rate >= 40) {
+                    detectionRateEl.style.color = '#eab308'; // Yellow - fair
+                } else {
+                    detectionRateEl.style.color = '#ef4444'; // Red - poor
+                }
+            } else {
+                // If no history yet, show based on current prediction
+                if (isDetectedEarly) {
+                    detectionRateEl.textContent = '100%';
+                    detectionRateEl.style.color = '#10b981';
+                } else {
+                    detectionRateEl.textContent = '0%';
+                    detectionRateEl.style.color = '#ef4444';
+                }
+            }
+        }
+        
+        // Update Predictive Timeline Chart
+        function updatePredictiveTimelineChart(riskPercent, timestamp) {
+            if (!predictiveTimelineChart) {
+                // Chart not initialized yet, try to initialize it
+                const timelineCanvas = document.getElementById('predictive_timelineChart');
+                if (timelineCanvas && typeof Chart !== 'undefined') {
+                    const timelineCtx = timelineCanvas.getContext('2d');
+                    predictiveTimelineChart = new Chart(timelineCtx, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: [{
+                                label: 'Risk Score %',
+                                data: [],
+                                borderColor: '#ef4444',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                tension: 0.4,
+                                fill: true,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                pointBackgroundColor: '#ef4444',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: { duration: 300 },
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top',
+                                    labels: { 
+                                        color: '#e8eaed',
+                                        padding: 15,
+                                        font: { size: 12, weight: 'bold' }
+                                    }
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                    titleColor: '#e8eaed',
+                                    bodyColor: '#e8eaed',
+                                    borderColor: '#ef4444',
+                                    borderWidth: 1,
+                                    callbacks: {
+                                        label: function(context) {
+                                            return 'Risk: ' + context.parsed.y.toFixed(2) + '%';
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    max: 100,
+                                    ticks: { 
+                                        color: '#9aa0a6',
+                                        callback: function(value) {
+                                            return value + '%';
+                                        }
+                                    },
+                                    grid: { color: '#374151' },
+                                    title: {
+                                        display: true,
+                                        text: 'Risk Score (%)',
+                                        color: '#9aa0a6',
+                                        font: { size: 12 }
+                                    }
+                                },
+                                x: {
+                                    ticks: { 
+                                        color: '#9aa0a6',
+                                        maxTicksLimit: 10
+                                    },
+                                    grid: { color: '#374151' },
+                                    title: {
+                                        display: true,
+                                        text: 'Time',
+                                        color: '#9aa0a6',
+                                        font: { size: 12 }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    return; // Can't initialize chart yet
+                }
+            }
+            
+            // Add new data point
+            const timeLabel = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const riskValue = parseFloat(riskPercent);
+            
+            // Add to history
+            riskScoreHistory.push({
+                time: timeLabel,
+                value: riskValue,
+                timestamp: timestamp || new Date().toISOString()
+            });
+            
+            // Keep only last MAX_HISTORY_POINTS
+            if (riskScoreHistory.length > MAX_HISTORY_POINTS) {
+                riskScoreHistory.shift();
+            }
+            
+            // Update chart
+            predictiveTimelineChart.data.labels = riskScoreHistory.map(h => h.time);
+            predictiveTimelineChart.data.datasets[0].data = riskScoreHistory.map(h => h.value);
+            
+            // Update chart colors based on risk level
+            const currentRisk = riskValue;
+            if (currentRisk > 70) {
+                predictiveTimelineChart.data.datasets[0].borderColor = '#ef4444'; // Red
+                predictiveTimelineChart.data.datasets[0].backgroundColor = 'rgba(239, 68, 68, 0.2)';
+                predictiveTimelineChart.data.datasets[0].pointBackgroundColor = '#ef4444';
+            } else if (currentRisk > 50) {
+                predictiveTimelineChart.data.datasets[0].borderColor = '#f59e0b'; // Orange
+                predictiveTimelineChart.data.datasets[0].backgroundColor = 'rgba(245, 158, 11, 0.2)';
+                predictiveTimelineChart.data.datasets[0].pointBackgroundColor = '#f59e0b';
+            } else if (currentRisk > 30) {
+                predictiveTimelineChart.data.datasets[0].borderColor = '#eab308'; // Yellow
+                predictiveTimelineChart.data.datasets[0].backgroundColor = 'rgba(234, 179, 8, 0.2)';
+                predictiveTimelineChart.data.datasets[0].pointBackgroundColor = '#eab308';
+            } else {
+                predictiveTimelineChart.data.datasets[0].borderColor = '#10b981'; // Green
+                predictiveTimelineChart.data.datasets[0].backgroundColor = 'rgba(16, 185, 129, 0.2)';
+                predictiveTimelineChart.data.datasets[0].pointBackgroundColor = '#10b981';
+            }
+            
+            // Update chart
+            predictiveTimelineChart.update('active');
+        }
+        
+        // Toggle model details section
+        function toggleModelDetails() {
+            const section = document.getElementById('modelDetailsSection');
+            const toggle = document.getElementById('modelDetailsToggle');
+            if (section && toggle) {
+                if (section.style.display === 'none' || !section.style.display) {
+                    section.style.display = 'block';
+                    toggle.textContent = '▲ Hide Details';
+                    // Update details when showing
+                    updateModelDetails();
+                } else {
+                    section.style.display = 'none';
+                    toggle.textContent = '▼ Show Details';
+                }
+            }
+        }
+        
+        // Update model details section
+        function updateModelDetails() {
+            // Update model status
+            const statusEl = document.getElementById('modelDetails_status');
+            const loadedEl = document.getElementById('modelDetails_loaded');
+            const modeEl = document.getElementById('modelDetails_mode');
+            
+            if (statusEl) {
+                statusEl.textContent = lastRiskData && !lastRiskData.error ? 'Active' : 'Inactive';
+                statusEl.style.color = lastRiskData && !lastRiskData.error ? '#10b981' : '#ef4444';
+            }
+            
+            if (loadedEl) {
+                loadedEl.textContent = lastRiskData && !lastRiskData.error ? 'Yes' : 'No';
+                loadedEl.style.color = lastRiskData && !lastRiskData.error ? '#10b981' : '#ef4444';
+            }
+            
+            if (modeEl) {
+                modeEl.textContent = demoMode ? 'Demo Mode' : 'Real Mode';
+            }
+            
+            // Update system metrics
+            const metricsEl = document.getElementById('modelDetails_metrics');
+            if (metricsEl && lastSystemMetrics) {
+                metricsEl.textContent = JSON.stringify(lastSystemMetrics, null, 2);
+            } else if (metricsEl) {
+                metricsEl.textContent = 'No metrics available';
+            }
+            
+            // Update risk response
+            const riskResponseEl = document.getElementById('modelDetails_riskResponse');
+            if (riskResponseEl && lastRiskData) {
+                riskResponseEl.textContent = JSON.stringify(lastRiskData, null, 2);
+            } else if (riskResponseEl) {
+                riskResponseEl.textContent = 'Waiting for risk prediction data...';
+            }
+            
+            // Update time to failure response
+            const timeResponseEl = document.getElementById('modelDetails_timeResponse');
+            if (timeResponseEl && lastTimeData) {
+                timeResponseEl.textContent = JSON.stringify(lastTimeData, null, 2);
+            } else if (timeResponseEl) {
+                timeResponseEl.textContent = 'Waiting for time-to-failure prediction data...';
+            }
+            
+            // Update warnings response
+            const warningsResponseEl = document.getElementById('modelDetails_warningsResponse');
+            if (warningsResponseEl && lastWarningsData) {
+                warningsResponseEl.textContent = JSON.stringify(lastWarningsData, null, 2);
+            } else if (warningsResponseEl) {
+                warningsResponseEl.textContent = 'Waiting for early warnings data...';
             }
         }
         

@@ -33,6 +33,10 @@ if not os.getenv('GEMINI_API_KEY') and not os.getenv('GOOGLE_API_KEY'):
     print("   Please add GEMINI_API_KEY to your .env file")
 
 app = Flask(__name__)
+# Set Flask configuration to avoid KeyError (must be set before Bootstrap)
+# Flask 3.1.0 requires this config to be set explicitly
+if 'PROVIDE_AUTOMATIC_OPTIONS' not in app.config:
+    app.config['PROVIDE_AUTOMATIC_OPTIONS'] = True
 bootstrap = Bootstrap(app)
 
 # Enable CORS for all routes to allow dashboard to access the API

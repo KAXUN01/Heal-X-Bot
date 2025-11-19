@@ -42,14 +42,7 @@ class HealingBotLauncher:
                 "health_url": "http://localhost:8000/active-threats",
                 "docker_service": "network-analyzer"
             },
-            "dashboard": {
-                "name": "ML Dashboard",
-                "port": 3001,
-                "path": "monitoring/dashboard",
-                "script": "app.py",
-                "health_url": "http://localhost:3001/api/health",
-                "docker_service": "dashboard"
-            },
+            # Removed dashboard service (port 3001) - using healing-dashboard (port 5001) instead
             "incident-bot": {
                 "name": "Incident Bot",
                 "port": 8000,
@@ -78,7 +71,7 @@ class HealingBotLauncher:
         
         # Docker services (full stack)
         self.docker_services = [
-            "model", "server", "network-analyzer", "dashboard", 
+            "model", "server", "network-analyzer",
             "incident-bot", "healing-dashboard", "prometheus", "grafana"
         ]
 
@@ -228,7 +221,7 @@ class HealingBotLauncher:
         
         import socket
         
-        ports_to_check = [8080, 8000, 3001, 5000, 5001, 9090, 3000]
+        ports_to_check = [8080, 8000, 5000, 5001, 9090, 3000]
         occupied_ports = []
         
         for port in ports_to_check:
@@ -424,7 +417,6 @@ class HealingBotLauncher:
         print("="*60)
         
         access_points = [
-            ("📊 Dashboard", "http://localhost:3001", "Main monitoring dashboard"),
             ("🛡️ Healing Dashboard", "http://localhost:5001", "Healing bot dashboard"),
             ("🤖 Model API", "http://localhost:8080", "DDoS detection model"),
             ("🔍 Network Analyzer", "http://localhost:8000", "Network traffic analysis"),

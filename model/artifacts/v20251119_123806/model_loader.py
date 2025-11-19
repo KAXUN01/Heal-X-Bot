@@ -43,15 +43,22 @@ try:
             feature_names = json.load(f)
     
     if XGBOOST_AVAILABLE and (MODEL_DIR / "model.json").exists():
-        model = xgb.Booster()
-        model.load_model(str(MODEL_DIR / "model.json"))
-        # Wrap in XGBClassifier for predict_proba
+        # Load model using XGBClassifier directly
         from xgboost import XGBClassifier
-        wrapper = XGBClassifier()
-        wrapper._Booster = model
-        wrapper.classes_ = np.array([0, 1])
-        wrapper.n_features_in_ = len(feature_names) if feature_names else 27
-        model = wrapper
+        model = XGBClassifier()
+        model.load_model(str(MODEL_DIR / "model.json"))
+        # Set classes if not already set
+        if not hasattr(model, 'classes_') or model.classes_ is None:
+            try:
+                model.classes_ = np.array([0, 1])
+            except:
+                pass  # Some XGBoost versions handle this automatically
+        # Set n_features_in_ if needed
+        if not hasattr(model, 'n_features_in_') or model.n_features_in_ is None:
+            try:
+                model.n_features_in_ = len(feature_names) if feature_names else 27
+            except:
+                pass  # Some XGBoost versions handle this automatically
     elif (MODEL_DIR / "model.pkl").exists():
         model = joblib.load(MODEL_DIR / "model.pkl")
     
@@ -60,7 +67,9 @@ try:
     
     logger.info("Model loaded successfully")
 except Exception as e:
-    logger.error(f"Failed to load model: {{e}}")
+    logger.error(f"Failed to load model: {e}")
+    import traceback
+    logger.debug(traceback.format_exc())
     model = None
 
 # Load regression model if available
@@ -79,13 +88,15 @@ try:
     
     # Load regression model
     if XGBOOST_AVAILABLE and (MODEL_DIR / "regression_model.json").exists():
-        regression_model = xgb.Booster()
-        regression_model.load_model(str(MODEL_DIR / "regression_model.json"))
         from xgboost import XGBRegressor
-        wrapper = XGBRegressor()
-        wrapper._Booster = regression_model
-        wrapper.n_features_in_ = len(feature_names) if feature_names else len(feature_names)
-        regression_model = wrapper
+        regression_model = XGBRegressor()
+        regression_model.load_model(str(MODEL_DIR / "regression_model.json"))
+        # Set n_features_in_ if needed
+        if not hasattr(regression_model, 'n_features_in_') or regression_model.n_features_in_ is None:
+            try:
+                regression_model.n_features_in_ = len(feature_names) if feature_names else 27
+            except:
+                pass  # Some XGBoost versions handle this automatically
     elif (MODEL_DIR / "regression_model.pkl").exists():
         regression_model = joblib.load(MODEL_DIR / "regression_model.pkl")
 except Exception as e:

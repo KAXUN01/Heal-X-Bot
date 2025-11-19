@@ -2144,7 +2144,15 @@
                 const riskResponse = await fetch('/api/predict-failure-risk');
                 if (riskResponse.ok) {
                     const riskData = await riskResponse.json();
-                    if (riskData.risk_score !== undefined) {
+                    
+                    // Check for errors
+                    if (riskData.error) {
+                        console.warn('Predictive model error:', riskData.error);
+                        document.getElementById('predictive_riskScore').textContent = 'N/A';
+                        document.getElementById('predictive_riskBar').style.width = '0%';
+                        document.getElementById('predictive_riskLevel').textContent = 'Model not available';
+                        document.getElementById('predictive_riskScore').style.color = '#6b7280';
+                    } else if (riskData.risk_score !== undefined) {
                         const riskPercent = (riskData.risk_score * 100).toFixed(1);
                         document.getElementById('predictive_riskScore').textContent = riskPercent + '%';
                         document.getElementById('predictive_riskBar').style.width = riskPercent + '%';
@@ -2163,13 +2171,19 @@
                             riskElement.style.color = '#10b981';
                         }
                     }
+                } else {
+                    console.error('Failed to fetch risk data:', riskResponse.status);
                 }
                 
                 // Fetch time to failure
                 const timeResponse = await fetch('/api/predict-time-to-failure');
                 if (timeResponse.ok) {
                     const timeData = await timeResponse.json();
-                    if (timeData.hours_until_failure) {
+                    if (timeData.error) {
+                        document.getElementById('predictive_timeToFailure').textContent = '--';
+                        document.getElementById('predictive_failureTime').textContent = 
+                            timeData.message || 'Model not available';
+                    } else if (timeData.hours_until_failure !== null && timeData.hours_until_failure !== undefined) {
                         document.getElementById('predictive_timeToFailure').textContent = 
                             timeData.hours_until_failure.toFixed(1) + 'h';
                         if (timeData.predicted_failure_time) {

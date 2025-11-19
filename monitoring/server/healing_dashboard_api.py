@@ -3,7 +3,7 @@ Healing Bot Dashboard API
 Comprehensive backend for real-time system monitoring and management
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -2130,9 +2130,39 @@ async def predict_failure_risk():
     try:
         if predictive_model is None:
             return {
+                "timestamp": datetime.now().isoformat(),
                 "error": "Predictive model not available",
                 "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown",
                 "message": "Train model first using model/train_xgboost_model.py"
+            }
+        
+        # Check if model is actually loaded
+        if not hasattr(predictive_model, 'model') or predictive_model.model is None:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Model not loaded",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown",
+                "message": "Model file exists but model failed to load"
+            }
+        
+        # Check if model functions exist
+        if not hasattr(predictive_model, 'predict_failure_risk'):
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Model functions not available",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown"
             }
         
         # Get current system metrics
@@ -2145,12 +2175,36 @@ async def predict_failure_risk():
         
         # Predict risk
         result = predictive_model.predict_failure_risk(metrics)
+        
+        # Ensure all required fields are present
+        if 'timestamp' not in result:
+            result['timestamp'] = datetime.now().isoformat()
+        if 'risk_percentage' not in result:
+            result['risk_percentage'] = result.get('risk_score', 0.0) * 100
+        if 'risk_level' not in result:
+            risk_score = result.get('risk_score', 0.0)
+            if risk_score > 0.7:
+                result['risk_level'] = 'High'
+            elif risk_score > 0.5:
+                result['risk_level'] = 'Medium'
+            elif risk_score > 0.3:
+                result['risk_level'] = 'Low'
+            else:
+                result['risk_level'] = 'Very Low'
+        
         return result
     except Exception as e:
         logger.error(f"Error predicting failure risk: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
         return {
+            "timestamp": datetime.now().isoformat(),
             "error": str(e),
-            "risk_score": 0.0
+            "risk_score": 0.0,
+            "risk_percentage": 0.0,
+            "has_early_warning": False,
+            "is_high_risk": False,
+            "risk_level": "Unknown"
         }
 
 @app.get("/api/get-early-warnings")
@@ -2159,9 +2213,47 @@ async def get_early_warnings():
     try:
         if predictive_model is None:
             return {
+                "timestamp": datetime.now().isoformat(),
                 "error": "Predictive model not available",
                 "warnings": [],
-                "has_warnings": False
+                "has_warnings": False,
+                "warning_count": 0
+            }
+        
+        # Check if model is actually loaded (warnings can work without model)
+        # But if model exists, check if it's loaded
+        if hasattr(predictive_model, 'model') and predictive_model.model is None:
+            # Still return warnings based on system metrics even if model isn't loaded
+            pass
+        
+        # Check if model functions exist
+        if not hasattr(predictive_model, 'get_early_warnings'):
+            # Return basic warnings based on system metrics
+            metrics = get_system_metrics()
+            warnings = []
+            if metrics.get('cpu_percent', 0) > 90:
+                warnings.append({
+                    'type': 'cpu_high',
+                    'severity': 'high',
+                    'message': f"CPU usage at {metrics.get('cpu_percent', 0):.1f}%"
+                })
+            if metrics.get('memory_percent', 0) > 85:
+                warnings.append({
+                    'type': 'memory_high',
+                    'severity': 'high',
+                    'message': f"Memory usage at {metrics.get('memory_percent', 0):.1f}%"
+                })
+            if metrics.get('disk_percent', 0) > 90:
+                warnings.append({
+                    'type': 'disk_high',
+                    'severity': 'high',
+                    'message': f"Disk usage at {metrics.get('disk_percent', 0):.1f}%"
+                })
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "warnings": warnings,
+                "has_warnings": len(warnings) > 0,
+                "warning_count": len(warnings)
             }
         
         # Get current system metrics
@@ -2172,13 +2264,26 @@ async def get_early_warnings():
         
         # Get warnings
         result = predictive_model.get_early_warnings(metrics)
+        
+        # Ensure all required fields are present
+        if 'timestamp' not in result:
+            result['timestamp'] = datetime.now().isoformat()
+        if 'warning_count' not in result:
+            result['warning_count'] = len(result.get('warnings', []))
+        if 'has_warnings' not in result:
+            result['has_warnings'] = result['warning_count'] > 0
+        
         return result
     except Exception as e:
         logger.error(f"Error getting early warnings: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
         return {
+            "timestamp": datetime.now().isoformat(),
             "error": str(e),
             "warnings": [],
-            "has_warnings": False
+            "has_warnings": False,
+            "warning_count": 0
         }
 
 @app.get("/api/predict-time-to-failure")
@@ -2187,8 +2292,28 @@ async def predict_time_to_failure():
     try:
         if predictive_model is None:
             return {
+                "timestamp": datetime.now().isoformat(),
                 "error": "Predictive model not available",
-                "hours_until_failure": None
+                "hours_until_failure": None,
+                "message": "No failure predicted - model not available"
+            }
+        
+        # Check if model is actually loaded
+        if not hasattr(predictive_model, 'model') or predictive_model.model is None:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Model not loaded",
+                "hours_until_failure": None,
+                "message": "No failure predicted - model failed to load"
+            }
+        
+        # Check if model functions exist
+        if not hasattr(predictive_model, 'predict_time_to_failure'):
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Model functions not available",
+                "hours_until_failure": None,
+                "message": "No failure predicted"
             }
         
         # Get current system metrics
@@ -2199,12 +2324,21 @@ async def predict_time_to_failure():
         
         # Predict time to failure
         result = predictive_model.predict_time_to_failure(metrics)
+        
+        # Ensure timestamp is present
+        if 'timestamp' not in result:
+            result['timestamp'] = datetime.now().isoformat()
+        
         return result
     except Exception as e:
         logger.error(f"Error predicting time to failure: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
         return {
+            "timestamp": datetime.now().isoformat(),
             "error": str(e),
-            "hours_until_failure": None
+            "hours_until_failure": None,
+            "message": "No failure predicted"
         }
 
 @app.post("/api/predict-anomaly")

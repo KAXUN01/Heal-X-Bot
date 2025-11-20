@@ -14,13 +14,48 @@ import json
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from log_monitor import initialize_log_monitoring, log_monitor
-from centralized_logger import initialize_centralized_logging, centralized_logger
-from service_discovery import ServiceDiscovery
-from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
-from system_log_collector import initialize_system_log_collector, get_system_log_collector
-from critical_services_monitor import initialize_critical_services_monitor, get_critical_services_monitor
-from auto_healer import initialize_auto_healer, get_auto_healer
+try:
+    from .log_monitor import initialize_log_monitoring, log_monitor
+except ImportError:
+    from log_monitor import initialize_log_monitoring, log_monitor
+try:
+    from .centralized_logger import initialize_centralized_logging, centralized_logger
+except ImportError:
+    from centralized_logger import initialize_centralized_logging, centralized_logger
+try:
+    from .service_discovery import ServiceDiscovery
+except ImportError:
+    from service_discovery import ServiceDiscovery
+try:
+    from .gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
+except ImportError:
+    from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
+try:
+    from .system_log_collector import initialize_system_log_collector, get_system_log_collector
+except ImportError:
+    from system_log_collector import initialize_system_log_collector, get_system_log_collector
+try:
+    from .critical_services_monitor import initialize_critical_services_monitor, get_critical_services_monitor
+except ImportError:
+    from critical_services_monitor import initialize_critical_services_monitor, get_critical_services_monitor
+try:
+    from .healing import initialize_auto_healer, get_auto_healer
+except ImportError:
+    # Fallback to old import path for backward compatibility
+    try:
+        from auto_healer import initialize_auto_healer, get_auto_healer
+    except ImportError:
+        # If running as module, try absolute import
+        try:
+            from monitoring.server.healing import initialize_auto_healer, get_auto_healer
+        except ImportError:
+            # Last resort: import directly from healing directory
+            import sys
+            from pathlib import Path
+            healing_path = Path(__file__).parent / 'healing'
+            if healing_path.exists():
+                sys.path.insert(0, str(Path(__file__).parent))
+                from healing import initialize_auto_healer, get_auto_healer
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
@@ -920,7 +955,6 @@ def initialize_services():
             print("✅ Cloud fault detector initialized and started")
             
             # Initialize AI-powered auto-healer with cloud capabilities
-            global auto_healer
             auto_healer = initialize_auto_healer(
                 gemini_analyzer=gemini_analyzer,
                 system_log_collector=system_log_collector,
@@ -938,7 +972,6 @@ def initialize_services():
         except Exception as e:
             print(f"⚠️  Cloud simulation components not available: {e}")
             # Fallback to basic auto-healer
-            global auto_healer
             auto_healer = initialize_auto_healer(
                 gemini_analyzer=gemini_analyzer,
                 system_log_collector=system_log_collector,

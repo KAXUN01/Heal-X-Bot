@@ -164,8 +164,9 @@ fi
 if [ -f "incident-bot/requirements.txt" ]; then
     python3 -m pip install -r incident-bot/requirements.txt
 fi
-# Ensure protobuf is compatible with TensorFlow
-python3 -m pip install --upgrade "protobuf>=4.25.3,<5" googleapis-common-protos >/dev/null || true
+# Ensure protobuf is compatible with TensorFlow (TensorFlow 2.20+ requires protobuf>=5.28.0)
+# Install protobuf>=5.28.0 for TensorFlow compatibility
+python3 -m pip install --upgrade "protobuf>=5.28.0,<6.0.0" googleapis-common-protos >/dev/null || true
 echo -e "${GREEN}✅ Virtual environment ready${NC}"
 
 # Check if .env file exists
@@ -252,6 +253,7 @@ start_service() {
     local script_name=$3
     local port=$4
     local env_vars="${5:-}"  # Optional environment variables
+    local health_url="${6:-}"  # Optional health check URL
     
     if [ ! -f "$service_path/$script_name" ]; then
         echo -e "${RED}❌ ERROR: Script not found: $service_path/$script_name${NC}"
@@ -263,6 +265,9 @@ start_service() {
     # Start the service in background with environment variables
     # Set PYTHONUNBUFFERED and any service-specific env vars
     local pid
+    
+    # Ensure PYTHONPATH includes project root for imports
+    export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
     
     if [ -n "$env_vars" ]; then
         # Export variables for this service (will be used by the python process)
@@ -284,10 +289,37 @@ start_service() {
     # Wait a moment to check if it started successfully
     sleep 2
     if kill -0 "$pid" 2>/dev/null; then
-        echo -e "${GREEN}✅ $service_name started (PID: $pid, Port: $port)${NC}"
+        # If health URL provided, check if service is responding
+        if [ -n "$health_url" ]; then
+            local max_attempts=10
+            local attempt=0
+            local health_ok=0
+            
+            while [ $attempt -lt $max_attempts ]; do
+                sleep 1
+                if curl -s --max-time 2 "$health_url" >/dev/null 2>&1; then
+                    health_ok=1
+                    break
+                fi
+                attempt=$((attempt + 1))
+            done
+            
+            if [ $health_ok -eq 1 ]; then
+                echo -e "${GREEN}✅ $service_name started and healthy (PID: $pid, Port: $port)${NC}"
+            else
+                echo -e "${YELLOW}⚠️  $service_name started but health check failed (PID: $pid, Port: $port)${NC}"
+                echo -e "${YELLOW}   Check logs/${service_name}.log for details${NC}"
+            fi
+        else
+            echo -e "${GREEN}✅ $service_name started (PID: $pid, Port: $port)${NC}"
+        fi
         return 0
     else
         echo -e "${RED}❌ $service_name failed to start - check logs/${service_name}.log${NC}"
+        if [ -f "$SCRIPT_DIR/logs/${service_name}.log" ]; then
+            echo -e "${YELLOW}   Last 5 lines of log:${NC}"
+            tail -5 "$SCRIPT_DIR/logs/${service_name}.log" | sed 's/^/   /'
+        fi
         return 1
     fi
 }
@@ -297,17 +329,51 @@ mkdir -p logs
 
 # Start all services
 # Note: Using different ports to avoid conflicts
-start_service "DDoS Model API" "model" "main.py" "8080" "MODEL_PORT=8080"
-start_service "Network Analyzer" "monitoring/server" "network_analyzer.py" "8000" "PORT=8000"
+# Format: service_name path script port env_vars health_url
+
+start_service "DDoS Model API" "model" "main.py" "8080" "MODEL_PORT=8080" "http://localhost:8080/health"
+start_service "Network Analyzer" "monitoring/server" "network_analyzer.py" "8000" "PORT=8000" "http://localhost:8000/active-threats"
 # Removed ML Dashboard (port 3001) - using Healing Dashboard (port 5001) instead
-start_service "Incident Bot" "incident-bot" "main.py" "8001" "PORT=8001"
-start_service "Monitoring Server" "monitoring/server" "app.py" "5000"
-start_service "Healing Dashboard API" "monitoring/server" "healing_dashboard_api.py" "5001" "HEALING_DASHBOARD_PORT=5001"
+start_service "Incident Bot" "incident-bot" "main.py" "8001" "PORT=8001" "http://localhost:8001/"
+start_service "Monitoring Server" "monitoring/server" "app.py" "5000" "" "http://localhost:5000/health"
+start_service "Healing Dashboard API" "monitoring/server" "healing_dashboard_api.py" "5001" "HEALING_DASHBOARD_PORT=5001" "http://localhost:5001/api/health"
 
 # Wait a bit for services to initialize
 echo ""
-echo -e "${YELLOW}⏳ Waiting for services to initialize...${NC}"
-sleep 5
+echo -e "${YELLOW}⏳ Waiting for services to fully initialize...${NC}"
+sleep 3
+
+# Verify services are accessible
+echo -e "${YELLOW}🔍 Verifying service health...${NC}"
+SERVICES_OK=0
+SERVICES_TOTAL=5
+
+check_service() {
+    local name=$1
+    local url=$2
+    if curl -s --max-time 2 "$url" >/dev/null 2>&1; then
+        echo -e "${GREEN}   ✅ $name is responding${NC}"
+        SERVICES_OK=$((SERVICES_OK + 1))
+        return 0
+    else
+        echo -e "${YELLOW}   ⚠️  $name not responding yet${NC}"
+        return 1
+    fi
+}
+
+check_service "Model API" "http://localhost:8080/health"
+check_service "Network Analyzer" "http://localhost:8000/active-threats"
+check_service "Incident Bot" "http://localhost:8001/"
+check_service "Monitoring Server" "http://localhost:5000/health"
+check_service "Healing Dashboard" "http://localhost:5001/api/health"
+
+echo ""
+if [ $SERVICES_OK -eq $SERVICES_TOTAL ]; then
+    echo -e "${GREEN}✅ All services are healthy!${NC}"
+else
+    echo -e "${YELLOW}⚠️  Some services may still be starting. Check logs/ for details.${NC}"
+fi
+sleep 2
 
 # Print access information
 echo ""
@@ -315,12 +381,16 @@ echo -e "${BLUE}╔════════════════════�
 echo -e "${BLUE}║                    🌐 ACCESS POINTS                          ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${GREEN}🛡️  Healing Dashboard:${NC}      http://localhost:5001"
-echo -e "${GREEN}🤖 Model API:${NC}               http://localhost:8080"
-echo -e "${GREEN}🔍 Network Analyzer:${NC}        http://localhost:8000"
-echo -e "${GREEN}🚨 Incident Bot:${NC}            http://localhost:8001"
-echo -e "${GREEN}📈 Monitoring Server:${NC}       http://localhost:5000"
-echo -e "${GREEN}📊 Fluent Bit:${NC}               http://localhost:8888"
+echo -e "${GREEN}🛡️  Healing Dashboard (Main UI):${NC}"
+echo -e "${GREEN}   http://localhost:5001/static/healing-dashboard.html${NC}"
+echo ""
+echo -e "${GREEN}📊 API Endpoints:${NC}"
+echo -e "${GREEN}   Monitoring Server:     http://localhost:5000${NC}"
+echo -e "${GREEN}   Healing Dashboard API: http://localhost:5001${NC}"
+echo -e "${GREEN}   Model API:             http://localhost:8080${NC}"
+echo -e "${GREEN}   Network Analyzer:      http://localhost:8000${NC}"
+echo -e "${GREEN}   Incident Bot:          http://localhost:8001${NC}"
+echo -e "${GREEN}   Fluent Bit:            http://localhost:8888${NC}"
 echo ""
 echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║         🛡️  HEALING-BOT IS RUNNING! 🛡️                        ║${NC}"

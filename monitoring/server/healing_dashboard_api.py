@@ -3351,7 +3351,11 @@ def initialize_cloud_components():
         from fault_detector import initialize_fault_detector
         from fault_injector import initialize_fault_injector
         from container_healer import initialize_container_healer
-        from auto_healer import initialize_auto_healer
+        try:
+            from .healing import initialize_auto_healer
+        except ImportError:
+            # Fallback to old import path
+            from auto_healer import initialize_auto_healer
         from root_cause_analyzer import initialize_root_cause_analyzer
         from container_monitor import ContainerMonitor
         from resource_monitor import ResourceMonitor

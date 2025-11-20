@@ -1070,7 +1070,8 @@ def get_auto_healer_status():
                 'enabled': auto_healer.enabled,
                 'auto_execute': auto_healer.auto_execute,
                 'monitoring': auto_healer.running,
-                'max_attempts': auto_healer.max_healing_attempts
+                'max_attempts': auto_healer.max_healing_attempts,
+                'monitoring_interval': getattr(auto_healer, 'monitoring_interval', 60)
             }
         })
     except Exception as e:
@@ -1156,6 +1157,50 @@ def manual_heal_error():
             'status': 'success',
             'healing_result': result
         })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route("/api/auto-healer/config", methods=['PUT', 'POST'])
+def update_auto_healer_config():
+    """Update auto-healer configuration"""
+    global auto_healer
+    
+    if not auto_healer:
+        return jsonify({
+            'status': 'error',
+            'message': 'Auto-healer not initialized'
+        }), 503
+    
+    try:
+        data = request.get_json() or {}
+        
+        # Extract configuration parameters
+        enabled = data.get('enabled')
+        auto_execute = data.get('auto_execute')
+        max_attempts = data.get('max_attempts')
+        monitoring_interval = data.get('monitoring_interval')
+        
+        # Update configuration
+        updated_config = auto_healer.update_config(
+            enabled=enabled if enabled is not None else None,
+            auto_execute=auto_execute if auto_execute is not None else None,
+            max_healing_attempts=max_attempts if max_attempts is not None else None,
+            monitoring_interval=monitoring_interval if monitoring_interval is not None else None
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Configuration updated successfully',
+            'auto_healer': updated_config
+        })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 400
     except Exception as e:
         return jsonify({
             'status': 'error',

@@ -66,6 +66,7 @@ class AutoHealer:
         self.enabled = True
         self.auto_execute = True  # Set to False for manual approval mode
         self.max_healing_attempts = 3
+        self.monitoring_interval = 60  # Default monitoring interval in seconds
         
         # Initialize action handlers
         self.system_actions = SystemHealingActions()
@@ -108,6 +109,7 @@ class AutoHealer:
             logger.warning("Auto-healer already running")
             return
         
+        self.monitoring_interval = interval_seconds
         self.running = True
         self.monitoring_thread = threading.Thread(
             target=self._monitoring_loop,
@@ -116,6 +118,59 @@ class AutoHealer:
         )
         self.monitoring_thread.start()
         logger.info(f"Auto-healer monitoring started (interval: {interval_seconds}s)")
+    
+    def update_config(self, enabled: Optional[bool] = None, 
+                     auto_execute: Optional[bool] = None,
+                     max_healing_attempts: Optional[int] = None,
+                     monitoring_interval: Optional[int] = None) -> Dict[str, Any]:
+        """Update auto-healer configuration
+        
+        Args:
+            enabled: Enable/disable auto-healer
+            auto_execute: Auto-execute healing or require approval
+            max_healing_attempts: Maximum healing attempts per error
+            monitoring_interval: Monitoring interval in seconds
+            
+        Returns:
+            Dictionary with updated configuration
+        """
+        if enabled is not None:
+            self.enabled = enabled
+            logger.info(f"Auto-healer enabled set to: {enabled}")
+        
+        if auto_execute is not None:
+            self.auto_execute = auto_execute
+            logger.info(f"Auto-execute set to: {auto_execute}")
+        
+        if max_healing_attempts is not None:
+            if max_healing_attempts < 1 or max_healing_attempts > 10:
+                raise ValueError("max_healing_attempts must be between 1 and 10")
+            self.max_healing_attempts = max_healing_attempts
+            logger.info(f"Max healing attempts set to: {max_healing_attempts}")
+        
+        if monitoring_interval is not None:
+            if monitoring_interval < 10 or monitoring_interval > 3600:
+                raise ValueError("monitoring_interval must be between 10 and 3600 seconds")
+            
+            # If monitoring is running, restart with new interval
+            was_running = self.running
+            if was_running:
+                self.stop_monitoring()
+            
+            self.monitoring_interval = monitoring_interval
+            
+            if was_running:
+                self.start_monitoring(interval_seconds=monitoring_interval)
+            
+            logger.info(f"Monitoring interval set to: {monitoring_interval}s")
+        
+        return {
+            'enabled': self.enabled,
+            'auto_execute': self.auto_execute,
+            'max_healing_attempts': self.max_healing_attempts,
+            'monitoring_interval': self.monitoring_interval,
+            'monitoring': self.running
+        }
     
     def stop_monitoring(self):
         """Stop automatic monitoring"""

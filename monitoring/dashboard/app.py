@@ -449,7 +449,22 @@ def unblock_ip(ip: str):
 # ============================================================================
 
 def run_disk_cleanup() -> Dict[str, Any]:
+    """Run disk cleanup operations (rate limited to once per hour)"""
     global last_cleanup_time
+    
+    # Rate limiting: Only run cleanup once per hour
+    if last_cleanup_time is not None:
+        time_since_last_cleanup = (datetime.now() - last_cleanup_time).total_seconds()
+        if time_since_last_cleanup < 3600:  # 1 hour = 3600 seconds
+            remaining_time = int(3600 - time_since_last_cleanup)
+            logger.info(f"Disk cleanup skipped. Last cleanup was {int(time_since_last_cleanup)}s ago. Next cleanup available in {remaining_time}s")
+            return {
+                "success": False,
+                "error": f"Rate limit: Cleanup can only run once per hour. Last cleanup was {int(time_since_last_cleanup)}s ago. Try again in {remaining_time}s",
+                "last_cleanup": last_cleanup_time.isoformat(),
+                "next_cleanup_available": (last_cleanup_time + timedelta(seconds=3600)).isoformat()
+            }
+    
     try:
         initial_usage = psutil.disk_usage('/')
         
@@ -594,9 +609,18 @@ async def monitoring_loop():
                     if not service["active"]:
                         restart_service(service["name"])
             
-            # Check disk usage
+            # Check disk usage (only run cleanup once per hour)
             if metrics.get('disk', 0) > CONFIG["disk_threshold"]:
-                run_disk_cleanup()
+                # Check if cleanup was run in the last hour
+                if last_cleanup_time is None:
+                    # Never run before, run it
+                    run_disk_cleanup()
+                else:
+                    time_since_last_cleanup = (datetime.now() - last_cleanup_time).total_seconds()
+                    if time_since_last_cleanup >= 3600:  # 1 hour = 3600 seconds
+                        # More than an hour has passed, safe to run cleanup
+                        run_disk_cleanup()
+                    # Otherwise, skip (cleanup already ran in the last hour)
             
             # Broadcast unified data
             dashboard_data = {

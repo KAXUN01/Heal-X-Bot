@@ -192,6 +192,7 @@ else:
 # Service status cache
 service_cache = {}
 last_cleanup_time = None
+last_freed_space = None  # Store last freed space in MB
 ssh_attempts = defaultdict(list)
 blocked_ips = set()
 command_history = []
@@ -555,8 +556,21 @@ def unblock_ip(ip: str, unblocked_by: str = "admin", reason: str = None) -> bool
 # ============================================================================
 
 def run_disk_cleanup() -> Dict[str, Any]:
-    """Run disk cleanup operations"""
-    global last_cleanup_time
+    """Run disk cleanup operations (rate limited to once per hour)"""
+    global last_cleanup_time, last_freed_space
+    
+    # Rate limiting: Only run cleanup once per hour
+    if last_cleanup_time is not None:
+        time_since_last_cleanup = (datetime.now() - last_cleanup_time).total_seconds()
+        if time_since_last_cleanup < 3600:  # 1 hour = 3600 seconds
+            remaining_time = int(3600 - time_since_last_cleanup)
+            logger.info(f"Disk cleanup skipped. Last cleanup was {int(time_since_last_cleanup)}s ago. Next cleanup available in {remaining_time}s")
+            return {
+                "success": False,
+                "error": f"Rate limit: Cleanup can only run once per hour. Last cleanup was {int(time_since_last_cleanup)}s ago. Try again in {remaining_time}s",
+                "last_cleanup": last_cleanup_time.isoformat(),
+                "next_cleanup_available": (last_cleanup_time + timedelta(seconds=3600)).isoformat()
+            }
     
     try:
         initial_usage = psutil.disk_usage('/')
@@ -592,6 +606,7 @@ def run_disk_cleanup() -> Dict[str, Any]:
         freed_space = (initial_usage.used - final_usage.used) / (1024 * 1024)  # MB
         
         last_cleanup_time = datetime.now()
+        last_freed_space = round(freed_space, 2)  # Store freed space
         
         logger.info(f"Disk cleanup completed. Freed {freed_space:.2f} MB")
         log_event("success", f"Disk cleanup freed {freed_space:.2f} MB")
@@ -599,7 +614,7 @@ def run_disk_cleanup() -> Dict[str, Any]:
         
         return {
             "success": True,
-            "freed_space": round(freed_space, 2),
+            "freed_space": last_freed_space,
             "timestamp": last_cleanup_time.isoformat()
         }
     except Exception as e:
@@ -1315,10 +1330,19 @@ async def monitoring_loop():
             # Check resource hogs
             auto_detect_resource_hogs()
             
-            # Check disk usage
+            # Check disk usage (only run cleanup once per hour)
             disk_usage = psutil.disk_usage('/')
             if disk_usage.percent > CONFIG["disk_threshold"]:
-                run_disk_cleanup()
+                # Check if cleanup was run in the last hour
+                if last_cleanup_time is None:
+                    # Never run before, run it
+                    run_disk_cleanup()
+                else:
+                    time_since_last_cleanup = (datetime.now() - last_cleanup_time).total_seconds()
+                    if time_since_last_cleanup >= 3600:  # 1 hour = 3600 seconds
+                        # More than an hour has passed, safe to run cleanup
+                        run_disk_cleanup()
+                    # Otherwise, skip (cleanup already ran in the last hour)
             
             # Fetch ML metrics every 5 iterations (10 seconds)
             if loop_counter % 5 == 0:
@@ -1473,7 +1497,8 @@ async def get_disk_status():
         "used": disk.used,
         "free": disk.free,
         "percent": disk.percent,
-        "last_cleanup": last_cleanup_time.isoformat() if last_cleanup_time else None
+        "last_cleanup": last_cleanup_time.isoformat() if last_cleanup_time else None,
+        "last_freed_space": last_freed_space
     }
 
 @app.post("/api/disk/cleanup")
@@ -3584,6 +3609,77 @@ async def get_healing_history(limit: int = 50):
     except Exception as e:
         logger.error(f"Error getting healing history: {e}")
         return {"success": False, "error": str(e)}
+
+@app.get("/api/auto-healer/status")
+async def get_auto_healer_status():
+    """Get auto-healer status and configuration"""
+    try:
+        if not auto_healer:
+            return {
+                "status": "error",
+                "message": "Auto-healer not initialized"
+            }
+        
+        return {
+            "status": "success",
+            "auto_healer": {
+                "enabled": auto_healer.enabled,
+                "auto_execute": auto_healer.auto_execute,
+                "monitoring": auto_healer.running,
+                "max_attempts": auto_healer.max_healing_attempts,
+                "monitoring_interval": getattr(auto_healer, 'monitoring_interval', 60)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting auto-healer status: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.post("/api/auto-healer/config")
+@app.put("/api/auto-healer/config")
+async def update_auto_healer_config(request: Request):
+    """Update auto-healer configuration"""
+    try:
+        if not auto_healer:
+            return {
+                "status": "error",
+                "message": "Auto-healer not initialized"
+            }
+        
+        data = await request.json()
+        
+        # Extract configuration parameters
+        enabled = data.get('enabled')
+        auto_execute = data.get('auto_execute')
+        max_attempts = data.get('max_attempts')
+        monitoring_interval = data.get('monitoring_interval')
+        
+        # Update configuration
+        updated_config = auto_healer.update_config(
+            enabled=enabled if enabled is not None else None,
+            auto_execute=auto_execute if auto_execute is not None else None,
+            max_healing_attempts=max_attempts if max_attempts is not None else None,
+            monitoring_interval=monitoring_interval if monitoring_interval is not None else None
+        )
+        
+        return {
+            "status": "success",
+            "message": "Configuration updated successfully",
+            "auto_healer": updated_config
+        }
+    except ValueError as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+    except Exception as e:
+        logger.error(f"Error updating auto-healer configuration: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
 
 @app.post("/api/cloud/faults/{fault_id}/heal")
 async def heal_fault(fault_id: int):

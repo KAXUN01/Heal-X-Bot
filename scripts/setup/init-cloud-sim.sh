@@ -78,7 +78,7 @@ echo "📊 Services:"
 echo "   - Load Balancer: http://localhost:8080"
 echo "   - Web Server: http://localhost:8081"
 echo "   - API Server: http://localhost:8082"
-echo "   - Database: localhost:5432"
+echo "   - Database: localhost:15432 (host port, container uses 5432)"
 echo "   - Cache: localhost:6379"
 echo ""
 # Determine which docker compose command to use

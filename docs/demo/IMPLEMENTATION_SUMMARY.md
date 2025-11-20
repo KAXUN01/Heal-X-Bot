@@ -12,7 +12,7 @@ All components of the autonomous self-healing AI Bot prototype have been success
   - Load Balancer (nginx) - Port 8080
   - Web Server (nginx) - Port 8081
   - API Server (FastAPI) - Port 8082
-  - Database (PostgreSQL) - Port 5432
+  - Database (PostgreSQL) - Port 15432 (host) / 5432 (container)
   - Cache (Redis) - Port 6379
 - **Setup Script**: `scripts/setup/init-cloud-sim.sh`
 

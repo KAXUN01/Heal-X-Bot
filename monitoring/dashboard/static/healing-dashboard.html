@@ -911,6 +911,7 @@
             <button class="tab" onclick="switchTab('predictive')">🔮 Predictive Maintenance</button>
             <button class="tab" onclick="switchTab('alerts')">🔔 Alerts</button>
             <button class="tab" onclick="switchTab('cli')">⚡ CLI Terminal</button>
+            <button class="tab" onclick="switchTab('auto-healing')">🤖 Autonomous Self-Healing</button>
             <button class="tab" onclick="switchTab('cloud-sim')">☁️ Cloud Simulation</button>
         </div>
 
@@ -1638,6 +1639,202 @@
             </div>
         </div>
 
+        <!-- Autonomous Self-Healing System Tab -->
+        <div id="auto-healing" class="tab-content">
+            <h2 style="margin-bottom: 1.5rem;">🤖 Autonomous Self-Healing System</h2>
+            
+            <!-- System Status Overview -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="card">
+                    <h3 style="margin-top: 0; font-size: 1rem;">System Status</h3>
+                    <div id="autoHealingStatus" style="font-size: 2rem; font-weight: bold; color: var(--accent-green);">
+                        <i class="fas fa-circle-notch fa-spin"></i> Loading...
+                    </div>
+                    <small style="color: var(--text-secondary);">Auto-healing system status</small>
+                </div>
+                <div class="card">
+                    <h3 style="margin-top: 0; font-size: 1rem;">Total Healings</h3>
+                    <div id="totalHealings" style="font-size: 2rem; font-weight: bold; color: var(--accent-blue);">0</div>
+                    <small style="color: var(--text-secondary);">Successful healing actions</small>
+                </div>
+                <div class="card">
+                    <h3 style="margin-top: 0; font-size: 1rem;">Success Rate</h3>
+                    <div id="healingSuccessRate" style="font-size: 2rem; font-weight: bold; color: var(--accent-green);">0%</div>
+                    <small style="color: var(--text-secondary);">Healing success percentage</small>
+                </div>
+                <div class="card">
+                    <h3 style="margin-top: 0; font-size: 1rem;">Active Monitoring</h3>
+                    <div id="monitoringStatus" style="font-size: 2rem; font-weight: bold; color: var(--accent-purple);">
+                        <i class="fas fa-check-circle"></i> Active
+                    </div>
+                    <small style="color: var(--text-secondary);">Real-time fault detection</small>
+                </div>
+            </div>
+
+            <!-- Healing Statistics & Performance -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Healing Statistics -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">📊 Healing Statistics</h3>
+                    <div id="healingStatsDetails" style="margin-bottom: 1rem;">
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            <span>Total Attempts:</span>
+                            <strong id="statsTotalAttempts">0</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            <span>Successful:</span>
+                            <strong style="color: var(--accent-green);" id="statsSuccessful">0</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            <span>Failed:</span>
+                            <strong style="color: var(--accent-red);" id="statsFailed">0</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            <span>In Progress:</span>
+                            <strong style="color: var(--accent-yellow);" id="statsInProgress">0</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem;">
+                            <span>Average Response Time:</span>
+                            <strong id="statsAvgResponseTime">0s</strong>
+                        </div>
+                    </div>
+                    <div style="position: relative; height: 200px;">
+                        <canvas id="healingPerformanceChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Recent Healing Actions -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">⚡ Recent Healing Actions</h3>
+                    <div id="recentHealingActions" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
+                        <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                            <i class="fas fa-spinner fa-spin"></i> Loading healing actions...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Healing History Timeline -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-top: 0;">📜 Healing History Timeline</h3>
+                <div style="margin-bottom: 1rem;">
+                    <label style="margin-right: 1rem;">Filter:</label>
+                    <select id="healingHistoryFilter" class="search-input" onchange="updateHealingHistory()" style="display: inline-block; width: auto;">
+                        <option value="all">All Actions</option>
+                        <option value="success">Successful Only</option>
+                        <option value="failed">Failed Only</option>
+                        <option value="in_progress">In Progress</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="refreshHealingHistory()" style="margin-left: 1rem;">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div id="healingHistoryTimeline" class="log-container scrollbar" style="max-height: 500px; overflow-y: auto;">
+                    <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                        <i class="fas fa-spinner fa-spin"></i> Loading healing history...
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Health & Auto-Healing Configuration -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- System Health Status -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">🏥 System Health Status</h3>
+                    <div id="systemHealthStatus">
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--accent-green); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Container Health:</strong></span>
+                                <span class="status-badge healthy" id="containerHealth">Healthy</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--accent-green); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Resource Usage:</strong></span>
+                                <span class="status-badge healthy" id="resourceHealth">Normal</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--accent-green); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Network Connectivity:</strong></span>
+                                <span class="status-badge healthy" id="networkHealth">Connected</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--accent-green); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>AI Diagnosis:</strong></span>
+                                <span class="status-badge healthy" id="aiHealth">Active</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Auto-Healing Configuration -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">⚙️ Auto-Healing Configuration</h3>
+                    <div id="autoHealingConfig">
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--accent-blue); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Monitoring Interval:</strong></span>
+                                <span id="monitoringInterval">30s</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--accent-blue); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Auto-Healing:</strong></span>
+                                <span class="status-badge healthy" id="autoHealingEnabled">Enabled</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--accent-blue); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>AI Diagnosis:</strong></span>
+                                <span class="status-badge healthy" id="aiDiagnosisEnabled">Active</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--accent-blue); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Discord Notifications:</strong></span>
+                                <span class="status-badge" id="discordNotificationsStatus">Configured</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Faults & Healing Queue -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Active Faults -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">🚨 Active Faults</h3>
+                    <div id="activeFaultsList" class="log-container scrollbar" style="max-height: 300px; overflow-y: auto;">
+                        <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                            No active faults detected
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Healing Queue -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">📋 Healing Queue</h3>
+                    <div id="healingQueue" class="log-container scrollbar" style="max-height: 300px; overflow-y: auto;">
+                        <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                            No items in healing queue
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manual Healing Instructions -->
+            <div class="card">
+                <h3 style="margin-top: 0;">📖 Manual Healing Instructions</h3>
+                <div id="manualHealingInstructionsAuto" class="log-container scrollbar" style="max-height: 300px; overflow-y: auto; background: rgba(251, 191, 36, 0.1); padding: 1rem; border-radius: 8px;">
+                    <div style="color: var(--text-secondary); padding: 1rem;">
+                        Manual instructions will appear here when auto-healing fails or requires human intervention.
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Cloud Simulation Tab -->
         <div id="cloud-sim" class="tab-content">
             <h2 style="margin-bottom: 1.5rem;">☁️ Cloud Simulation - Autonomous Self-Healing</h2>
@@ -2129,6 +2326,10 @@
         }
         
         function switchTab(tabName) {
+            // Refresh auto-healing dashboard when tab is switched to
+            if (tabName === 'auto-healing') {
+                updateAutoHealingDashboard();
+            }
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             
@@ -5464,6 +5665,297 @@
             }
         }
         
+        // ============================================================================
+        // Autonomous Self-Healing System Functions
+        // ============================================================================
+        
+        let healingPerformanceChart = null;
+        
+        async function updateAutoHealingDashboard() {
+            try {
+                // Fetch healing history and statistics
+                const response = await fetch('/api/cloud/healing/history?limit=50');
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateAutoHealingStatus(data.statistics);
+                    updateHealingStatistics(data.statistics);
+                    updateRecentHealingActions(data.history);
+                    updateHealingHistoryTimeline(data.history);
+                    updateActiveFaults();
+                    updateHealingPerformanceChart(data.history);
+                }
+            } catch (error) {
+                console.error('Error updating auto-healing dashboard:', error);
+            }
+        }
+        
+        function updateAutoHealingStatus(stats) {
+            if (!stats) return;
+            
+            // Update status badge
+            const statusEl = document.getElementById('autoHealingStatus');
+            if (statusEl) {
+                statusEl.innerHTML = '<i class="fas fa-check-circle"></i> Active';
+                statusEl.style.color = 'var(--accent-green)';
+            }
+            
+            // Update total healings
+            const totalEl = document.getElementById('totalHealings');
+            if (totalEl && stats.total_healings) {
+                totalEl.textContent = stats.total_healings || 0;
+            }
+            
+            // Update success rate
+            const successRateEl = document.getElementById('healingSuccessRate');
+            if (successRateEl && stats.success_rate !== undefined) {
+                const rate = (stats.success_rate * 100).toFixed(1);
+                successRateEl.textContent = `${rate}%`;
+                successRateEl.style.color = rate >= 80 ? 'var(--accent-green)' : rate >= 50 ? 'var(--accent-yellow)' : 'var(--accent-red)';
+            }
+        }
+        
+        function updateHealingStatistics(stats) {
+            if (!stats) return;
+            
+            const elements = {
+                'statsTotalAttempts': stats.total_attempts || 0,
+                'statsSuccessful': stats.successful || 0,
+                'statsFailed': stats.failed || 0,
+                'statsInProgress': stats.in_progress || 0,
+                'statsAvgResponseTime': stats.avg_response_time ? `${stats.avg_response_time.toFixed(1)}s` : '0s'
+            };
+            
+            for (const [id, value] of Object.entries(elements)) {
+                const el = document.getElementById(id);
+                if (el) el.textContent = value;
+            }
+        }
+        
+        function updateRecentHealingActions(history) {
+            const container = document.getElementById('recentHealingActions');
+            if (!container) return;
+            
+            if (!history || history.length === 0) {
+                container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No recent healing actions</div>';
+                return;
+            }
+            
+            const recent = history.slice(0, 10);
+            container.innerHTML = recent.map(entry => {
+                const statusIcon = entry.status === 'healed' ? '✅' : entry.status === 'failed' ? '❌' : '⏳';
+                const statusColor = entry.status === 'healed' ? 'var(--accent-green)' : entry.status === 'failed' ? 'var(--accent-red)' : 'var(--accent-yellow)';
+                const service = entry.error?.service || entry.error?.resource || 'Unknown';
+                
+                return `
+                    <div class="log-entry" style="padding: 1rem; margin-bottom: 0.5rem; border-left: 4px solid ${statusColor}; background: rgba(0,0,0,0.2);">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                            <div>
+                                <strong style="color: ${statusColor};">${statusIcon} ${entry.status.toUpperCase()}</strong>
+                                <div style="margin-top: 0.25rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                    ${service} - ${entry.error?.type?.replace('_', ' ') || 'Unknown fault'}
+                                </div>
+                            </div>
+                            <span style="color: var(--text-secondary); font-size: 0.85rem;">
+                                ${new Date(entry.timestamp).toLocaleTimeString()}
+                            </span>
+                        </div>
+                        ${entry.analysis?.quick_fix ? `
+                            <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 4px; font-size: 0.85rem;">
+                                <strong>AI Analysis:</strong> ${entry.analysis.quick_fix.substring(0, 100)}${entry.analysis.quick_fix.length > 100 ? '...' : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateHealingHistoryTimeline(history) {
+            const container = document.getElementById('healingHistoryTimeline');
+            if (!container) return;
+            
+            const filter = document.getElementById('healingHistoryFilter')?.value || 'all';
+            let filteredHistory = history || [];
+            
+            if (filter !== 'all') {
+                filteredHistory = filteredHistory.filter(entry => {
+                    if (filter === 'success') return entry.status === 'healed';
+                    if (filter === 'failed') return entry.status === 'failed';
+                    if (filter === 'in_progress') return entry.status === 'in_progress';
+                    return true;
+                });
+            }
+            
+            if (filteredHistory.length === 0) {
+                container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No healing history found</div>';
+                return;
+            }
+            
+            container.innerHTML = filteredHistory.map(entry => {
+                const statusIcon = entry.status === 'healed' ? '✅' : entry.status === 'failed' ? '❌' : '⏳';
+                const statusColor = entry.status === 'healed' ? 'var(--accent-green)' : entry.status === 'failed' ? 'var(--accent-red)' : 'var(--accent-yellow)';
+                const service = entry.error?.service || entry.error?.resource || 'Unknown';
+                
+                return `
+                    <div class="log-entry" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${statusColor}; background: rgba(0,0,0,0.2);">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                    <strong style="color: ${statusColor}; font-size: 1.1rem;">${statusIcon} ${entry.status.toUpperCase()}</strong>
+                                    <span style="color: var(--text-secondary); font-size: 0.85rem;">${new Date(entry.timestamp).toLocaleString()}</span>
+                                </div>
+                                <div style="margin-bottom: 0.5rem;">
+                                    <strong>Service/Resource:</strong> ${service}
+                                </div>
+                                <div style="margin-bottom: 0.5rem; color: var(--text-secondary);">
+                                    <strong>Fault Type:</strong> ${entry.error?.type?.replace('_', ' ').toUpperCase() || 'Unknown'}
+                                </div>
+                                ${entry.error?.reason ? `
+                                    <div style="margin-bottom: 0.5rem; color: var(--text-secondary);">
+                                        <strong>Reason:</strong> ${entry.error.reason}
+                                    </div>
+                                ` : ''}
+                                ${entry.analysis?.root_cause ? `
+                                    <div style="margin-top: 0.5rem; padding: 0.75rem; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
+                                        <strong>🧠 AI Root Cause:</strong> ${entry.analysis.root_cause}
+                                    </div>
+                                ` : ''}
+                                ${entry.actions && entry.actions.length > 0 ? `
+                                    <div style="margin-top: 0.5rem;">
+                                        <strong>Actions Taken:</strong>
+                                        <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                                            ${entry.actions.map(action => `
+                                                <li style="margin: 0.25rem 0;">
+                                                    ${action.success ? '✅' : '❌'} ${action.action?.description || 'Unknown action'}
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                    </div>
+                                ` : ''}
+                                ${entry.verification ? `
+                                    <div style="margin-top: 0.5rem; padding: 0.5rem; background: ${entry.verification.success ? 'rgba(52, 211, 153, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; border-radius: 4px;">
+                                        <strong>Verification:</strong> ${entry.verification.success ? '✅' : '❌'} ${entry.verification.details || 'N/A'}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateActiveFaults() {
+            fetch('/api/cloud/faults?limit=10')
+                .then(res => res.json())
+                .then(data => {
+                    const container = document.getElementById('activeFaultsList');
+                    if (!container) return;
+                    
+                    if (!data.success || !data.faults || data.faults.length === 0) {
+                        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No active faults detected</div>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.faults.map(fault => {
+                        const severityColor = fault.severity === 'critical' ? 'var(--accent-red)' : 'var(--accent-yellow)';
+                        return `
+                            <div class="log-entry" style="padding: 0.75rem; margin-bottom: 0.5rem; border-left: 4px solid ${severityColor}; background: rgba(0,0,0,0.2);">
+                                <div style="display: flex; justify-content: space-between; align-items: start;">
+                                    <div>
+                                        <strong style="color: ${severityColor};">${fault.type.replace('_', ' ').toUpperCase()}</strong>
+                                        <div style="margin-top: 0.25rem; color: var(--text-secondary); font-size: 0.85rem;">
+                                            ${fault.service || fault.resource || 'Unknown'}
+                                        </div>
+                                        <div style="margin-top: 0.25rem; color: var(--text-secondary); font-size: 0.85rem;">
+                                            ${fault.reason}
+                                        </div>
+                                    </div>
+                                    <span style="color: var(--text-secondary); font-size: 0.75rem;">
+                                        ${new Date(fault.timestamp).toLocaleTimeString()}
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                })
+                .catch(err => console.error('Error fetching active faults:', err));
+        }
+        
+        function updateHealingPerformanceChart(history) {
+            const canvas = document.getElementById('healingPerformanceChart');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (healingPerformanceChart) {
+                healingPerformanceChart.destroy();
+            }
+            
+            if (!history || history.length === 0) {
+                return;
+            }
+            
+            // Prepare data for last 30 days or available data
+            const last30Days = history.slice(0, 30).reverse();
+            const labels = last30Days.map(entry => new Date(entry.timestamp).toLocaleDateString());
+            const successData = last30Days.map(entry => entry.status === 'healed' ? 1 : 0);
+            const failedData = last30Days.map(entry => entry.status === 'failed' ? 1 : 0);
+            
+            healingPerformanceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Successful',
+                            data: successData,
+                            borderColor: 'var(--accent-green)',
+                            backgroundColor: 'rgba(52, 211, 153, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Failed',
+                            data: failedData,
+                            borderColor: 'var(--accent-red)',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'var(--text-primary)' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: 'var(--text-secondary)' },
+                            grid: { color: 'var(--border-color)' }
+                        },
+                        x: {
+                            ticks: { color: 'var(--text-secondary)' },
+                            grid: { color: 'var(--border-color)' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function refreshHealingHistory() {
+            updateAutoHealingDashboard();
+            showNotification('Healing history refreshed', 'success');
+        }
+        
+        function updateHealingHistory() {
+            updateHealingHistoryTimeline([]); // Will be updated by updateAutoHealingDashboard
+            updateAutoHealingDashboard();
+        }
+        
         // Initialize on load
         window.addEventListener('load', function() {
             console.log('Dashboard loading...');
@@ -5483,6 +5975,10 @@
             // Initialize cloud simulation visualizations
             updateServiceStatus();
             updateResourceCharts();
+            
+            // Initialize autonomous self-healing dashboard
+            updateAutoHealingDashboard();
+            setInterval(updateAutoHealingDashboard, 10000); // Update every 10 seconds
             
             // Refresh cloud simulation data periodically
             setInterval(updateServiceStatus, 5000);

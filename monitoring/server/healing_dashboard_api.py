@@ -15,7 +15,7 @@ import time
 import os
 import sys
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Callable
 from collections import defaultdict, Counter
 import logging
 import re
@@ -1343,8 +1343,11 @@ async def monitoring_loop():
 
 @app.on_event("startup")
 async def startup_event():
-    """Start background tasks"""
+    """Start background tasks and initialize cloud components"""
     asyncio.create_task(monitoring_loop())
+    
+    # Initialize cloud simulation components
+    initialize_cloud_components()
     
     # Initialize with some sample DDoS data if empty
     if ddos_statistics['total_detections'] == 0:
@@ -3324,6 +3327,297 @@ async def get_ip_details(ip_address: str):
             return {"success": False, "error": "IP not found"}
     except Exception as e:
         logger.error(f"Error getting IP details: {e}")
+        return {"success": False, "error": str(e)}
+
+# ============================================================================
+# Cloud Simulation & Fault Detection API Endpoints
+# ============================================================================
+
+# Initialize cloud simulation components
+fault_detector = None
+fault_injector = None
+container_healer = None
+auto_healer = None
+root_cause_analyzer = None
+container_monitor = None
+resource_monitor = None
+
+def initialize_cloud_components():
+    """Initialize cloud simulation and fault detection components"""
+    global fault_detector, fault_injector, container_healer, auto_healer
+    global root_cause_analyzer, container_monitor, resource_monitor
+    
+    try:
+        from fault_detector import initialize_fault_detector
+        from fault_injector import initialize_fault_injector
+        from container_healer import initialize_container_healer
+        from auto_healer import initialize_auto_healer
+        from root_cause_analyzer import initialize_root_cause_analyzer
+        from container_monitor import ContainerMonitor
+        from resource_monitor import ResourceMonitor
+        
+        # Discord notifier function
+        def discord_notifier(message, severity="info", embed_data=None):
+            return send_discord_alert(message, severity, embed_data)
+        
+        # Event emitter for WebSocket (wrapper to make it callable from sync code)
+        def event_emitter(event):
+            # Schedule async broadcast in the event loop
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(broadcast_event(event))
+                else:
+                    asyncio.run(broadcast_event(event))
+            except RuntimeError:
+                # No event loop running, create a new one
+                asyncio.run(broadcast_event(event))
+        
+        # Initialize components
+        fault_detector = initialize_fault_detector(
+            discord_notifier=discord_notifier,
+            event_emitter=event_emitter
+        )
+        fault_detector.start_monitoring(interval=30)
+        
+        fault_injector = initialize_fault_injector()
+        container_healer = initialize_container_healer(
+            discord_notifier=discord_notifier,
+            event_emitter=event_emitter
+        )
+        
+        root_cause_analyzer = initialize_root_cause_analyzer(
+            gemini_analyzer=_gemini_analyzer
+        )
+        
+        auto_healer = initialize_auto_healer(
+            gemini_analyzer=_gemini_analyzer,
+            container_healer=container_healer,
+            root_cause_analyzer=root_cause_analyzer,
+            discord_notifier=discord_notifier,
+            event_emitter=event_emitter
+        )
+        auto_healer.start_monitoring(interval=60)
+        
+        container_monitor = ContainerMonitor()
+        resource_monitor = ResourceMonitor()
+        
+        logger.info("✅ Cloud simulation components initialized")
+    except Exception as e:
+        logger.error(f"Error initializing cloud components: {e}", exc_info=True)
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+    
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+    
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+    
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except:
+                pass
+
+manager = ConnectionManager()
+
+async def broadcast_event(event: dict):
+    """Broadcast event to all WebSocket connections"""
+    await manager.broadcast(event)
+
+# Cloud components will be initialized in the startup event handler
+
+@app.websocket("/ws/faults")
+async def websocket_faults(websocket: WebSocket):
+    """WebSocket endpoint for real-time fault and healing updates"""
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Send periodic updates
+            if fault_detector:
+                faults = fault_detector.get_detected_faults(limit=10)
+                stats = fault_detector.get_fault_statistics()
+                
+                await websocket.send_json({
+                    'type': 'faults_update',
+                    'faults': faults,
+                    'statistics': stats,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            if auto_healer:
+                history = auto_healer.get_healing_history(limit=10)
+                healing_stats = auto_healer.get_healing_statistics()
+                
+                await websocket.send_json({
+                    'type': 'healing_update',
+                    'history': history,
+                    'statistics': healing_stats,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            await asyncio.sleep(5)  # Update every 5 seconds
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+@app.get("/api/cloud/services/status")
+async def get_cloud_services_status():
+    """Get status of all cloud simulation services"""
+    try:
+        if not container_monitor:
+            return {"success": False, "error": "Container monitor not initialized"}
+        
+        services = container_monitor.get_all_containers_status()
+        return {
+            "success": True,
+            "services": services,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting cloud services status: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/cloud/faults")
+async def get_detected_faults(limit: int = 50):
+    """Get detected faults"""
+    try:
+        if not fault_detector:
+            return {"success": False, "error": "Fault detector not initialized"}
+        
+        faults = fault_detector.get_detected_faults(limit=limit)
+        stats = fault_detector.get_fault_statistics()
+        
+        return {
+            "success": True,
+            "faults": faults,
+            "statistics": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting detected faults: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/cloud/resources")
+async def get_resource_metrics():
+    """Get current resource metrics"""
+    try:
+        if not resource_monitor:
+            return {"success": False, "error": "Resource monitor not initialized"}
+        
+        resources = resource_monitor.get_all_resources()
+        anomalies = resource_monitor.detect_resource_anomalies()
+        
+        return {
+            "success": True,
+            "resources": resources,
+            "anomalies": anomalies,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting resource metrics: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/cloud/faults/inject")
+async def inject_fault(request: Request):
+    """Inject a fault for testing"""
+    try:
+        if not fault_injector:
+            return {"success": False, "error": "Fault injector not initialized"}
+        
+        data = await request.json()
+        fault_type = data.get('type', 'crash')
+        container = data.get('container', 'cloud-sim-api-server')
+        
+        if fault_type == 'crash':
+            success, message = fault_injector.inject_service_crash(container)
+        elif fault_type == 'cpu':
+            duration = data.get('duration', 60)
+            success, message = fault_injector.inject_cpu_exhaustion(duration)
+        elif fault_type == 'memory':
+            size = data.get('size', 2.0)
+            success, message = fault_injector.inject_memory_exhaustion(size)
+        elif fault_type == 'disk':
+            size = data.get('size', 5.0)
+            success, message = fault_injector.inject_disk_full(size)
+        elif fault_type == 'network':
+            port = data.get('port')
+            success, message = fault_injector.inject_network_issue(container, port)
+        else:
+            return {"success": False, "error": f"Unknown fault type: {fault_type}"}
+        
+        return {
+            "success": success,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error injecting fault: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/cloud/healing/history")
+async def get_healing_history(limit: int = 50):
+    """Get healing history"""
+    try:
+        if not auto_healer:
+            return {"success": False, "error": "Auto-healer not initialized"}
+        
+        history = auto_healer.get_healing_history(limit=limit)
+        stats = auto_healer.get_healing_statistics()
+        
+        return {
+            "success": True,
+            "history": history,
+            "statistics": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting healing history: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/cloud/faults/{fault_id}/heal")
+async def heal_fault(fault_id: int):
+    """Manually trigger healing for a specific fault"""
+    try:
+        if not auto_healer or not fault_detector:
+            return {"success": False, "error": "Auto-healer or fault detector not initialized"}
+        
+        faults = fault_detector.get_detected_faults(limit=100)
+        if fault_id < len(faults):
+            fault = faults[fault_id]
+            result = auto_healer.heal_cloud_fault(fault)
+            return {
+                "success": True,
+                "healing_result": result,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {"success": False, "error": "Fault not found"}
+    except Exception as e:
+        logger.error(f"Error healing fault: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/cloud/faults/cleanup")
+async def cleanup_injected_faults():
+    """Clean up all injected faults"""
+    try:
+        if not fault_injector:
+            return {"success": False, "error": "Fault injector not initialized"}
+        
+        success, message = fault_injector.cleanup_injected_faults()
+        return {
+            "success": success,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up faults: {e}")
         return {"success": False, "error": str(e)}
 
 if __name__ == "__main__":

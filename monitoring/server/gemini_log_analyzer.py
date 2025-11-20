@@ -168,6 +168,226 @@ class GeminiLogAnalyzer:
                 'message': str(e)
             }
     
+    def analyze_cloud_fault(self, fault: Dict[str, Any], 
+                           container_logs: List[str] = None,
+                           system_metrics: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Analyze cloud-specific faults (service crashes, resource exhaustion, network issues)
+        
+        Args:
+            fault: Fault information dictionary
+            container_logs: Optional container logs
+            system_metrics: Optional system metrics
+            
+        Returns:
+            AI analysis of the fault
+        """
+        if not self.api_key or not self.model:
+            return {
+                'status': 'error',
+                'message': 'Gemini API key not configured'
+            }
+        
+        fault_type = fault.get('type', 'unknown')
+        service = fault.get('service', 'unknown')
+        
+        # Create specialized prompt based on fault type
+        if fault_type == 'service_crash':
+            prompt = self._create_service_crash_prompt(fault, container_logs, system_metrics)
+        elif fault_type in ['cpu_exhaustion', 'memory_exhaustion', 'disk_full']:
+            prompt = self._create_resource_exhaustion_prompt(fault, system_metrics)
+        elif fault_type == 'network_issue':
+            prompt = self._create_network_issue_prompt(fault, system_metrics)
+        else:
+            prompt = self._create_generic_fault_prompt(fault)
+        
+        try:
+            response = self._call_gemini_api(prompt)
+            
+            if response.get('status') == 'success':
+                return {
+                    'status': 'success',
+                    'fault_type': fault_type,
+                    'service': service,
+                    'timestamp': datetime.now().isoformat(),
+                    'analysis': {
+                        'root_cause': self._extract_root_cause(response['text']),
+                        'why': self._extract_why_section(response['text']),
+                        'solution': self._extract_solution(response['text']),
+                        'prevention': self._extract_prevention(response['text']),
+                        'confidence': self._estimate_confidence(response['text']),
+                        'full_analysis': response['text']
+                    }
+                }
+            else:
+                return response
+        except Exception as e:
+            logger.error(f"Error analyzing cloud fault: {e}")
+            return {
+                'status': 'error',
+                'message': str(e)
+            }
+    
+    def _create_service_crash_prompt(self, fault: Dict[str, Any], 
+                                     container_logs: List[str] = None,
+                                     system_metrics: Dict[str, Any] = None) -> str:
+        """Create prompt for service crash analysis"""
+        service = fault.get('service', 'unknown')
+        status = fault.get('status', 'unknown')
+        restart_count = fault.get('restart_count', 0)
+        
+        logs_summary = "No logs available"
+        if container_logs:
+            recent_logs = '\n'.join(container_logs[-10:])
+            logs_summary = f"Recent logs:\n{recent_logs}"
+        
+        metrics_summary = "No metrics available"
+        if system_metrics:
+            cpu = system_metrics.get('cpu', {}).get('cpu_percent', 0)
+            memory = system_metrics.get('memory', {}).get('memory_percent', 0)
+            metrics_summary = f"CPU: {cpu}%, Memory: {memory}%"
+        
+        return f"""
+You are an expert DevOps engineer analyzing a Docker container crash in a cloud environment.
+
+FAULT DETAILS:
+- Service: {service}
+- Status: {status}
+- Restart Count: {restart_count}
+- Timestamp: {fault.get('timestamp', '')}
+
+SYSTEM METRICS:
+{metrics_summary}
+
+CONTAINER LOGS:
+{logs_summary}
+
+Analyze this service crash and provide:
+
+🔍 ROOT CAUSE:
+[Identify the most likely cause of the crash - OOM kill, application error, resource exhaustion, etc.]
+
+💡 IMMEDIATE FIX:
+[2-3 concrete steps to recover the service]
+
+🛡️ PREVENTION:
+[How to prevent this from happening again]
+
+CONFIDENCE: [Rate your confidence 0-100%]
+
+Be specific and actionable. Focus on Docker container recovery.
+"""
+    
+    def _create_resource_exhaustion_prompt(self, fault: Dict[str, Any],
+                                           system_metrics: Dict[str, Any] = None) -> str:
+        """Create prompt for resource exhaustion analysis"""
+        fault_type = fault.get('type', 'unknown')
+        value = fault.get('value', 0)
+        threshold = fault.get('threshold', 0)
+        
+        metrics_summary = "No detailed metrics available"
+        if system_metrics:
+            if fault_type == 'cpu_exhaustion':
+                cpu = system_metrics.get('cpu', {})
+                metrics_summary = f"CPU Usage: {cpu.get('cpu_percent', 0)}%\nCPU Cores: {cpu.get('cpu_count', 0)}"
+            elif fault_type == 'memory_exhaustion':
+                memory = system_metrics.get('memory', {})
+                metrics_summary = f"Memory Usage: {memory.get('memory_percent', 0)}%\nAvailable: {memory.get('memory_available_gb', 0)} GB"
+            elif fault_type == 'disk_full':
+                disk = system_metrics.get('disk', {})
+                metrics_summary = f"Disk Usage: {disk.get('disk_percent', 0)}%\nFree Space: {disk.get('disk_free_gb', 0)} GB"
+        
+        return f"""
+You are an expert system administrator analyzing resource exhaustion in a cloud environment.
+
+FAULT TYPE: {fault_type}
+Current Usage: {value}%
+Threshold: {threshold}%
+
+SYSTEM METRICS:
+{metrics_summary}
+
+Analyze this resource exhaustion and provide:
+
+🔍 ROOT CAUSE:
+[Why is this resource exhausted? Identify the cause - memory leak, too many processes, disk full, etc.]
+
+💡 IMMEDIATE FIX:
+[2-3 concrete steps to free up resources immediately]
+
+🛡️ PREVENTION:
+[How to prevent resource exhaustion in the future]
+
+CONFIDENCE: [Rate your confidence 0-100%]
+
+Be specific and actionable. Focus on immediate recovery.
+"""
+    
+    def _create_network_issue_prompt(self, fault: Dict[str, Any],
+                                     system_metrics: Dict[str, Any] = None) -> str:
+        """Create prompt for network issue analysis"""
+        service = fault.get('service', 'unknown')
+        port = fault.get('port', 0)
+        
+        return f"""
+You are an expert network engineer analyzing connectivity issues in a cloud environment.
+
+NETWORK FAULT:
+- Service: {service}
+- Port: {port}
+- Issue: Service not reachable
+
+Analyze this network connectivity issue and provide:
+
+🔍 ROOT CAUSE:
+[Why is the service not reachable? Container down, firewall blocking, port conflict, etc.]
+
+💡 IMMEDIATE FIX:
+[2-3 concrete steps to restore connectivity]
+
+🛡️ PREVENTION:
+[How to prevent network issues in the future]
+
+CONFIDENCE: [Rate your confidence 0-100%]
+
+Be specific and actionable. Focus on Docker networking.
+"""
+    
+    def _create_generic_fault_prompt(self, fault: Dict[str, Any]) -> str:
+        """Create prompt for generic fault analysis"""
+        return f"""
+You are an expert system administrator analyzing a system fault.
+
+FAULT DETAILS:
+{json.dumps(fault, indent=2)}
+
+Analyze this fault and provide:
+
+🔍 ROOT CAUSE:
+[Identify the root cause]
+
+💡 IMMEDIATE FIX:
+[2-3 concrete steps to resolve]
+
+🛡️ PREVENTION:
+[How to prevent this in the future]
+
+CONFIDENCE: [Rate your confidence 0-100%]
+"""
+    
+    def _estimate_confidence(self, analysis_text: str) -> float:
+        """Estimate confidence from analysis text"""
+        # Look for confidence percentage in text
+        import re
+        confidence_match = re.search(r'CONFIDENCE:\s*(\d+)%', analysis_text, re.IGNORECASE)
+        if confidence_match:
+            return float(confidence_match.group(1)) / 100.0
+        
+        # Default confidence based on analysis quality
+        if len(analysis_text) > 200:
+            return 0.75
+        return 0.5
+    
     def analyze_service_health(self, service_name: str, 
                               logs: List[Dict[str, Any]]) -> Dict[str, Any]:
         """

@@ -882,19 +882,70 @@ def initialize_services():
         print("✅ Critical services monitor initialized")
         print("   📊 Monitoring critical services: Docker, systemd-journald, dbus, cron, etc.")
         
-        # Initialize AI-powered auto-healer
-        global auto_healer
-        auto_healer = initialize_auto_healer(
-            gemini_analyzer=gemini_analyzer,
-            system_log_collector=system_log_collector,
-            critical_services_monitor=critical_services_monitor
-        )
-        print("✅ AI-powered auto-healer initialized")
-        print("   🤖 Auto-healing enabled: System will automatically fix detected errors")
-        
-        # Start auto-healing monitoring (check every 60 seconds)
-        auto_healer.start_monitoring(interval_seconds=60)
-        print("   ⚡ Auto-healing monitoring started (60s interval)")
+        # Initialize cloud simulation components
+        try:
+            from container_healer import initialize_container_healer
+            from root_cause_analyzer import initialize_root_cause_analyzer
+            from fault_detector import initialize_fault_detector
+            
+            # Discord notifier function (simple implementation for app.py)
+            def discord_notifier(message, severity="info", embed_data=None):
+                # Simple Discord notification - can be enhanced
+                try:
+                    import requests
+                    discord_webhook = os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL", "")
+                    if discord_webhook:
+                        payload = {"content": message}
+                        if embed_data:
+                            payload["embeds"] = [embed_data]
+                        requests.post(discord_webhook, json=payload, timeout=10)
+                except:
+                    pass  # Fail silently if Discord not configured
+            
+            # Initialize container healer
+            container_healer = initialize_container_healer(
+                discord_notifier=discord_notifier
+            )
+            
+            # Initialize root cause analyzer
+            root_cause_analyzer = initialize_root_cause_analyzer(
+                gemini_analyzer=gemini_analyzer
+            )
+            
+            # Initialize fault detector
+            fault_detector = initialize_fault_detector(
+                discord_notifier=discord_notifier
+            )
+            fault_detector.start_monitoring(interval=30)
+            print("✅ Cloud fault detector initialized and started")
+            
+            # Initialize AI-powered auto-healer with cloud capabilities
+            global auto_healer
+            auto_healer = initialize_auto_healer(
+                gemini_analyzer=gemini_analyzer,
+                system_log_collector=system_log_collector,
+                critical_services_monitor=critical_services_monitor,
+                container_healer=container_healer,
+                root_cause_analyzer=root_cause_analyzer,
+                discord_notifier=discord_notifier
+            )
+            print("✅ AI-powered auto-healer initialized with cloud healing")
+            print("   🤖 Auto-healing enabled: System will automatically fix detected errors")
+            
+            # Start auto-healing monitoring (check every 60 seconds)
+            auto_healer.start_monitoring(interval_seconds=60)
+            print("   ⚡ Auto-healing monitoring started (60s interval)")
+        except Exception as e:
+            print(f"⚠️  Cloud simulation components not available: {e}")
+            # Fallback to basic auto-healer
+            global auto_healer
+            auto_healer = initialize_auto_healer(
+                gemini_analyzer=gemini_analyzer,
+                system_log_collector=system_log_collector,
+                critical_services_monitor=critical_services_monitor
+            )
+            print("✅ Basic AI-powered auto-healer initialized")
+            auto_healer.start_monitoring(interval_seconds=60)
         
         print(f"\n📊 Active Services:")
         print(f"   - gemini_analyzer: {gemini_analyzer is not None} (AI analysis)")

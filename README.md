@@ -92,7 +92,7 @@ scripts\deployment\start-healing-bot.bat
 
 **Direct Python:**
 ```bash
-python run-healing-bot.py
+python3 run-healing-bot.py
 ```
 
 **With Virtual Environment:**

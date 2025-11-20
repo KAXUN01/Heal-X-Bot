@@ -29,10 +29,15 @@ class AutoHealer:
     """
     
     def __init__(self, gemini_analyzer=None, system_log_collector=None, 
-                 critical_services_monitor=None):
+                 critical_services_monitor=None, container_healer=None,
+                 root_cause_analyzer=None, discord_notifier=None, event_emitter=None):
         self.gemini_analyzer = gemini_analyzer
         self.system_log_collector = system_log_collector
         self.critical_services_monitor = critical_services_monitor
+        self.container_healer = container_healer
+        self.root_cause_analyzer = root_cause_analyzer
+        self.discord_notifier = discord_notifier
+        self.event_emitter = event_emitter
         
         # Healing configuration
         self.enabled = True
@@ -53,13 +58,19 @@ class AutoHealer:
             'restart_network': self._restart_network,
             'reload_config': self._reload_config,
             'kill_zombie_process': self._kill_zombie_process,
+            # Cloud-specific healing actions
+            'restart_container': self._restart_container,
+            'start_container': self._start_container,
+            'recreate_container': self._recreate_container,
+            'cleanup_resources': self._cleanup_resources,
+            'restore_network': self._restore_network,
         }
         
         # Monitoring thread
         self.monitoring_thread = None
         self.running = False
         
-        logger.info("Auto-Healer initialized")
+        logger.info("Auto-Healer initialized with cloud healing capabilities")
     
     def start_monitoring(self, interval_seconds: int = 60):
         """Start automatic error monitoring and healing"""
@@ -499,6 +510,658 @@ class AutoHealer:
         except Exception as e:
             return False, f"Error checking zombies: {str(e)}"
     
+    # Cloud-specific healing actions
+    
+    def _restart_container(self, cmd_info: Dict[str, Any]) -> Tuple[bool, str]:
+        """Restart a Docker container"""
+        container_name = cmd_info.get('container', '')
+        if not container_name:
+            return False, "Container name not provided"
+        
+        if self.container_healer:
+            success, message = self.container_healer.restart_container(container_name)
+            if success and self.discord_notifier:
+                self._send_healing_discord_notification(container_name, 'restart', True, message)
+            return success, message
+        else:
+            return False, "Container healer not available"
+    
+    def _start_container(self, cmd_info: Dict[str, Any]) -> Tuple[bool, str]:
+        """Start a Docker container"""
+        container_name = cmd_info.get('container', '')
+        if not container_name:
+            return False, "Container name not provided"
+        
+        if self.container_healer:
+            success, message = self.container_healer.start_container(container_name)
+            if success and self.discord_notifier:
+                self._send_healing_discord_notification(container_name, 'start', True, message)
+            return success, message
+        else:
+            return False, "Container healer not available"
+    
+    def _recreate_container(self, cmd_info: Dict[str, Any]) -> Tuple[bool, str]:
+        """Recreate a Docker container"""
+        container_name = cmd_info.get('container', '')
+        if not container_name:
+            return False, "Container name not provided"
+        
+        if self.container_healer:
+            success, message = self.container_healer.recreate_container(container_name)
+            if success and self.discord_notifier:
+                self._send_healing_discord_notification(container_name, 'recreate', True, message)
+            return success, message
+        else:
+            return False, "Container healer not available"
+    
+    def _cleanup_resources(self, cmd_info: Dict[str, Any]) -> Tuple[bool, str]:
+        """Clean up system resources (kill resource hogs, clear caches)"""
+        try:
+            import psutil
+            cleaned = []
+            
+            # Kill high CPU processes
+            for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
+                try:
+                    cpu = proc.info['cpu_percent'] or 0
+                    mem = proc.info['memory_percent'] or 0
+                    
+                    # Kill processes using > 80% CPU or > 50% memory (excluding system processes)
+                    if (cpu > 80 or mem > 50) and proc.info['name'] not in ['systemd', 'kernel', 'dockerd']:
+                        proc.kill()
+                        cleaned.append(f"Killed {proc.info['name']} (PID: {proc.info['pid']}, CPU: {cpu}%, Mem: {mem}%)")
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            
+            # Clear system cache
+            try:
+                subprocess.run(['sudo', 'sync'], timeout=10, check=False)
+                subprocess.run(['sudo', 'sh', '-c', 'echo 3 > /proc/sys/vm/drop_caches'], 
+                             timeout=10, check=False)
+                cleaned.append('System cache cleared')
+            except:
+                pass
+            
+            if cleaned:
+                message = f"Resource cleanup: {', '.join(cleaned)}"
+                logger.info(f"✅ {message}")
+                return True, message
+            else:
+                return True, "No resource cleanup needed"
+                
+        except Exception as e:
+            return False, f"Error cleaning up resources: {str(e)}"
+    
+    def _restore_network(self, cmd_info: Dict[str, Any]) -> Tuple[bool, str]:
+        """Restore network connectivity"""
+        try:
+            # Restart network services
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'restart', 'systemd-resolved'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                message = "Network services restarted"
+                logger.info(f"✅ {message}")
+                return True, message
+            else:
+                return False, f"Failed to restart network: {result.stderr}"
+        except Exception as e:
+            return False, f"Error restoring network: {str(e)}"
+    
+    def _send_healing_discord_notification(self, container_name: str, action: str,
+                                          success: bool, message: str):
+        """Send Discord notification for healing action"""
+        if not self.discord_notifier:
+            return
+        
+        try:
+            status_emoji = "✅" if success else "❌"
+            status_text = "Success" if success else "Failed"
+            
+            embed_data = {
+                'title': f'{status_emoji} Auto-Healing: {action}',
+                'description': f"**Container:** {container_name}\n**Action:** {action}\n**Status:** {status_text}",
+                'color': 3066993 if success else 15158332,
+                'fields': [
+                    {
+                        'name': 'Message',
+                        'value': message,
+                        'inline': False
+                    },
+                    {
+                        'name': 'Timestamp',
+                        'value': datetime.now().isoformat(),
+                        'inline': False
+                    }
+                ],
+                'footer': {
+                    'text': 'Healing Bot - Auto-Recovery System'
+                }
+            }
+            
+            self.discord_notifier(
+                f"{status_emoji} Auto-Healing {action}: {container_name}",
+                'success' if success else 'error',
+                embed_data
+            )
+        except Exception as e:
+            logger.error(f"Error sending healing Discord notification: {e}")
+    
+    def heal_cloud_fault(self, fault: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Heal a cloud-specific fault (service crash, resource exhaustion, network issue)
+        
+        Args:
+            fault: Fault information dictionary
+            
+        Returns:
+            Healing result dictionary
+        """
+        start_time = datetime.now()
+        fault_type = fault.get('type', 'unknown')
+        service = fault.get('service', 'unknown')
+        
+        # Enhanced logging with step-by-step explanation
+        logger.info("="*70)
+        logger.info(f"🔧 ATTEMPTING TO HEAL CLOUD FAULT")
+        logger.info("="*70)
+        logger.info(f"Fault Type: {fault_type}")
+        logger.info(f"Service: {service}")
+        logger.info(f"Timestamp: {start_time.isoformat()}")
+        logger.info("="*70)
+        
+        print(f"\n{'='*70}")
+        print(f"🔧 HEALING PROCESS STARTED")
+        print(f"{'='*70}")
+        print(f"Fault: {fault_type.upper()}")
+        print(f"Service: {service}")
+        print(f"{'='*70}\n")
+        
+        healing_result = {
+            'timestamp': start_time.isoformat(),
+            'fault': fault,
+            'fault_type': fault_type,
+            'status': 'failed',
+            'analysis': None,
+            'actions': [],
+            'success': False,
+            'manual_instructions': None,
+            'error_message': None
+        }
+        
+        try:
+            # Step 1: Root cause analysis
+            if self.root_cause_analyzer:
+                analysis = self.root_cause_analyzer.analyze_fault(fault)
+                healing_result['analysis'] = analysis
+                root_cause = analysis.get('root_cause', 'Unknown')
+                confidence = analysis.get('confidence', 0.0)
+                
+                logger.info(f"📊 STEP 1: ROOT CAUSE ANALYSIS")
+                logger.info(f"   Root Cause: {root_cause}")
+                logger.info(f"   Confidence: {confidence:.0%}")
+                logger.info(f"   Classification: {analysis.get('fault_classification', 'Unknown')}")
+                
+                print(f"📊 Root Cause Analysis:")
+                print(f"   Cause: {root_cause}")
+                print(f"   Confidence: {confidence:.0%}")
+                if analysis.get('recommended_actions'):
+                    print(f"   Recommended Actions: {len(analysis.get('recommended_actions', []))} actions identified")
+                
+                # Send Discord notification for healing attempt
+                if self.discord_notifier:
+                    self._send_healing_attempt_discord_notification(fault, analysis)
+            else:
+                analysis = None
+                root_cause = 'Analysis not available'
+                confidence = 0.5
+            
+            # Step 2: Determine healing action based on fault type
+            logger.info(f"📋 STEP 2: DETERMINING HEALING ACTION")
+            print(f"📋 Determining healing action for {fault_type}...")
+            healing_action = None
+            
+            if fault_type == 'service_crash':
+                # Try to restart the container
+                container_name = service if service.startswith('cloud-sim-') else f'cloud-sim-{service}'
+                healing_action = {
+                    'type': 'restart_container',
+                    'container': container_name,
+                    'description': f'Restart crashed container {container_name}'
+                }
+            elif fault_type == 'cpu_exhaustion':
+                healing_action = {
+                    'type': 'cleanup_resources',
+                    'description': 'Clean up CPU-intensive processes'
+                }
+            elif fault_type == 'memory_exhaustion':
+                healing_action = {
+                    'type': 'cleanup_resources',
+                    'description': 'Clean up memory-intensive processes and clear caches'
+                }
+            elif fault_type == 'disk_full':
+                healing_action = {
+                    'type': 'free_disk_space',
+                    'description': 'Free up disk space'
+                }
+            elif fault_type == 'network_issue':
+                healing_action = {
+                    'type': 'restore_network',
+                    'description': 'Restore network connectivity'
+                }
+            
+            # Step 3: Execute healing action
+            if healing_action and self.auto_execute:
+                logger.info(f"⚙️  STEP 3: EXECUTING HEALING ACTION")
+                logger.info(f"   Action: {healing_action.get('type', 'unknown')}")
+                logger.info(f"   Description: {healing_action.get('description', 'No description')}")
+                
+                print(f"⚙️  Executing healing action: {healing_action.get('description', 'Unknown action')}")
+                
+                action_result = self._execute_healing_action(healing_action, fault)
+                healing_result['actions'].append(action_result)
+                
+                if action_result.get('success'):
+                    logger.info(f"   ✅ Action executed successfully")
+                    print(f"   ✅ Action successful: {action_result.get('output', 'No output')}")
+                else:
+                    logger.warning(f"   ❌ Action failed: {action_result.get('error', 'Unknown error')}")
+                    print(f"   ❌ Action failed: {action_result.get('error', 'Unknown error')}")
+                
+                if action_result['success']:
+                    # Step 4: Verify healing
+                    time.sleep(3)  # Wait for changes to take effect
+                    verification = self._verify_cloud_fault_healing(fault)
+                    healing_result['verification'] = verification
+                    
+                    if verification.get('success', False):
+                        healing_result['status'] = 'healed'
+                        healing_result['success'] = True
+                        
+                        logger.info("="*70)
+                        logger.info(f"✅ HEALING SUCCESSFUL")
+                        logger.info("="*70)
+                        logger.info(f"Fault: {fault_type}")
+                        logger.info(f"Service: {service}")
+                        logger.info(f"Verification: {verification.get('details', 'Verified')}")
+                        logger.info("="*70)
+                        
+                        print(f"\n{'='*70}")
+                        print(f"✅ HEALING SUCCESSFUL!")
+                        print(f"{'='*70}")
+                        print(f"Fault: {fault_type}")
+                        print(f"Service: {service}")
+                        print(f"Verification: {verification.get('details', 'Verified')}")
+                        print(f"{'='*70}\n")
+                        
+                        # Send success Discord notification
+                        if self.discord_notifier:
+                            self._send_healing_success_discord_notification(fault, healing_result)
+                    else:
+                        healing_result['status'] = 'failed_verification'
+                        
+                        logger.warning("="*70)
+                        logger.warning(f"❌ HEALING VERIFICATION FAILED")
+                        logger.warning("="*70)
+                        logger.warning(f"Fault: {fault_type}")
+                        logger.warning(f"Service: {service}")
+                        logger.warning(f"Reason: {verification.get('details', 'Verification failed')}")
+                        logger.warning("="*70)
+                        
+                        print(f"\n{'='*70}")
+                        print(f"❌ HEALING VERIFICATION FAILED")
+                        print(f"{'='*70}")
+                        print(f"Reason: {verification.get('details', 'Verification failed')}")
+                        print(f"{'='*70}\n")
+                        
+                        # Generate manual instructions
+                        healing_result['manual_instructions'] = self._generate_manual_instructions(fault, analysis)
+                        
+                        # Send failure Discord notification with manual instructions
+                        if self.discord_notifier:
+                            self._send_healing_failed_discord_notification(fault, healing_result)
+                else:
+                    healing_result['status'] = 'failed'
+                    healing_result['error_message'] = action_result.get('error', 'Healing action failed')
+                    
+                    # Generate manual instructions
+                    healing_result['manual_instructions'] = self._generate_manual_instructions(fault, analysis)
+                    
+                    # Send failure Discord notification
+                    if self.discord_notifier:
+                        self._send_healing_failed_discord_notification(fault, healing_result)
+            else:
+                # Auto-execute disabled or no action determined
+                healing_result['status'] = 'pending_approval' if not self.auto_execute else 'no_action'
+                healing_result['manual_instructions'] = self._generate_manual_instructions(fault, analysis)
+        
+        except Exception as e:
+            logger.error(f"Error during cloud fault healing: {e}")
+            healing_result['error_message'] = str(e)
+            healing_result['status'] = 'exception'
+            healing_result['manual_instructions'] = self._generate_manual_instructions(fault, None)
+        
+        # Record the healing attempt
+        self._record_healing(healing_result)
+        
+        return healing_result
+    
+    def _verify_cloud_fault_healing(self, fault: Dict[str, Any]) -> Dict[str, Any]:
+        """Verify that cloud fault healing was successful"""
+        verification = {
+            'timestamp': datetime.now().isoformat(),
+            'success': False,
+            'method': 'container_check',
+            'details': None
+        }
+        
+        fault_type = fault.get('type', 'unknown')
+        service = fault.get('service', '')
+        
+        try:
+            if fault_type == 'service_crash':
+                # Verify container is running
+                if self.container_healer:
+                    container_name = service if service.startswith('cloud-sim-') else f'cloud-sim-{service}'
+                    health = self.container_healer.verify_container_health(container_name)
+                    
+                    if health.get('is_running', False):
+                        verification['success'] = True
+                        verification['details'] = f'Container {container_name} is running'
+                    else:
+                        verification['details'] = f'Container {container_name} is not running'
+            elif fault_type in ['cpu_exhaustion', 'memory_exhaustion', 'disk_full']:
+                # Verify resource usage is below threshold
+                from resource_monitor import ResourceMonitor
+                monitor = ResourceMonitor()
+                resources = monitor.get_all_resources()
+                
+                if fault_type == 'cpu_exhaustion':
+                    cpu = resources.get('cpu', {}).get('cpu_percent', 0)
+                    if cpu < 90:
+                        verification['success'] = True
+                        verification['details'] = f'CPU usage reduced to {cpu}%'
+                elif fault_type == 'memory_exhaustion':
+                    memory = resources.get('memory', {}).get('memory_percent', 0)
+                    if memory < 95:
+                        verification['success'] = True
+                        verification['details'] = f'Memory usage reduced to {memory}%'
+                elif fault_type == 'disk_full':
+                    disk = resources.get('disk', {}).get('disk_percent', 0)
+                    if disk < 90:
+                        verification['success'] = True
+                        verification['details'] = f'Disk usage reduced to {disk}%'
+            elif fault_type == 'network_issue':
+                # Verify port is accessible
+                port = fault.get('port', 0)
+                if port > 0:
+                    import socket
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(2)
+                    result = sock.connect_ex(('localhost', port))
+                    sock.close()
+                    
+                    if result == 0:
+                        verification['success'] = True
+                        verification['details'] = f'Port {port} is now accessible'
+                    else:
+                        verification['details'] = f'Port {port} is still not accessible'
+        
+        except Exception as e:
+            logger.error(f"Error during cloud fault verification: {e}")
+            verification['details'] = f'Verification error: {str(e)}'
+        
+        return verification
+    
+    def _generate_manual_instructions(self, fault: Dict[str, Any], 
+                                     analysis: Dict[str, Any] = None) -> str:
+        """Generate manual healing instructions when auto-healing fails"""
+        fault_type = fault.get('type', 'unknown')
+        service = fault.get('service', 'unknown')
+        container_name = service if service.startswith('cloud-sim-') else f'cloud-sim-{service}'
+        
+        instructions = []
+        instructions.append(f"# Manual Healing Instructions for {fault_type}")
+        instructions.append("")
+        instructions.append(f"**Fault:** {fault.get('message', 'Unknown fault')}")
+        instructions.append(f"**Service:** {service}")
+        instructions.append("")
+        
+        if fault_type == 'service_crash':
+            instructions.append("## Steps to Fix Service Crash:")
+            instructions.append("")
+            instructions.append("1. **Check container status:**")
+            instructions.append(f"   ```bash")
+            instructions.append(f"   docker ps -a | grep {container_name}")
+            instructions.append(f"   ```")
+            instructions.append("")
+            instructions.append("2. **View container logs:**")
+            instructions.append(f"   ```bash")
+            instructions.append(f"   docker logs {container_name} --tail 50")
+            instructions.append(f"   ```")
+            instructions.append("")
+            instructions.append("3. **Restart the container:**")
+            instructions.append(f"   ```bash")
+            instructions.append(f"   docker restart {container_name}")
+            instructions.append(f"   ```")
+            instructions.append("")
+            instructions.append("4. **If restart fails, recreate the container:**")
+            instructions.append(f"   ```bash")
+            instructions.append(f"   cd /home/kasun/Documents/Heal-X-Bot")
+            instructions.append(f"   # Try newer syntax first:")
+            instructions.append(f"   docker compose -f config/docker-compose-cloud-sim.yml up -d --no-deps {service}")
+            instructions.append(f"   # Or use older syntax:")
+            instructions.append(f"   docker-compose -f config/docker-compose-cloud-sim.yml up -d --no-deps {service}")
+            instructions.append(f"   ```")
+        elif fault_type == 'cpu_exhaustion':
+            instructions.append("## Steps to Fix CPU Exhaustion:")
+            instructions.append("")
+            instructions.append("1. **Identify CPU-intensive processes:**")
+            instructions.append("   ```bash")
+            instructions.append("   top -b -n 1 | head -20")
+            instructions.append("   ```")
+            instructions.append("")
+            instructions.append("2. **Kill resource-hogging processes (if safe):**")
+            instructions.append("   ```bash")
+            instructions.append("   kill -9 <PID>")
+            instructions.append("   ```")
+            instructions.append("")
+            instructions.append("3. **Clear system cache:**")
+            instructions.append("   ```bash")
+            instructions.append("   sudo sync")
+            instructions.append("   sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'")
+            instructions.append("   ```")
+        elif fault_type == 'memory_exhaustion':
+            instructions.append("## Steps to Fix Memory Exhaustion:")
+            instructions.append("")
+            instructions.append("1. **Check memory usage:**")
+            instructions.append("   ```bash")
+            instructions.append("   free -h")
+            instructions.append("   ```")
+            instructions.append("")
+            instructions.append("2. **Kill memory-intensive processes:**")
+            instructions.append("   ```bash")
+            instructions.append("   ps aux --sort=-%mem | head -10")
+            instructions.append("   kill -9 <PID>")
+            instructions.append("   ```")
+            instructions.append("")
+            instructions.append("3. **Clear caches and restart services:**")
+            instructions.append("   ```bash")
+            instructions.append("   sudo sync")
+            instructions.append("   sudo sh -c 'echo 3 > /proc/sys/vm/drop_caches'")
+            instructions.append("   ```")
+        elif fault_type == 'disk_full':
+            instructions.append("## Steps to Fix Disk Full:")
+            instructions.append("")
+            instructions.append("1. **Check disk usage:**")
+            instructions.append("   ```bash")
+            instructions.append("   df -h")
+            instructions.append("   ```")
+            instructions.append("")
+            instructions.append("2. **Clean up Docker resources:**")
+            instructions.append("   ```bash")
+            instructions.append("   docker system prune -a --volumes")
+            instructions.append("   ```")
+            instructions.append("")
+            instructions.append("3. **Remove old logs:**")
+            instructions.append("   ```bash")
+            instructions.append("   sudo find /var/log -type f -name '*.log.*' -mtime +7 -delete")
+            instructions.append("   ```")
+            instructions.append("")
+            instructions.append("4. **Clean apt cache:**")
+            instructions.append("   ```bash")
+            instructions.append("   sudo apt-get clean")
+            instructions.append("   ```")
+        elif fault_type == 'network_issue':
+            instructions.append("## Steps to Fix Network Issue:")
+            instructions.append("")
+            instructions.append(f"1. **Check if container is running:**")
+            instructions.append(f"   ```bash")
+            instructions.append(f"   docker ps | grep {container_name}")
+            instructions.append(f"   ```")
+            instructions.append("")
+            instructions.append("2. **Check port accessibility:**")
+            port = fault.get('port', 0)
+            if port > 0:
+                instructions.append(f"   ```bash")
+                instructions.append(f"   curl http://localhost:{port}/health")
+                instructions.append(f"   ```")
+            instructions.append("")
+            instructions.append("3. **Restart network services:**")
+            instructions.append("   ```bash")
+            instructions.append("   sudo systemctl restart systemd-resolved")
+            instructions.append("   ```")
+            instructions.append("")
+            instructions.append(f"4. **Restart the container:**")
+            instructions.append(f"   ```bash")
+            instructions.append(f"   docker restart {container_name}")
+            instructions.append(f"   ```")
+        
+        if analysis and analysis.get('recommended_actions'):
+            instructions.append("")
+            instructions.append("## AI-Recommended Actions:")
+            for i, action in enumerate(analysis.get('recommended_actions', []), 1):
+                instructions.append(f"{i}. {action}")
+        
+        return "\n".join(instructions)
+    
+    def _send_healing_attempt_discord_notification(self, fault: Dict[str, Any], analysis: Dict[str, Any]):
+        """Send Discord notification when healing attempt starts"""
+        if not self.discord_notifier:
+            return
+        
+        try:
+            embed_data = {
+                'title': '🔧 Auto-Healing Attempt Started',
+                'description': f"**Fault Type:** {fault.get('type', 'unknown')}\n**Service:** {fault.get('service', 'unknown')}",
+                'color': 16776960,  # Yellow
+                'fields': [
+                    {
+                        'name': 'Root Cause',
+                        'value': analysis.get('root_cause', 'Analyzing...')[:200],
+                        'inline': False
+                    },
+                    {
+                        'name': 'Confidence',
+                        'value': f"{analysis.get('confidence', 0) * 100:.0f}%",
+                        'inline': True
+                    }
+                ],
+                'footer': {
+                    'text': 'Healing Bot - Auto-Recovery System'
+                }
+            }
+            
+            self.discord_notifier(
+                f"🔧 Auto-healing started for {fault.get('service', 'unknown')}",
+                'warning',
+                embed_data
+            )
+        except Exception as e:
+            logger.error(f"Error sending healing attempt notification: {e}")
+    
+    def _send_healing_success_discord_notification(self, fault: Dict[str, Any], healing_result: Dict[str, Any]):
+        """Send Discord notification when healing succeeds"""
+        if not self.discord_notifier:
+            return
+        
+        try:
+            actions_taken = healing_result.get('actions', [])
+            action_summary = "\n".join([f"• {a.get('action', {}).get('description', 'Unknown action')}" 
+                                       for a in actions_taken if a.get('success')])
+            
+            embed_data = {
+                'title': '✅ Auto-Healing Successful',
+                'description': f"**Fault Type:** {fault.get('type', 'unknown')}\n**Service:** {fault.get('service', 'unknown')}",
+                'color': 3066993,  # Green
+                'fields': [
+                    {
+                        'name': 'Actions Taken',
+                        'value': action_summary or 'No actions',
+                        'inline': False
+                    },
+                    {
+                        'name': 'Verification',
+                        'value': healing_result.get('verification', {}).get('details', 'Verified'),
+                        'inline': False
+                    }
+                ],
+                'footer': {
+                    'text': 'Healing Bot - Auto-Recovery System'
+                }
+            }
+            
+            self.discord_notifier(
+                f"✅ Auto-healing successful for {fault.get('service', 'unknown')}",
+                'success',
+                embed_data
+            )
+        except Exception as e:
+            logger.error(f"Error sending healing success notification: {e}")
+    
+    def _send_healing_failed_discord_notification(self, fault: Dict[str, Any], healing_result: Dict[str, Any]):
+        """Send Discord notification when healing fails, including manual instructions"""
+        if not self.discord_notifier:
+            return
+        
+        try:
+            manual_instructions = healing_result.get('manual_instructions', 'No manual instructions available')
+            # Truncate instructions for Discord (limit to 2000 chars)
+            instructions_preview = manual_instructions[:1500] + "..." if len(manual_instructions) > 1500 else manual_instructions
+            
+            embed_data = {
+                'title': '❌ Auto-Healing Failed - Manual Intervention Required',
+                'description': f"**Fault Type:** {fault.get('type', 'unknown')}\n**Service:** {fault.get('service', 'unknown')}",
+                'color': 15158332,  # Red
+                'fields': [
+                    {
+                        'name': 'Error',
+                        'value': healing_result.get('error_message', 'Unknown error')[:500],
+                        'inline': False
+                    },
+                    {
+                        'name': 'Manual Instructions',
+                        'value': f"```\n{instructions_preview}\n```",
+                        'inline': False
+                    }
+                ],
+                'footer': {
+                    'text': 'Healing Bot - Manual Intervention Required'
+                }
+            }
+            
+            self.discord_notifier(
+                f"❌ Auto-healing failed for {fault.get('service', 'unknown')} - Manual steps required",
+                'critical',
+                embed_data
+            )
+        except Exception as e:
+            logger.error(f"Error sending healing failed notification: {e}")
+    
     def _verify_healing(self, original_error: Dict[str, Any]) -> Dict[str, Any]:
         """
         Verify that the healing action resolved the error
@@ -609,7 +1272,8 @@ class AutoHealer:
 _auto_healer_instance = None
 
 def initialize_auto_healer(gemini_analyzer=None, system_log_collector=None, 
-                          critical_services_monitor=None):
+                          critical_services_monitor=None, container_healer=None,
+                          root_cause_analyzer=None, discord_notifier=None, event_emitter=None):
     """Initialize the auto-healer"""
     global _auto_healer_instance
     
@@ -617,9 +1281,13 @@ def initialize_auto_healer(gemini_analyzer=None, system_log_collector=None,
         _auto_healer_instance = AutoHealer(
             gemini_analyzer=gemini_analyzer,
             system_log_collector=system_log_collector,
-            critical_services_monitor=critical_services_monitor
+            critical_services_monitor=critical_services_monitor,
+            container_healer=container_healer,
+            root_cause_analyzer=root_cause_analyzer,
+            discord_notifier=discord_notifier,
+            event_emitter=event_emitter
         )
-        logger.info("Auto-healer initialized")
+        logger.info("Auto-healer initialized with cloud healing capabilities")
     
     return _auto_healer_instance
 

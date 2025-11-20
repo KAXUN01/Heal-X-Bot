@@ -1,0 +1,123 @@
+version: '3.8'
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  cloud-sim-network:
+    driver: bridge
+
+services:
+  # Load Balancer (nginx) - Port 8080
+  load-balancer:
+    image: nginx:alpine
+    container_name: cloud-sim-load-balancer
+    ports:
+      - "8080:80"
+    volumes:
+      - ./cloud-sim/nginx-lb.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - cloud-sim-network
+    restart: unless-stopped
+    depends_on:
+      - web-server
+      - api-server
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+  # Web Server (nginx) - Port 8081
+  web-server:
+    image: nginx:alpine
+    container_name: cloud-sim-web-server
+    ports:
+      - "8081:80"
+    volumes:
+      - ./cloud-sim/web-server/index.html:/usr/share/nginx/html/index.html:ro
+    networks:
+      - cloud-sim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+  # API Server (FastAPI) - Port 8082
+  api-server:
+    build:
+      context: ./cloud-sim/api-server
+      dockerfile: Dockerfile
+    container_name: cloud-sim-api-server
+    ports:
+      - "8082:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@database:5432/cloudsim
+      - REDIS_URL=redis://cache:6379/0
+    networks:
+      - cloud-sim-network
+    restart: unless-stopped
+    depends_on:
+      - database
+      - cache
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+  # Database (PostgreSQL) - Port 5432
+  database:
+    image: postgres:15-alpine
+    container_name: cloud-sim-database
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=cloudsim
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - cloud-sim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
+  # Cache (Redis) - Port 6379
+  cache:
+    image: redis:7-alpine
+    container_name: cloud-sim-cache
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - cloud-sim-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging: *default-logging
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+

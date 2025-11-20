@@ -111,14 +111,25 @@ class HealingBotLauncher:
         
         # Check if Docker Compose is available
         if self.docker_available:
+            # Try newer syntax first (docker compose)
             try:
-                result = subprocess.run(["docker-compose", "--version"], 
+                result = subprocess.run(["docker", "compose", "version"], 
                                       capture_output=True, text=True, check=True)
                 print(f"✅ Docker Compose detected: {result.stdout.strip()}")
                 self.docker_compose_available = True
+                self.docker_compose_cmd = ["docker", "compose"]
             except (subprocess.CalledProcessError, FileNotFoundError):
-                print("⚠️  Docker Compose not available")
-                self.docker_compose_available = False
+                # Try older syntax (docker-compose)
+                try:
+                    result = subprocess.run(["docker-compose", "--version"], 
+                                          capture_output=True, text=True, check=True)
+                    print(f"✅ Docker Compose detected: {result.stdout.strip()}")
+                    self.docker_compose_available = True
+                    self.docker_compose_cmd = ["docker-compose"]
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    print("⚠️  Docker Compose not available")
+                    self.docker_compose_available = False
+                    self.docker_compose_cmd = None
         
         return True
 
@@ -465,7 +476,16 @@ class HealingBotLauncher:
         if hasattr(self, 'docker_started') and self.docker_started:
             try:
                 print("🛑 Stopping Docker services...")
-                subprocess.run(["docker-compose", "down"], cwd=self.project_root)
+                # Use the detected docker compose command
+                if hasattr(self, 'docker_compose_cmd') and self.docker_compose_cmd:
+                    cmd = self.docker_compose_cmd + ["down"]
+                else:
+                    # Fallback: try newer syntax first
+                    try:
+                        cmd = ["docker", "compose", "down"]
+                    except:
+                        cmd = ["docker-compose", "down"]
+                subprocess.run(cmd, cwd=self.project_root)
             except:
                 pass
         

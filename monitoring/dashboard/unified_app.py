@@ -59,7 +59,7 @@ CONFIG = {
     "cpu_threshold": 90.0,
     "memory_threshold": 85.0,
     "disk_threshold": 80.0,
-    "discord_webhook": os.getenv("DISCORD_WEBHOOK", ""),
+    "discord_webhook": os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL", ""),
     "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
 }
 
@@ -489,7 +489,8 @@ def run_disk_cleanup() -> Dict[str, Any]:
 
 def send_discord_alert(message: str, severity: str = "info"):
     if not CONFIG["discord_webhook"]:
-        return
+        logger.warning("Discord webhook not configured. Notification not sent.")
+        return False
     
     try:
         emoji_map = {"info": "ℹ️", "success": "✅", "warning": "⚠️", "error": "❌", "critical": "🚨"}
@@ -504,9 +505,44 @@ def send_discord_alert(message: str, severity: str = "info"):
             }]
         }
         
-        requests.post(CONFIG["discord_webhook"], json=payload, timeout=5)
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.post(
+            CONFIG["discord_webhook"], 
+            json=payload, 
+            headers=headers,
+            timeout=10
+        )
+        
+        # Check response status
+        if response.status_code in [200, 201, 204]:
+            logger.debug(f"Discord notification sent successfully (severity: {severity})")
+            return True
+        else:
+            error_msg = f"Discord webhook returned status {response.status_code}"
+            try:
+                error_body = response.text
+                if error_body:
+                    error_msg += f": {error_body[:200]}"
+            except:
+                pass
+            logger.error(f"Failed to send Discord alert: {error_msg}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        logger.error("Discord webhook request timed out after 10 seconds")
+        return False
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Discord webhook connection error: {e}")
+        return False
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Discord webhook request error: {e}")
+        return False
     except Exception as e:
-        logger.error(f"Error sending Discord alert: {e}")
+        logger.error(f"Error sending Discord alert: {e}", exc_info=True)
+        return False
 
 # ============================================================================
 # Event Logging
@@ -749,8 +785,15 @@ async def test_discord_endpoint(data: dict):
     webhook = data.get("webhook")
     if webhook:
         CONFIG["discord_webhook"] = webhook
-    send_discord_alert("Test notification from Healing Bot", "info")
-    return {"success": True}
+    
+    if not CONFIG["discord_webhook"]:
+        return {"success": False, "error": "Discord webhook not configured"}
+    
+    success = send_discord_alert("Test notification from Healing Bot", "info")
+    if success:
+        return {"success": True, "message": "Test notification sent successfully"}
+    else:
+        return {"success": False, "error": "Failed to send test notification. Check server logs for details."}
 
 @app.post("/api/discord/configure")
 async def configure_discord(data: dict):

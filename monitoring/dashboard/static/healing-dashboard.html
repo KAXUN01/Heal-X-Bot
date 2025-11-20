@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🛡️ Healing Bot Dashboard</title>
+    <title>🛡️ Heal-X Dashboard</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
@@ -908,8 +908,11 @@
             <button class="tab" onclick="switchTab('ssh')">🔐 SSH Security</button>
             <button class="tab" onclick="switchTab('disk')">💿 Disk Management</button>
             <button class="tab" onclick="switchTab('logs')">📝 Logs & AI</button>
+            <button class="tab" onclick="switchTab('predictive')">🔮 Predictive Maintenance</button>
             <button class="tab" onclick="switchTab('alerts')">🔔 Alerts</button>
             <button class="tab" onclick="switchTab('cli')">⚡ CLI Terminal</button>
+            <button class="tab" onclick="switchTab('auto-healing')">🤖 Autonomous Self-Healing</button>
+            <button class="tab" onclick="switchTab('cloud-sim')">☁️ Cloud Simulation</button>
         </div>
 
         <!-- Tab Content -->
@@ -1115,6 +1118,141 @@
                             <option value="50">50</option>
                             <option value="100">100</option>
                         </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="predictive" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h2 style="margin: 0;">🔮 Predictive Maintenance & Proactive Intelligence</h2>
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 4px;">
+                        <input type="checkbox" id="demoModeToggle" onchange="toggleDemoMode()" style="cursor: pointer;">
+                        <span style="font-size: 0.9rem;">Demo Mode</span>
+                    </label>
+                    <button onclick="refreshPredictiveMaintenance(); showNotification('🔄 Refreshing predictions...', 'info');" style="padding: 0.5rem 1rem; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                        🔄 Refresh Now
+                    </button>
+                    <div id="demoScenarioInfo" style="padding: 0.5rem 1rem; background: rgba(139, 92, 246, 0.2); border-radius: 4px; font-size: 0.85rem; display: none; color: #a78bfa; font-weight: 500;">
+                        <span id="demoScenarioName">No active scenario</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Risk Score Card -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="card" style="border-left: 4px solid #ef4444;">
+                    <h4 style="margin-top: 0;">Failure Risk Score</h4>
+                    <div style="font-size: 3rem; font-weight: bold; color: #ef4444;" id="predictive_riskScore">0%</div>
+                    <div style="margin-top: 1rem;">
+                        <div class="progress-bar" style="height: 20px; background: #f3f4f6; border-radius: 10px; overflow: hidden;">
+                            <div id="predictive_riskBar" style="height: 100%; background: linear-gradient(90deg, #10b981 0%, #f59e0b 50%, #ef4444 100%); width: 0%; transition: width 0.5s;"></div>
+                        </div>
+                    </div>
+                    <small style="color: var(--text-secondary);" id="predictive_riskLevel">Calculating...</small>
+                </div>
+                
+                <div class="card" style="border-left: 4px solid #3b82f6;">
+                    <h4 style="margin-top: 0;">Time to Failure</h4>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: #3b82f6;" id="predictive_timeToFailure">--</div>
+                    <small style="color: var(--text-secondary);" id="predictive_failureTime">No failure predicted</small>
+                </div>
+                
+                <div class="card" style="border-left: 4px solid #f59e0b;">
+                    <h4 style="margin-top: 0;">Early Warnings</h4>
+                    <div style="font-size: 2.5rem; font-weight: bold; color: #f59e0b;" id="predictive_warningCount">0</div>
+                    <small style="color: var(--text-secondary);">Active indicators</small>
+                </div>
+            </div>
+            
+            <!-- Early Warnings List -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-top: 0;">⚠️ Early Warning Indicators</h3>
+                <div id="predictive_warningsList" style="min-height: 100px;">
+                    <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                        Loading warnings...
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Prediction Timeline Chart -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-top: 0;">Prediction Timeline</h3>
+                <div style="position: relative; height: 300px; width: 100%;">
+                    <canvas id="predictive_timelineChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Model Status -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="card">
+                    <h5>Model Status</h5>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #10b981;" id="predictive_modelStatus">Active</div>
+                    <small style="color: var(--text-secondary);">Predictive maintenance model</small>
+                </div>
+                <div class="card">
+                    <h5>Last Update</h5>
+                    <div style="font-size: 1.2rem; font-weight: bold;" id="predictive_lastUpdate">--</div>
+                    <small style="color: var(--text-secondary);">Prediction refresh time</small>
+                </div>
+                <div class="card">
+                    <h5>Early Detection Rate</h5>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #3b82f6;" id="predictive_detectionRate">--</div>
+                    <small style="color: var(--text-secondary);">Failures predicted >1h ahead</small>
+                </div>
+            </div>
+
+            <!-- Model Details & API Responses -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">🔍 Model Details & API Responses</h3>
+                    <button onclick="toggleModelDetails()" style="padding: 0.5rem 1rem; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">
+                        <span id="modelDetailsToggle">▼ Show Details</span>
+                    </button>
+                </div>
+                <div id="modelDetailsSection" style="display: none;">
+                    <!-- Model Information -->
+                    <div style="margin-bottom: 2rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">Model Information</h4>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                            <div>
+                                <strong style="color: var(--text-secondary); font-size: 0.875rem;">Model Status:</strong>
+                                <div id="modelDetails_status" style="font-family: monospace; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem;">--</div>
+                            </div>
+                            <div>
+                                <strong style="color: var(--text-secondary); font-size: 0.875rem;">Model Loaded:</strong>
+                                <div id="modelDetails_loaded" style="font-family: monospace; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem;">--</div>
+                            </div>
+                            <div>
+                                <strong style="color: var(--text-secondary); font-size: 0.875rem;">Prediction Mode:</strong>
+                                <div id="modelDetails_mode" style="font-family: monospace; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem;">--</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- System Metrics Used -->
+                    <div style="margin-bottom: 2rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">System Metrics Used for Prediction</h4>
+                        <pre id="modelDetails_metrics" style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 200px; overflow-y: auto;">Loading metrics...</pre>
+                    </div>
+
+                    <!-- API Response: Risk Prediction -->
+                    <div style="margin-bottom: 2rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">📊 Risk Prediction API Response</h4>
+                        <pre id="modelDetails_riskResponse" style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 250px; overflow-y: auto;">Waiting for data...</pre>
+                    </div>
+
+                    <!-- API Response: Time to Failure -->
+                    <div style="margin-bottom: 2rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">⏱️ Time to Failure API Response</h4>
+                        <pre id="modelDetails_timeResponse" style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 250px; overflow-y: auto;">Waiting for data...</pre>
+                    </div>
+
+                    <!-- API Response: Early Warnings -->
+                    <div style="margin-bottom: 1rem;">
+                        <h4 style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">⚠️ Early Warnings API Response</h4>
+                        <pre id="modelDetails_warningsResponse" style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 250px; overflow-y: auto;">Waiting for data...</pre>
                     </div>
                 </div>
             </div>
@@ -1500,13 +1638,350 @@
                 <div id="cliHistory" style="max-height: 200px; overflow-y: auto;"></div>
             </div>
         </div>
+
+        <!-- Autonomous Self-Healing System Tab -->
+        <div id="auto-healing" class="tab-content">
+            <h2 style="margin-bottom: 1.5rem;">🤖 Autonomous Self-Healing System</h2>
+            
+            <!-- System Status Overview -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <div class="card">
+                    <h3 style="margin-top: 0; font-size: 1rem;">System Status</h3>
+                    <div id="autoHealingStatus" style="font-size: 2rem; font-weight: bold; color: var(--accent-green);">
+                        <i class="fas fa-circle-notch fa-spin"></i> Loading...
+                    </div>
+                    <small style="color: var(--text-secondary);">Auto-healing system status</small>
+                </div>
+                <div class="card">
+                    <h3 style="margin-top: 0; font-size: 1rem;">Total Healings</h3>
+                    <div id="totalHealings" style="font-size: 2rem; font-weight: bold; color: var(--accent-blue);">0</div>
+                    <small style="color: var(--text-secondary);">Successful healing actions</small>
+                </div>
+                <div class="card">
+                    <h3 style="margin-top: 0; font-size: 1rem;">Success Rate</h3>
+                    <div id="healingSuccessRate" style="font-size: 2rem; font-weight: bold; color: var(--accent-green);">0%</div>
+                    <small style="color: var(--text-secondary);">Healing success percentage</small>
+                </div>
+                <div class="card">
+                    <h3 style="margin-top: 0; font-size: 1rem;">Active Monitoring</h3>
+                    <div id="monitoringStatus" style="font-size: 2rem; font-weight: bold; color: var(--accent-purple);">
+                        <i class="fas fa-check-circle"></i> Active
+                    </div>
+                    <small style="color: var(--text-secondary);">Real-time fault detection</small>
+                </div>
+            </div>
+
+            <!-- Healing Statistics & Performance -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Healing Statistics -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">📊 Healing Statistics</h3>
+                    <div id="healingStatsDetails" style="margin-bottom: 1rem;">
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            <span>Total Attempts:</span>
+                            <strong id="statsTotalAttempts">0</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            <span>Successful:</span>
+                            <strong style="color: var(--accent-green);" id="statsSuccessful">0</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            <span>Failed:</span>
+                            <strong style="color: var(--accent-red);" id="statsFailed">0</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                            <span>In Progress:</span>
+                            <strong style="color: var(--accent-yellow);" id="statsInProgress">0</strong>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem;">
+                            <span>Average Response Time:</span>
+                            <strong id="statsAvgResponseTime">0s</strong>
+                        </div>
+                    </div>
+                    <div style="position: relative; height: 200px;">
+                        <canvas id="healingPerformanceChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Recent Healing Actions -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">⚡ Recent Healing Actions</h3>
+                    <div id="recentHealingActions" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
+                        <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                            <i class="fas fa-spinner fa-spin"></i> Loading healing actions...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Healing History Timeline -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-top: 0;">📜 Healing History Timeline</h3>
+                <div style="margin-bottom: 1rem;">
+                    <label style="margin-right: 1rem;">Filter:</label>
+                    <select id="healingHistoryFilter" class="search-input" onchange="updateHealingHistory()" style="display: inline-block; width: auto;">
+                        <option value="all">All Actions</option>
+                        <option value="success">Successful Only</option>
+                        <option value="failed">Failed Only</option>
+                        <option value="in_progress">In Progress</option>
+                    </select>
+                    <button class="btn btn-secondary" onclick="refreshHealingHistory()" style="margin-left: 1rem;">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div id="healingHistoryTimeline" class="log-container scrollbar" style="max-height: 500px; overflow-y: auto;">
+                    <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                        <i class="fas fa-spinner fa-spin"></i> Loading healing history...
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Health & Auto-Healing Configuration -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- System Health Status -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">🏥 System Health Status</h3>
+                    <div id="systemHealthStatus">
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--accent-green); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Container Health:</strong></span>
+                                <span class="status-badge healthy" id="containerHealth">Healthy</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--accent-green); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Resource Usage:</strong></span>
+                                <span class="status-badge healthy" id="resourceHealth">Normal</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--accent-green); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Network Connectivity:</strong></span>
+                                <span class="status-badge healthy" id="networkHealth">Connected</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; background: rgba(52, 211, 153, 0.1); border-left: 4px solid var(--accent-green); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>AI Diagnosis:</strong></span>
+                                <span class="status-badge healthy" id="aiHealth">Active</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Auto-Healing Configuration -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">⚙️ Auto-Healing Configuration</h3>
+                    <div id="autoHealingConfig">
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--accent-blue); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Monitoring Interval:</strong></span>
+                                <span id="monitoringInterval">30s</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--accent-blue); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Auto-Healing:</strong></span>
+                                <span class="status-badge healthy" id="autoHealingEnabled">Enabled</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--accent-blue); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>AI Diagnosis:</strong></span>
+                                <span class="status-badge healthy" id="aiDiagnosisEnabled">Active</span>
+                            </div>
+                        </div>
+                        <div style="padding: 1rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid var(--accent-blue); border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span><strong>Discord Notifications:</strong></span>
+                                <span class="status-badge" id="discordNotificationsStatus">Configured</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Faults & Healing Queue -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Active Faults -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">🚨 Active Faults</h3>
+                    <div id="activeFaultsList" class="log-container scrollbar" style="max-height: 300px; overflow-y: auto;">
+                        <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                            No active faults detected
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Healing Queue -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">📋 Healing Queue</h3>
+                    <div id="healingQueue" class="log-container scrollbar" style="max-height: 300px; overflow-y: auto;">
+                        <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                            No items in healing queue
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manual Healing Instructions -->
+            <div class="card">
+                <h3 style="margin-top: 0;">📖 Manual Healing Instructions</h3>
+                <div id="manualHealingInstructionsAuto" class="log-container scrollbar" style="max-height: 300px; overflow-y: auto; background: rgba(251, 191, 36, 0.1); padding: 1rem; border-radius: 8px;">
+                    <div style="color: var(--text-secondary); padding: 1rem;">
+                        Manual instructions will appear here when auto-healing fails or requires human intervention.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cloud Simulation Tab -->
+        <div id="cloud-sim" class="tab-content">
+            <h2 style="margin-bottom: 1.5rem;">☁️ Cloud Simulation - Autonomous Self-Healing</h2>
+            
+            <!-- Service Status Dashboard -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-top: 0;">📊 Service Status Dashboard</h3>
+                <div id="serviceStatusGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <!-- Service cards will be populated here -->
+                </div>
+            </div>
+
+            <!-- Fault Detection & AI Diagnosis Row -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Fault Detection Panel -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">🔍 Fault Detection Timeline</h3>
+                    <div id="faultDetectionFeed" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
+                        <!-- Fault feed will be populated here -->
+                    </div>
+                </div>
+
+                <!-- AI Diagnosis Display -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">🧠 AI Diagnosis</h3>
+                    <div id="aiDiagnosisDisplay">
+                        <!-- AI analysis results will be shown here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Self-Healing Action Log & Discord Notifications Row -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Self-Healing Action Log -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">🔧 Self-Healing Action Log</h3>
+                    <div id="healingActionLog" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
+                        <!-- Healing actions will be shown here -->
+                    </div>
+                </div>
+
+                <!-- Discord Notification Status -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">🔔 Discord Notifications</h3>
+                    <div id="discordNotificationFeed" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
+                        <!-- Discord notifications will be shown here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resource Monitoring Charts -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-top: 0;">📈 Resource Monitoring</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                    <div>
+                        <h4>CPU Usage</h4>
+                        <div style="position: relative; height: 200px;">
+                            <canvas id="cpuChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h4>Memory Usage</h4>
+                        <div style="position: relative; height: 200px;">
+                            <canvas id="memoryChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h4>Disk Usage</h4>
+                        <div style="position: relative; height: 200px;">
+                            <canvas id="diskChart"></canvas>
+                        </div>
+                    </div>
+                    <div>
+                        <h4>Network Traffic</h4>
+                        <div style="position: relative; height: 200px;">
+                            <canvas id="networkChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Healing Statistics & Manual Instructions Row -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Healing Statistics -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">📊 Healing Statistics</h3>
+                    <div id="healingStatistics">
+                        <!-- Statistics will be shown here -->
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <div style="position: relative; height: 250px;">
+                            <canvas id="healingStatsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manual Instructions Panel -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">📖 Manual Instructions</h3>
+                    <div id="manualInstructionsPanel" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto; background: rgba(251, 191, 36, 0.1); padding: 1rem; border-radius: 8px;">
+                        <p style="color: var(--text-secondary);">Manual instructions will appear here when auto-healing fails or is not possible.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fault Injection Controls -->
+            <div class="card">
+                <h3 style="margin-top: 0;">💥 Fault Injection (Testing)</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                    <button class="btn btn-danger" onclick="injectFault('crash', 'cloud-sim-api-server')">
+                        💥 Inject Service Crash
+                    </button>
+                    <button class="btn btn-warning" onclick="injectFault('cpu')">
+                        🔥 Inject CPU Exhaustion
+                    </button>
+                    <button class="btn btn-warning" onclick="injectFault('memory')">
+                        💾 Inject Memory Exhaustion
+                    </button>
+                    <button class="btn btn-warning" onclick="injectFault('disk')">
+                        💿 Inject Disk Full
+                    </button>
+                    <button class="btn btn-warning" onclick="injectFault('network', 'cloud-sim-api-server', 8082)">
+                        🌐 Inject Network Issue
+                    </button>
+                    <button class="btn btn-secondary" onclick="cleanupFaults()">
+                        🧹 Cleanup All Faults
+                    </button>
+                </div>
+                <div style="padding: 1rem; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
+                    <small style="color: var(--text-secondary);">
+                        ⚠️ These buttons inject real faults into the simulated cloud environment. 
+                        The AI Bot will automatically detect, diagnose, and attempt to heal them.
+                    </small>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         // WebSocket connection for real-time updates
         let ws = null;
-        let metricsChart, mlPerformanceChart, attackTypesChart;
+        let metricsChart, mlPerformanceChart, attackTypesChart, predictiveTimelineChart;
+        
+        // Risk score history for timeline chart
+        let riskScoreHistory = [];
+        const MAX_HISTORY_POINTS = 30;
         
         // Recent Activity tracking
         let recentActivities = [];
@@ -1578,6 +2053,259 @@
                 `Showing ${start}-${end} of ${totalItems} IPs`;
         }
         
+        // Cloud Simulation WebSocket
+        let cloudWs = null;
+        
+        function initializeCloudWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            cloudWs = new WebSocket(`${protocol}//${window.location.host}/ws/faults`);
+            
+            cloudWs.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                if (data.type === 'faults_update') {
+                    updateFaultDetection(data.faults, data.statistics);
+                } else if (data.type === 'healing_update') {
+                    updateHealingActions(data.history, data.statistics);
+                }
+            };
+            
+            cloudWs.onerror = function(error) {
+                console.error('Cloud WebSocket error:', error);
+            };
+            
+            cloudWs.onclose = function() {
+                console.log('Cloud WebSocket closed, reconnecting...');
+                setTimeout(initializeCloudWebSocket, 3000);
+            };
+        }
+        
+        // Cloud Simulation Functions
+        async function updateServiceStatus() {
+            try {
+                const response = await fetch('/api/cloud/services/status');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const grid = document.getElementById('serviceStatusGrid');
+                    if (!grid) return;
+                    
+                    grid.innerHTML = data.services.map(service => {
+                        const statusColor = service.is_running ? 'var(--accent-green)' : 'var(--accent-red)';
+                        const statusIcon = service.is_running ? '🟢' : '🔴';
+                        const healthColor = service.is_healthy ? 'var(--accent-green)' : 'var(--accent-yellow)';
+                        
+                        return `
+                            <div class="card" style="border-left: 4px solid ${statusColor};">
+                                <h4 style="margin-top: 0;">${service.name}</h4>
+                                <div style="font-size: 1.5rem; margin: 0.5rem 0;">
+                                    ${statusIcon} ${service.status}
+                                </div>
+                                <div style="font-size: 0.9rem; color: ${healthColor};">
+                                    Health: ${service.health || 'unknown'}
+                                </div>
+                                <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                                    CPU: ${service.cpu_percent || 0}%<br>
+                                    Memory: ${service.memory_percent || 0}%
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Error updating service status:', error);
+            }
+        }
+        
+        async function updateFaultDetection(faults, statistics) {
+            const feed = document.getElementById('faultDetectionFeed');
+            if (!feed) return;
+            
+            if (!faults || faults.length === 0) {
+                feed.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem;">No faults detected</p>';
+                return;
+            }
+            
+            feed.innerHTML = faults.slice().reverse().map(fault => {
+                const severityColor = fault.severity === 'critical' ? 'var(--accent-red)' : 
+                                     fault.severity === 'high' ? 'var(--accent-yellow)' : 'var(--accent-blue)';
+                const timestamp = new Date(fault.timestamp).toLocaleString();
+                
+                return `
+                    <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid ${severityColor}; border-radius: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div>
+                                <strong style="color: ${severityColor};">${fault.type}</strong>
+                                <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                                    ${fault.message || ''}
+                                </div>
+                                ${fault.service ? `<div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Service: ${fault.service}</div>` : ''}
+                            </div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">
+                                ${timestamp}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        async function updateHealingActions(history, statistics) {
+            const log = document.getElementById('healingActionLog');
+            if (!log) return;
+            
+            if (!history || history.length === 0) {
+                log.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem;">No healing actions yet</p>';
+                return;
+            }
+            
+            log.innerHTML = history.slice().reverse().map(healing => {
+                const statusColor = healing.success ? 'var(--accent-green)' : 'var(--accent-red)';
+                const statusIcon = healing.success ? '✅' : '❌';
+                const timestamp = new Date(healing.timestamp).toLocaleString();
+                
+                return `
+                    <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(59, 130, 246, 0.1); border-left: 4px solid ${statusColor}; border-radius: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div>
+                                <strong>${statusIcon} ${healing.status || 'unknown'}</strong>
+                                <div style="font-size: 0.9rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                                    ${healing.fault?.type || 'Unknown fault'}
+                                </div>
+                                ${healing.actions && healing.actions.length > 0 ? `
+                                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.5rem;">
+                                        Actions: ${healing.actions.map(a => a.action?.description || 'Unknown').join(', ')}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <div style="font-size: 0.8rem; color: var(--text-secondary);">
+                                ${timestamp}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Update statistics
+            if (statistics) {
+                updateHealingStatistics(statistics);
+            }
+        }
+        
+        function updateHealingStatistics(stats) {
+            const statsDiv = document.getElementById('healingStatistics');
+            if (!statsDiv) return;
+            
+            statsDiv.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                    <div>
+                        <div style="font-size: 2rem; font-weight: bold; color: var(--accent-blue);">
+                            ${stats.total_attempts || 0}
+                        </div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Total Attempts</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 2rem; font-weight: bold; color: var(--accent-green);">
+                            ${stats.successful || 0}
+                        </div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Successful</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 2rem; font-weight: bold; color: var(--accent-red);">
+                            ${stats.failed || 0}
+                        </div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Failed</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 2rem; font-weight: bold; color: var(--accent-yellow);">
+                            ${stats.success_rate || 0}%
+                        </div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">Success Rate</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        async function updateResourceCharts() {
+            try {
+                const response = await fetch('/api/cloud/resources');
+                const data = await response.json();
+                
+                if (data.success && data.resources) {
+                    // Update CPU chart
+                    updateChart('cpuChart', 'CPU Usage', data.resources.cpu?.cpu_percent || 0, '%');
+                    // Update Memory chart
+                    updateChart('memoryChart', 'Memory Usage', data.resources.memory?.memory_percent || 0, '%');
+                    // Update Disk chart
+                    updateChart('diskChart', 'Disk Usage', data.resources.disk?.disk_percent || 0, '%');
+                }
+            } catch (error) {
+                console.error('Error updating resource charts:', error);
+            }
+        }
+        
+        function updateChart(canvasId, label, value, unit) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width || 300;
+            const height = canvas.height || 200;
+            
+            // Simple bar chart
+            ctx.clearRect(0, 0, width, height);
+            ctx.fillStyle = value > 90 ? 'var(--accent-red)' : value > 70 ? 'var(--accent-yellow)' : 'var(--accent-green)';
+            ctx.fillRect(10, height - (value / 100 * (height - 40)), width - 20, value / 100 * (height - 40));
+            
+            ctx.fillStyle = 'var(--text-primary)';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${label}: ${value}${unit}`, width / 2, height - 10);
+        }
+        
+        async function injectFault(type, container = null, port = null) {
+            try {
+                const payload = { type };
+                if (container) payload.container = container;
+                if (port) payload.port = port;
+                
+                const response = await fetch('/api/cloud/faults/inject', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showNotification(`✅ Fault injected: ${data.message}`, 'success');
+                    setTimeout(() => {
+                        updateServiceStatus();
+                        updateFaultDetection([], {});
+                    }, 2000);
+                } else {
+                    showNotification(`❌ Failed to inject fault: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error injecting fault:', error);
+                showNotification('❌ Error injecting fault', 'error');
+            }
+        }
+        
+        async function cleanupFaults() {
+            try {
+                const response = await fetch('/api/cloud/faults/cleanup', {method: 'POST'});
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification(`✅ ${data.message}`, 'success');
+                } else {
+                    showNotification(`❌ ${data.error}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error cleaning up faults:', error);
+                showNotification('❌ Error cleaning up faults', 'error');
+            }
+        }
+        
         function initializeWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/healing`);
@@ -1598,11 +2326,32 @@
         }
         
         function switchTab(tabName) {
+            // Refresh auto-healing dashboard when tab is switched to
+            if (tabName === 'auto-healing') {
+                updateAutoHealingDashboard();
+            }
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             
             event.target.classList.add('active');
-            document.getElementById(tabName).classList.add('active');
+            const tabContent = document.getElementById(tabName);
+            if (tabContent) {
+                tabContent.classList.add('active');
+            }
+            
+            // Refresh predictive maintenance data when tab is opened
+            if (tabName === 'predictive') {
+                console.log('🔮 Predictive Maintenance tab opened - refreshing data...');
+                // Force immediate refresh when tab becomes visible
+                setTimeout(() => {
+                    if (document.getElementById('predictive_riskScore')) {
+                        console.log('✅ Predictive tab elements found, refreshing...');
+                        refreshPredictiveMaintenance();
+                    } else {
+                        console.error('❌ Predictive tab elements not found!');
+                    }
+                }, 200);
+            }
         }
         
         function updateDashboard(data) {
@@ -1976,6 +2725,92 @@
                 });
             }
             
+            // Initialize Predictive Timeline Chart
+            if (predictiveTimelineChart) predictiveTimelineChart.destroy();
+            const timelineCanvas = document.getElementById('predictive_timelineChart');
+            if (timelineCanvas) {
+                const timelineCtx = timelineCanvas.getContext('2d');
+                predictiveTimelineChart = new Chart(timelineCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Risk Score %',
+                            data: [],
+                            borderColor: '#ef4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            tension: 0.4,
+                            fill: true,
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            pointBackgroundColor: '#ef4444',
+                            pointBorderColor: '#ffffff',
+                            pointBorderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: { duration: 300 },
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'top',
+                                labels: { 
+                                    color: '#e8eaed',
+                                    padding: 15,
+                                    font: { size: 12, weight: 'bold' }
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                titleColor: '#e8eaed',
+                                bodyColor: '#e8eaed',
+                                borderColor: '#ef4444',
+                                borderWidth: 1,
+                                callbacks: {
+                                    label: function(context) {
+                                        return 'Risk: ' + context.parsed.y.toFixed(2) + '%';
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100,
+                                ticks: { 
+                                    color: '#9aa0a6',
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
+                                },
+                                grid: { color: '#374151' },
+                                title: {
+                                    display: true,
+                                    text: 'Risk Score (%)',
+                                    color: '#9aa0a6',
+                                    font: { size: 12 }
+                                }
+                            },
+                            x: {
+                                ticks: { 
+                                    color: '#9aa0a6',
+                                    maxTicksLimit: 10
+                                },
+                                grid: { color: '#374151' },
+                                title: {
+                                    display: true,
+                                    text: 'Time',
+                                    color: '#9aa0a6',
+                                    font: { size: 12 }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
         }
         
         // Fetch and update DDoS detection data
@@ -2066,6 +2901,769 @@
                 console.error('Error refreshing DDoS data:', error);
                 }
                 // Don't break the UI - errors are logged but don't stop updates
+            }
+        }
+        
+        // Demo mode state
+        let demoMode = false;
+        let lastDemoMetrics = null;
+        let currentDemoScenario = null;
+        
+        function toggleDemoMode() {
+            const toggle = document.getElementById('demoModeToggle');
+            demoMode = toggle.checked;
+            console.log('🎭 Demo mode:', demoMode ? 'ON' : 'OFF');
+            
+            if (demoMode) {
+                showNotification('🎭 Demo mode enabled - Will use test scenarios', 'info');
+                // Start polling for demo metrics
+                startDemoMetricsPolling();
+                // Try to fetch metrics immediately
+                setTimeout(() => refreshPredictiveMaintenance(), 500);
+            } else {
+                showNotification('📊 Demo mode disabled - Using real system metrics', 'info');
+                // Stop polling
+                stopDemoMetricsPolling();
+                lastDemoMetrics = null;
+                currentDemoScenario = null;
+                // Hide scenario info
+                const scenarioInfo = document.getElementById('demoScenarioInfo');
+                if (scenarioInfo) {
+                    scenarioInfo.style.display = 'none';
+                }
+                // Refresh with real metrics
+                refreshPredictiveMaintenance();
+            }
+        }
+        
+        // Listen for demo metrics from external scripts
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.type === 'demo_metrics') {
+                lastDemoMetrics = event.data.metrics;
+                if (demoMode) {
+                    console.log('📥 Received demo metrics, refreshing...');
+                    refreshPredictiveMaintenance();
+                }
+            }
+        });
+        
+        // Also check for demo metrics via polling (for demo scripts)
+        let demoMetricsCheckInterval = null;
+        function startDemoMetricsPolling() {
+            // Clear existing interval
+            if (demoMetricsCheckInterval) {
+                clearInterval(demoMetricsCheckInterval);
+                demoMetricsCheckInterval = null;
+            }
+            
+            // Start polling immediately and then every 1 second when demo mode is on
+            const pollDemoMetrics = async () => {
+                if (!demoMode) return;
+                try {
+                    console.log('🔍 Polling for demo metrics...');
+                    const response = await fetch('/api/get-last-demo-metrics', { 
+                        cache: 'no-cache',
+                        headers: { 'Cache-Control': 'no-cache' }
+                    });
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.metrics && Object.keys(data.metrics).length > 0) {
+                            console.log('✅ Demo metrics received:', data.metrics);
+                            lastDemoMetrics = data.metrics;
+                            // Only refresh if demo mode is already enabled by user
+                            if (demoMode) {
+                                refreshPredictiveMaintenance();
+                            } else {
+                                console.log('ℹ️ Demo metrics available, but demo mode is disabled. Enable demo mode to use them.');
+                            }
+                        } else {
+                            console.log('⚠️ No demo metrics available yet');
+                        }
+                    }
+                } catch (e) {
+                    console.error('❌ Error polling demo metrics:', e);
+                }
+            };
+            
+            // Poll immediately
+            pollDemoMetrics();
+            
+            // Then poll every 1 second
+            demoMetricsCheckInterval = setInterval(pollDemoMetrics, 1000);
+        }
+        
+        function stopDemoMetricsPolling() {
+            if (demoMetricsCheckInterval) {
+                clearInterval(demoMetricsCheckInterval);
+                demoMetricsCheckInterval = null;
+            }
+        }
+        
+        // Refresh Predictive Maintenance Data
+        async function refreshPredictiveMaintenance() {
+            console.log('🔄 Refreshing predictive maintenance data...', demoMode ? '(Demo Mode)' : '(Real Mode)');
+            
+            // Get elements - check if they exist
+            const riskScoreEl = document.getElementById('predictive_riskScore');
+            const riskBarEl = document.getElementById('predictive_riskBar');
+            const riskLevelEl = document.getElementById('predictive_riskLevel');
+            
+            // Verify elements exist
+            if (!riskScoreEl || !riskBarEl || !riskLevelEl) {
+                console.error('❌ Predictive maintenance elements not found!', {
+                    riskScoreEl: !!riskScoreEl,
+                    riskBarEl: !!riskBarEl,
+                    riskLevelEl: !!riskLevelEl
+                });
+                return;
+            }
+            
+            // Show loading state
+            riskScoreEl.textContent = 'Loading...';
+            riskLevelEl.textContent = 'Loading...';
+            
+            try {
+                let riskResponse;
+                
+                // ALWAYS check for demo metrics first (even if demo mode not explicitly enabled)
+            // This allows the script to work without requiring checkbox toggle
+            try {
+                const metricsResponse = await fetch('/api/get-last-demo-metrics', { 
+                    cache: 'no-cache',
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                if (metricsResponse.ok) {
+                    const metricsData = await metricsResponse.json();
+                    if (metricsData.metrics && Object.keys(metricsData.metrics).length > 0) {
+                        lastDemoMetrics = metricsData.metrics;
+                        console.log('✅ Demo metrics available:', lastDemoMetrics);
+                        // Only use demo metrics if demo mode is manually enabled
+                        // Don't auto-enable - user must check the checkbox
+                        if (!demoMode) {
+                            console.log('ℹ️ Demo metrics available, but demo mode is disabled. Check the "Demo Mode" checkbox to use them.');
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log('⚠️ Could not fetch demo metrics:', e);
+            }
+            
+                // Use demo metrics if available AND demo mode is manually enabled
+            if (demoMode && lastDemoMetrics && Object.keys(lastDemoMetrics).length > 0) {
+                    // Use custom metrics for demo
+                    console.log('🎭 Using demo metrics for prediction:', lastDemoMetrics);
+                    console.log('📡 POST /api/predict-failure-risk-custom with demo metrics...');
+                    riskResponse = await fetch('/api/predict-failure-risk-custom', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Cache-Control': 'no-cache'
+                        },
+                        body: JSON.stringify({ metrics: lastDemoMetrics }),
+                        cache: 'no-cache'
+                    });
+                } else {
+                    // Fetch failure risk (uses current system metrics)
+                    if (demoMode) {
+                        console.log('⚠️ Demo mode ON but no demo metrics available, using system metrics');
+                    } else {
+                        console.log('📡 Fetching /api/predict-failure-risk (system metrics)...');
+                    }
+                    riskResponse = await fetch('/api/predict-failure-risk', {
+                        cache: 'no-cache',
+                        headers: {
+                            'Cache-Control': 'no-cache'
+                        }
+                    });
+                }
+                
+                console.log('✅ Risk response status:', riskResponse.status);
+                
+                if (riskResponse.ok) {
+                    const riskData = await riskResponse.json();
+                    console.log('📊 Risk data received:', riskData);
+                    
+                    // Store for model details
+                    lastRiskData = riskData;
+                    
+                    // Detect and display scenario in demo mode
+                    if (demoMode && lastDemoMetrics) {
+                        // Determine scenario based on metrics
+                        const cpu = lastDemoMetrics.cpu_percent || 0;
+                        const mem = lastDemoMetrics.memory_percent || 0;
+                        const disk = lastDemoMetrics.disk_percent || 0;
+                        
+                        if (cpu > 95 || mem > 95 || disk > 95) {
+                            currentDemoScenario = 'Extreme Risk - Near Failure';
+                        } else if (cpu > 85 || mem > 90 || disk > 90) {
+                            currentDemoScenario = 'High Risk - Critical Conditions';
+                        } else if (cpu > 60 || mem > 70 || disk > 75) {
+                            currentDemoScenario = 'Medium Risk - Elevated Load';
+                        } else {
+                            currentDemoScenario = 'Low Risk - Healthy System';
+                        }
+                        
+                        // Update scenario display
+                        const scenarioInfo = document.getElementById('demoScenarioInfo');
+                        const scenarioName = document.getElementById('demoScenarioName');
+                        if (scenarioInfo && scenarioName) {
+                            scenarioInfo.style.display = 'block';
+                            scenarioName.textContent = `🎭 Demo: ${currentDemoScenario}`;
+                        }
+                    } else if (!demoMode) {
+                        // Hide scenario info when not in demo mode
+                        const scenarioInfo = document.getElementById('demoScenarioInfo');
+                        if (scenarioInfo) {
+                            scenarioInfo.style.display = 'none';
+                        }
+                        currentDemoScenario = null;
+                    }
+                    
+                    // Get system metrics for display - use the metrics that were used for prediction
+                    try {
+                        // Use demo metrics if available, otherwise fetch from API
+                        if (demoMode && lastDemoMetrics) {
+                            lastSystemMetrics = lastDemoMetrics;
+                        } else {
+                            // Try to get from health endpoint or use what we can infer
+                            const healthResponse = await fetch('/api/predict-failure-risk', { cache: 'no-cache' });
+                            if (healthResponse.ok) {
+                                // Note: The API uses get_system_metrics() internally
+                                // We'll construct a basic metrics object based on what we know
+                                lastSystemMetrics = {
+                                    note: 'Metrics are fetched internally by the prediction API',
+                                    source: 'Real-time system metrics via get_system_metrics()',
+                                    prediction_mode: 'Real Mode'
+                                };
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Could not fetch system metrics:', e);
+                        lastSystemMetrics = {
+                            note: 'Metrics are retrieved internally by the prediction model',
+                            error: e.message
+                        };
+                    }
+                    
+                    // Check for errors
+                    if (riskData.error) {
+                        console.warn('⚠️ Predictive model error:', riskData.error);
+                        if (riskScoreEl) {
+                            riskScoreEl.textContent = 'N/A';
+                            riskScoreEl.style.color = '#6b7280';
+                        }
+                        if (riskBarEl) riskBarEl.style.width = '0%';
+                        if (riskLevelEl) riskLevelEl.textContent = 'Model not available';
+                    } else if (riskData.risk_score !== undefined) {
+                        const riskPercent = (riskData.risk_score * 100).toFixed(1);
+                        console.log('📈 Updating risk score to:', riskPercent + '%');
+                        
+                        // Update risk score text
+                        riskScoreEl.textContent = riskPercent + '%';
+                        
+                        // Color code based on risk level
+                        const riskScore = riskData.risk_score;
+                        if (riskScore > 0.7 || riskData.is_high_risk) {
+                            riskScoreEl.style.color = '#ef4444'; // Red
+                        } else if (riskScore > 0.5 || riskData.has_early_warning) {
+                            riskScoreEl.style.color = '#f59e0b'; // Orange
+                        } else if (riskScore > 0.3) {
+                            riskScoreEl.style.color = '#eab308'; // Yellow
+                        } else {
+                            riskScoreEl.style.color = '#10b981'; // Green
+                        }
+                        
+                        // Update progress bar
+                        riskBarEl.style.width = riskPercent + '%';
+                        console.log('📊 Progress bar updated to:', riskPercent + '%');
+                        
+                        // Update risk level
+                        const riskLevel = riskData.risk_level || 'Unknown';
+                        riskLevelEl.textContent = 'Risk Level: ' + riskLevel;
+                        console.log('🏷️ Risk level updated to:', riskLevel);
+                        
+                        console.log('✅ Risk score updated successfully:', riskPercent + '%');
+                        
+                        // Update timeline chart with new risk score
+                        updatePredictiveTimelineChart(riskPercent, riskData.timestamp);
+                        
+                        // Force a repaint to ensure visual update
+                        riskScoreEl.offsetHeight; // Trigger reflow
+                        riskBarEl.offsetHeight; // Trigger reflow
+                    } else {
+                        console.warn('⚠️ No risk_score in response:', riskData);
+                    }
+                } else {
+                    console.error('❌ Failed to fetch risk data:', riskResponse.status, riskResponse.statusText);
+                    if (riskScoreEl) riskScoreEl.textContent = 'Error';
+                    if (riskLevelEl) riskLevelEl.textContent = 'Failed to load';
+                }
+                
+                // Fetch time to failure
+                console.log('📡 Fetching /api/predict-time-to-failure...');
+                // If in demo mode, first ensure metrics are sent, then get prediction
+                if (demoMode && lastDemoMetrics && Object.keys(lastDemoMetrics).length > 0) {
+                    // Send demo metrics first so time-to-failure uses them
+                    try {
+                        await fetch('/api/predict-failure-risk-custom', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ metrics: lastDemoMetrics }),
+                            cache: 'no-cache'
+                        });
+                        // Small delay to ensure metrics are processed
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    } catch (e) {
+                        console.warn('Could not send demo metrics for time-to-failure:', e);
+                    }
+                }
+                
+                const timeResponse = await fetch('/api/predict-time-to-failure', {
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
+                });
+                if (timeResponse.ok) {
+                    const timeData = await timeResponse.json();
+                    
+                    // Store for model details
+                    lastTimeData = timeData;
+                    
+                    const timeToFailureEl = document.getElementById('predictive_timeToFailure');
+                    const failureTimeEl = document.getElementById('predictive_failureTime');
+                    
+                    if (timeData.error) {
+                        if (timeToFailureEl) timeToFailureEl.textContent = '--';
+                        if (failureTimeEl) failureTimeEl.textContent = timeData.message || 'Model not available';
+                    } else if (timeData.hours_until_failure !== null && timeData.hours_until_failure !== undefined) {
+                        const hours = timeData.hours_until_failure;
+                        if (timeToFailureEl) {
+                            timeToFailureEl.textContent = hours.toFixed(1) + 'h';
+                            // Color code based on hours
+                            if (hours < 1) {
+                                timeToFailureEl.style.color = '#ef4444'; // Red - critical
+                            } else if (hours < 12) {
+                                timeToFailureEl.style.color = '#f59e0b'; // Orange - urgent
+                            } else if (hours < 24) {
+                                timeToFailureEl.style.color = '#eab308'; // Yellow - warning
+                            } else {
+                                timeToFailureEl.style.color = '#10b981'; // Green - stable
+                            }
+                        }
+                        if (failureTimeEl && timeData.predicted_failure_time) {
+                            const failureTime = new Date(timeData.predicted_failure_time);
+                            failureTimeEl.textContent = 'Predicted: ' + failureTime.toLocaleString();
+                        }
+                        
+                        // Update Early Detection Rate based on prediction
+                        updateEarlyDetectionRate(hours);
+                    } else {
+                        if (timeToFailureEl) {
+                            timeToFailureEl.textContent = '--';
+                            timeToFailureEl.style.color = '#3b82f6'; // Default blue
+                        }
+                        if (failureTimeEl) {
+                            failureTimeEl.textContent = timeData.message || 'No failure predicted';
+                        }
+                        // No failure predicted means high detection rate (no failures = good)
+                        updateEarlyDetectionRate(null);
+                    }
+                } else {
+                    console.warn('⚠️ Failed to fetch time-to-failure:', timeResponse.status);
+                    // Update with default values
+                    const timeToFailureEl = document.getElementById('predictive_timeToFailure');
+                    const failureTimeEl = document.getElementById('predictive_failureTime');
+                    if (timeToFailureEl) timeToFailureEl.textContent = '--';
+                    if (failureTimeEl) failureTimeEl.textContent = 'Unable to fetch prediction';
+                }
+                
+                // Fetch early warnings
+                console.log('📡 Fetching /api/get-early-warnings...');
+                // If in demo mode, first ensure metrics are sent, then get warnings
+                if (demoMode && lastDemoMetrics && Object.keys(lastDemoMetrics).length > 0) {
+                    // Send demo metrics first so warnings use them
+                    try {
+                        await fetch('/api/predict-failure-risk-custom', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ metrics: lastDemoMetrics }),
+                            cache: 'no-cache'
+                        });
+                        // Small delay to ensure metrics are processed
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    } catch (e) {
+                        console.warn('Could not send demo metrics for warnings:', e);
+                    }
+                }
+                
+                const warningsResponse = await fetch('/api/get-early-warnings', {
+                    cache: 'no-cache',
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
+                });
+                if (warningsResponse.ok) {
+                    const warningsData = await warningsResponse.json();
+                    
+                    // Store for model details
+                    lastWarningsData = warningsData;
+                    
+                    const warningsList = document.getElementById('predictive_warningsList');
+                    const warningCountEl = document.getElementById('predictive_warningCount');
+                    const warningCount = warningsData.warning_count || 0;
+                    
+                    console.log('⚠️ Warnings received:', warningCount);
+                    
+                    if (warningCountEl) {
+                        warningCountEl.textContent = warningCount;
+                        // Color code based on count
+                        if (warningCount === 0) {
+                            warningCountEl.style.color = '#10b981'; // Green - no warnings
+                        } else if (warningCount < 5) {
+                            warningCountEl.style.color = '#eab308'; // Yellow - low warnings
+                        } else if (warningCount < 10) {
+                            warningCountEl.style.color = '#f59e0b'; // Orange - medium warnings
+                        } else {
+                            warningCountEl.style.color = '#ef4444'; // Red - high warnings
+                        }
+                    }
+                    
+                    if (warningsData.has_warnings && warningsData.warnings) {
+                        warningsList.innerHTML = warningsData.warnings.map((warning, idx) => {
+                            const severityColor = warning.severity === 'high' ? '#ef4444' : 
+                                                 warning.severity === 'medium' ? '#f59e0b' : '#3b82f6';
+                            return `
+                                <div style="padding: 1rem; margin-bottom: 0.5rem; background: rgba(239, 68, 68, 0.1); 
+                                            border-left: 4px solid ${severityColor}; border-radius: 4px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <div>
+                                            <strong style="color: ${severityColor}; text-transform: uppercase;">
+                                                ${warning.severity}
+                                            </strong>
+                                            <div style="margin-top: 0.25rem; color: var(--text-primary);">
+                                                ${warning.message}
+                                            </div>
+                                        </div>
+                                        <span style="font-size: 1.5rem;">⚠️</span>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                    } else {
+                        // No warnings - show empty state
+                        if (warningsList) {
+                            warningsList.innerHTML = `
+                                <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                                    ✅ No active warnings - System operating normally
+                                </div>
+                            `;
+                        }
+                    }
+                } else {
+                    console.warn('⚠️ Failed to fetch early warnings:', warningsResponse.status);
+                    // Show error or empty state
+                    const warningsList = document.getElementById('predictive_warningsList');
+                    const warningCountEl = document.getElementById('predictive_warningCount');
+                    if (warningCountEl) warningCountEl.textContent = '--';
+                    if (warningsList) {
+                        warningsList.innerHTML = `
+                            <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                                ⚠️ Unable to fetch warnings
+                            </div>
+                        `;
+                    }
+                }
+                
+                // Update last update time
+                const lastUpdateElement = document.getElementById('predictive_lastUpdate');
+                if (lastUpdateElement) {
+                    lastUpdateElement.textContent = new Date().toLocaleTimeString();
+                }
+                
+                // Update model status
+                const statusElement = document.getElementById('predictive_modelStatus');
+                if (statusElement) {
+                    statusElement.textContent = 'Active';
+                    statusElement.style.color = '#10b981';
+                }
+                
+                console.log('Predictive maintenance data refreshed successfully');
+                
+                // Update model details section if visible
+                updateModelDetails();
+                    
+            } catch (error) {
+                console.error('Error refreshing predictive maintenance data:', error);
+                const statusElement = document.getElementById('predictive_modelStatus');
+                if (statusElement) {
+                    statusElement.textContent = 'Error';
+                    statusElement.style.color = '#ef4444';
+                }
+            }
+        }
+        
+        // Store last API responses for display
+        let lastRiskData = null;
+        let lastTimeData = null;
+        let lastWarningsData = null;
+        let lastSystemMetrics = null;
+        
+        // Early Detection Rate tracking
+        let detectionRateHistory = [];
+        const MAX_DETECTION_HISTORY = 100;
+        
+        // Update Early Detection Rate
+        function updateEarlyDetectionRate(hoursUntilFailure) {
+            const detectionRateEl = document.getElementById('predictive_detectionRate');
+            if (!detectionRateEl) return;
+            
+            // If no failure predicted or prediction is >1 hour ahead, count as successful detection
+            const isDetectedEarly = hoursUntilFailure === null || hoursUntilFailure > 1;
+            
+            // Add to history
+            detectionRateHistory.push({
+                timestamp: new Date(),
+                detectedEarly: isDetectedEarly
+            });
+            
+            // Keep only last MAX_DETECTION_HISTORY entries
+            if (detectionRateHistory.length > MAX_DETECTION_HISTORY) {
+                detectionRateHistory.shift();
+            }
+            
+            // Calculate rate based on history
+            if (detectionRateHistory.length > 0) {
+                const earlyDetections = detectionRateHistory.filter(h => h.detectedEarly).length;
+                const rate = (earlyDetections / detectionRateHistory.length) * 100;
+                
+                detectionRateEl.textContent = rate.toFixed(1) + '%';
+                
+                // Color code based on rate
+                if (rate >= 80) {
+                    detectionRateEl.style.color = '#10b981'; // Green - excellent
+                } else if (rate >= 60) {
+                    detectionRateEl.style.color = '#3b82f6'; // Blue - good
+                } else if (rate >= 40) {
+                    detectionRateEl.style.color = '#eab308'; // Yellow - fair
+                } else {
+                    detectionRateEl.style.color = '#ef4444'; // Red - poor
+                }
+            } else {
+                // If no history yet, show based on current prediction
+                if (isDetectedEarly) {
+                    detectionRateEl.textContent = '100%';
+                    detectionRateEl.style.color = '#10b981';
+                } else {
+                    detectionRateEl.textContent = '0%';
+                    detectionRateEl.style.color = '#ef4444';
+                }
+            }
+        }
+        
+        // Update Predictive Timeline Chart
+        function updatePredictiveTimelineChart(riskPercent, timestamp) {
+            if (!predictiveTimelineChart) {
+                // Chart not initialized yet, try to initialize it
+                const timelineCanvas = document.getElementById('predictive_timelineChart');
+                if (timelineCanvas && typeof Chart !== 'undefined') {
+                    const timelineCtx = timelineCanvas.getContext('2d');
+                    predictiveTimelineChart = new Chart(timelineCtx, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: [{
+                                label: 'Risk Score %',
+                                data: [],
+                                borderColor: '#ef4444',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                tension: 0.4,
+                                fill: true,
+                                pointRadius: 4,
+                                pointHoverRadius: 6,
+                                pointBackgroundColor: '#ef4444',
+                                pointBorderColor: '#ffffff',
+                                pointBorderWidth: 2
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: { duration: 300 },
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top',
+                                    labels: { 
+                                        color: '#e8eaed',
+                                        padding: 15,
+                                        font: { size: 12, weight: 'bold' }
+                                    }
+                                },
+                                tooltip: {
+                                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                    titleColor: '#e8eaed',
+                                    bodyColor: '#e8eaed',
+                                    borderColor: '#ef4444',
+                                    borderWidth: 1,
+                                    callbacks: {
+                                        label: function(context) {
+                                            return 'Risk: ' + context.parsed.y.toFixed(2) + '%';
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    max: 100,
+                                    ticks: { 
+                                        color: '#9aa0a6',
+                                        callback: function(value) {
+                                            return value + '%';
+                                        }
+                                    },
+                                    grid: { color: '#374151' },
+                                    title: {
+                                        display: true,
+                                        text: 'Risk Score (%)',
+                                        color: '#9aa0a6',
+                                        font: { size: 12 }
+                                    }
+                                },
+                                x: {
+                                    ticks: { 
+                                        color: '#9aa0a6',
+                                        maxTicksLimit: 10
+                                    },
+                                    grid: { color: '#374151' },
+                                    title: {
+                                        display: true,
+                                        text: 'Time',
+                                        color: '#9aa0a6',
+                                        font: { size: 12 }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    return; // Can't initialize chart yet
+                }
+            }
+            
+            // Add new data point
+            const timeLabel = timestamp ? new Date(timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+            const riskValue = parseFloat(riskPercent);
+            
+            // Add to history
+            riskScoreHistory.push({
+                time: timeLabel,
+                value: riskValue,
+                timestamp: timestamp || new Date().toISOString()
+            });
+            
+            // Keep only last MAX_HISTORY_POINTS
+            if (riskScoreHistory.length > MAX_HISTORY_POINTS) {
+                riskScoreHistory.shift();
+            }
+            
+            // Update chart
+            predictiveTimelineChart.data.labels = riskScoreHistory.map(h => h.time);
+            predictiveTimelineChart.data.datasets[0].data = riskScoreHistory.map(h => h.value);
+            
+            // Update chart colors based on risk level
+            const currentRisk = riskValue;
+            if (currentRisk > 70) {
+                predictiveTimelineChart.data.datasets[0].borderColor = '#ef4444'; // Red
+                predictiveTimelineChart.data.datasets[0].backgroundColor = 'rgba(239, 68, 68, 0.2)';
+                predictiveTimelineChart.data.datasets[0].pointBackgroundColor = '#ef4444';
+            } else if (currentRisk > 50) {
+                predictiveTimelineChart.data.datasets[0].borderColor = '#f59e0b'; // Orange
+                predictiveTimelineChart.data.datasets[0].backgroundColor = 'rgba(245, 158, 11, 0.2)';
+                predictiveTimelineChart.data.datasets[0].pointBackgroundColor = '#f59e0b';
+            } else if (currentRisk > 30) {
+                predictiveTimelineChart.data.datasets[0].borderColor = '#eab308'; // Yellow
+                predictiveTimelineChart.data.datasets[0].backgroundColor = 'rgba(234, 179, 8, 0.2)';
+                predictiveTimelineChart.data.datasets[0].pointBackgroundColor = '#eab308';
+            } else {
+                predictiveTimelineChart.data.datasets[0].borderColor = '#10b981'; // Green
+                predictiveTimelineChart.data.datasets[0].backgroundColor = 'rgba(16, 185, 129, 0.2)';
+                predictiveTimelineChart.data.datasets[0].pointBackgroundColor = '#10b981';
+            }
+            
+            // Update chart
+            predictiveTimelineChart.update('active');
+        }
+        
+        // Toggle model details section
+        function toggleModelDetails() {
+            const section = document.getElementById('modelDetailsSection');
+            const toggle = document.getElementById('modelDetailsToggle');
+            if (section && toggle) {
+                if (section.style.display === 'none' || !section.style.display) {
+                    section.style.display = 'block';
+                    toggle.textContent = '▲ Hide Details';
+                    // Update details when showing
+                    updateModelDetails();
+                } else {
+                    section.style.display = 'none';
+                    toggle.textContent = '▼ Show Details';
+                }
+            }
+        }
+        
+        // Update model details section
+        function updateModelDetails() {
+            // Update model status
+            const statusEl = document.getElementById('modelDetails_status');
+            const loadedEl = document.getElementById('modelDetails_loaded');
+            const modeEl = document.getElementById('modelDetails_mode');
+            
+            if (statusEl) {
+                statusEl.textContent = lastRiskData && !lastRiskData.error ? 'Active' : 'Inactive';
+                statusEl.style.color = lastRiskData && !lastRiskData.error ? '#10b981' : '#ef4444';
+            }
+            
+            if (loadedEl) {
+                loadedEl.textContent = lastRiskData && !lastRiskData.error ? 'Yes' : 'No';
+                loadedEl.style.color = lastRiskData && !lastRiskData.error ? '#10b981' : '#ef4444';
+            }
+            
+            if (modeEl) {
+                modeEl.textContent = demoMode ? 'Demo Mode' : 'Real Mode';
+            }
+            
+            // Update system metrics
+            const metricsEl = document.getElementById('modelDetails_metrics');
+            if (metricsEl && lastSystemMetrics) {
+                metricsEl.textContent = JSON.stringify(lastSystemMetrics, null, 2);
+            } else if (metricsEl) {
+                metricsEl.textContent = 'No metrics available';
+            }
+            
+            // Update risk response
+            const riskResponseEl = document.getElementById('modelDetails_riskResponse');
+            if (riskResponseEl && lastRiskData) {
+                riskResponseEl.textContent = JSON.stringify(lastRiskData, null, 2);
+            } else if (riskResponseEl) {
+                riskResponseEl.textContent = 'Waiting for risk prediction data...';
+            }
+            
+            // Update time to failure response
+            const timeResponseEl = document.getElementById('modelDetails_timeResponse');
+            if (timeResponseEl && lastTimeData) {
+                timeResponseEl.textContent = JSON.stringify(lastTimeData, null, 2);
+            } else if (timeResponseEl) {
+                timeResponseEl.textContent = 'Waiting for time-to-failure prediction data...';
+            }
+            
+            // Update warnings response
+            const warningsResponseEl = document.getElementById('modelDetails_warningsResponse');
+            if (warningsResponseEl && lastWarningsData) {
+                warningsResponseEl.textContent = JSON.stringify(lastWarningsData, null, 2);
+            } else if (warningsResponseEl) {
+                warningsResponseEl.textContent = 'Waiting for early warnings data...';
             }
         }
         
@@ -4067,6 +5665,297 @@
             }
         }
         
+        // ============================================================================
+        // Autonomous Self-Healing System Functions
+        // ============================================================================
+        
+        let healingPerformanceChart = null;
+        
+        async function updateAutoHealingDashboard() {
+            try {
+                // Fetch healing history and statistics
+                const response = await fetch('/api/cloud/healing/history?limit=50');
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateAutoHealingStatus(data.statistics);
+                    updateHealingStatistics(data.statistics);
+                    updateRecentHealingActions(data.history);
+                    updateHealingHistoryTimeline(data.history);
+                    updateActiveFaults();
+                    updateHealingPerformanceChart(data.history);
+                }
+            } catch (error) {
+                console.error('Error updating auto-healing dashboard:', error);
+            }
+        }
+        
+        function updateAutoHealingStatus(stats) {
+            if (!stats) return;
+            
+            // Update status badge
+            const statusEl = document.getElementById('autoHealingStatus');
+            if (statusEl) {
+                statusEl.innerHTML = '<i class="fas fa-check-circle"></i> Active';
+                statusEl.style.color = 'var(--accent-green)';
+            }
+            
+            // Update total healings
+            const totalEl = document.getElementById('totalHealings');
+            if (totalEl && stats.total_healings) {
+                totalEl.textContent = stats.total_healings || 0;
+            }
+            
+            // Update success rate
+            const successRateEl = document.getElementById('healingSuccessRate');
+            if (successRateEl && stats.success_rate !== undefined) {
+                const rate = (stats.success_rate * 100).toFixed(1);
+                successRateEl.textContent = `${rate}%`;
+                successRateEl.style.color = rate >= 80 ? 'var(--accent-green)' : rate >= 50 ? 'var(--accent-yellow)' : 'var(--accent-red)';
+            }
+        }
+        
+        function updateHealingStatistics(stats) {
+            if (!stats) return;
+            
+            const elements = {
+                'statsTotalAttempts': stats.total_attempts || 0,
+                'statsSuccessful': stats.successful || 0,
+                'statsFailed': stats.failed || 0,
+                'statsInProgress': stats.in_progress || 0,
+                'statsAvgResponseTime': stats.avg_response_time ? `${stats.avg_response_time.toFixed(1)}s` : '0s'
+            };
+            
+            for (const [id, value] of Object.entries(elements)) {
+                const el = document.getElementById(id);
+                if (el) el.textContent = value;
+            }
+        }
+        
+        function updateRecentHealingActions(history) {
+            const container = document.getElementById('recentHealingActions');
+            if (!container) return;
+            
+            if (!history || history.length === 0) {
+                container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No recent healing actions</div>';
+                return;
+            }
+            
+            const recent = history.slice(0, 10);
+            container.innerHTML = recent.map(entry => {
+                const statusIcon = entry.status === 'healed' ? '✅' : entry.status === 'failed' ? '❌' : '⏳';
+                const statusColor = entry.status === 'healed' ? 'var(--accent-green)' : entry.status === 'failed' ? 'var(--accent-red)' : 'var(--accent-yellow)';
+                const service = entry.error?.service || entry.error?.resource || 'Unknown';
+                
+                return `
+                    <div class="log-entry" style="padding: 1rem; margin-bottom: 0.5rem; border-left: 4px solid ${statusColor}; background: rgba(0,0,0,0.2);">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                            <div>
+                                <strong style="color: ${statusColor};">${statusIcon} ${entry.status.toUpperCase()}</strong>
+                                <div style="margin-top: 0.25rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                    ${service} - ${entry.error?.type?.replace('_', ' ') || 'Unknown fault'}
+                                </div>
+                            </div>
+                            <span style="color: var(--text-secondary); font-size: 0.85rem;">
+                                ${new Date(entry.timestamp).toLocaleTimeString()}
+                            </span>
+                        </div>
+                        ${entry.analysis?.quick_fix ? `
+                            <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 4px; font-size: 0.85rem;">
+                                <strong>AI Analysis:</strong> ${entry.analysis.quick_fix.substring(0, 100)}${entry.analysis.quick_fix.length > 100 ? '...' : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateHealingHistoryTimeline(history) {
+            const container = document.getElementById('healingHistoryTimeline');
+            if (!container) return;
+            
+            const filter = document.getElementById('healingHistoryFilter')?.value || 'all';
+            let filteredHistory = history || [];
+            
+            if (filter !== 'all') {
+                filteredHistory = filteredHistory.filter(entry => {
+                    if (filter === 'success') return entry.status === 'healed';
+                    if (filter === 'failed') return entry.status === 'failed';
+                    if (filter === 'in_progress') return entry.status === 'in_progress';
+                    return true;
+                });
+            }
+            
+            if (filteredHistory.length === 0) {
+                container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No healing history found</div>';
+                return;
+            }
+            
+            container.innerHTML = filteredHistory.map(entry => {
+                const statusIcon = entry.status === 'healed' ? '✅' : entry.status === 'failed' ? '❌' : '⏳';
+                const statusColor = entry.status === 'healed' ? 'var(--accent-green)' : entry.status === 'failed' ? 'var(--accent-red)' : 'var(--accent-yellow)';
+                const service = entry.error?.service || entry.error?.resource || 'Unknown';
+                
+                return `
+                    <div class="log-entry" style="padding: 1rem; margin-bottom: 1rem; border-left: 4px solid ${statusColor}; background: rgba(0,0,0,0.2);">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                    <strong style="color: ${statusColor}; font-size: 1.1rem;">${statusIcon} ${entry.status.toUpperCase()}</strong>
+                                    <span style="color: var(--text-secondary); font-size: 0.85rem;">${new Date(entry.timestamp).toLocaleString()}</span>
+                                </div>
+                                <div style="margin-bottom: 0.5rem;">
+                                    <strong>Service/Resource:</strong> ${service}
+                                </div>
+                                <div style="margin-bottom: 0.5rem; color: var(--text-secondary);">
+                                    <strong>Fault Type:</strong> ${entry.error?.type?.replace('_', ' ').toUpperCase() || 'Unknown'}
+                                </div>
+                                ${entry.error?.reason ? `
+                                    <div style="margin-bottom: 0.5rem; color: var(--text-secondary);">
+                                        <strong>Reason:</strong> ${entry.error.reason}
+                                    </div>
+                                ` : ''}
+                                ${entry.analysis?.root_cause ? `
+                                    <div style="margin-top: 0.5rem; padding: 0.75rem; background: rgba(139, 92, 246, 0.1); border-radius: 4px;">
+                                        <strong>🧠 AI Root Cause:</strong> ${entry.analysis.root_cause}
+                                    </div>
+                                ` : ''}
+                                ${entry.actions && entry.actions.length > 0 ? `
+                                    <div style="margin-top: 0.5rem;">
+                                        <strong>Actions Taken:</strong>
+                                        <ul style="margin: 0.5rem 0; padding-left: 1.5rem;">
+                                            ${entry.actions.map(action => `
+                                                <li style="margin: 0.25rem 0;">
+                                                    ${action.success ? '✅' : '❌'} ${action.action?.description || 'Unknown action'}
+                                                </li>
+                                            `).join('')}
+                                        </ul>
+                                    </div>
+                                ` : ''}
+                                ${entry.verification ? `
+                                    <div style="margin-top: 0.5rem; padding: 0.5rem; background: ${entry.verification.success ? 'rgba(52, 211, 153, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; border-radius: 4px;">
+                                        <strong>Verification:</strong> ${entry.verification.success ? '✅' : '❌'} ${entry.verification.details || 'N/A'}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function updateActiveFaults() {
+            fetch('/api/cloud/faults?limit=10')
+                .then(res => res.json())
+                .then(data => {
+                    const container = document.getElementById('activeFaultsList');
+                    if (!container) return;
+                    
+                    if (!data.success || !data.faults || data.faults.length === 0) {
+                        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No active faults detected</div>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.faults.map(fault => {
+                        const severityColor = fault.severity === 'critical' ? 'var(--accent-red)' : 'var(--accent-yellow)';
+                        return `
+                            <div class="log-entry" style="padding: 0.75rem; margin-bottom: 0.5rem; border-left: 4px solid ${severityColor}; background: rgba(0,0,0,0.2);">
+                                <div style="display: flex; justify-content: space-between; align-items: start;">
+                                    <div>
+                                        <strong style="color: ${severityColor};">${fault.type.replace('_', ' ').toUpperCase()}</strong>
+                                        <div style="margin-top: 0.25rem; color: var(--text-secondary); font-size: 0.85rem;">
+                                            ${fault.service || fault.resource || 'Unknown'}
+                                        </div>
+                                        <div style="margin-top: 0.25rem; color: var(--text-secondary); font-size: 0.85rem;">
+                                            ${fault.reason}
+                                        </div>
+                                    </div>
+                                    <span style="color: var(--text-secondary); font-size: 0.75rem;">
+                                        ${new Date(fault.timestamp).toLocaleTimeString()}
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                })
+                .catch(err => console.error('Error fetching active faults:', err));
+        }
+        
+        function updateHealingPerformanceChart(history) {
+            const canvas = document.getElementById('healingPerformanceChart');
+            if (!canvas) return;
+            
+            const ctx = canvas.getContext('2d');
+            
+            // Destroy existing chart if it exists
+            if (healingPerformanceChart) {
+                healingPerformanceChart.destroy();
+            }
+            
+            if (!history || history.length === 0) {
+                return;
+            }
+            
+            // Prepare data for last 30 days or available data
+            const last30Days = history.slice(0, 30).reverse();
+            const labels = last30Days.map(entry => new Date(entry.timestamp).toLocaleDateString());
+            const successData = last30Days.map(entry => entry.status === 'healed' ? 1 : 0);
+            const failedData = last30Days.map(entry => entry.status === 'failed' ? 1 : 0);
+            
+            healingPerformanceChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Successful',
+                            data: successData,
+                            borderColor: 'var(--accent-green)',
+                            backgroundColor: 'rgba(52, 211, 153, 0.1)',
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Failed',
+                            data: failedData,
+                            borderColor: 'var(--accent-red)',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'var(--text-primary)' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { color: 'var(--text-secondary)' },
+                            grid: { color: 'var(--border-color)' }
+                        },
+                        x: {
+                            ticks: { color: 'var(--text-secondary)' },
+                            grid: { color: 'var(--border-color)' }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function refreshHealingHistory() {
+            updateAutoHealingDashboard();
+            showNotification('Healing history refreshed', 'success');
+        }
+        
+        function updateHealingHistory() {
+            updateHealingHistoryTimeline([]); // Will be updated by updateAutoHealingDashboard
+            updateAutoHealingDashboard();
+        }
+        
         // Initialize on load
         window.addEventListener('load', function() {
             console.log('Dashboard loading...');
@@ -4075,12 +5964,81 @@
             updateRecentActivity();
             
             initializeWebSocket();
+            initializeCloudWebSocket(); // Initialize cloud simulation WebSocket
             initializeCharts();
             refreshProcesses();
             refreshDDoSData();
             refreshBlockedIPsList();
             updateStatistics(); // Initial statistics load
             refreshSystemLogs(); // Initial system logs load
+            
+            // Initialize cloud simulation visualizations
+            updateServiceStatus();
+            updateResourceCharts();
+            
+            // Initialize autonomous self-healing dashboard
+            updateAutoHealingDashboard();
+            setInterval(updateAutoHealingDashboard, 10000); // Update every 10 seconds
+            
+            // Refresh cloud simulation data periodically
+            setInterval(updateServiceStatus, 5000);
+            setInterval(updateResourceCharts, 5000);
+            setInterval(async () => {
+                try {
+                    const response = await fetch('/api/cloud/faults?limit=10');
+                    const data = await response.json();
+                    if (data.success) {
+                        updateFaultDetection(data.faults, data.statistics);
+                    }
+                } catch (e) { console.error('Error fetching faults:', e); }
+            }, 5000);
+            setInterval(async () => {
+                try {
+                    const response = await fetch('/api/cloud/healing/history?limit=10');
+                    const data = await response.json();
+                    if (data.success) {
+                        updateHealingActions(data.history, data.statistics);
+                        
+                        // Update manual instructions if latest healing failed
+                        if (data.history && data.history.length > 0) {
+                            const latest = data.history[0];
+                            if (!latest.success && latest.manual_instructions) {
+                                updateManualInstructions(latest.manual_instructions);
+                            }
+                        }
+                    }
+                } catch (e) { console.error('Error fetching healing history:', e); }
+            }, 5000);
+        
+        function updateManualInstructions(instructions) {
+            const panel = document.getElementById('manualInstructionsPanel');
+            if (!panel) return;
+            
+            panel.innerHTML = `
+                <div style="background: rgba(251, 191, 36, 0.2); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--accent-yellow);">
+                    <h4 style="margin-top: 0; color: var(--accent-yellow);">⚠️ Manual Intervention Required</h4>
+                    <div style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.6;">
+                        ${instructions}
+                    </div>
+                    <button class="btn btn-secondary" onclick="copyInstructions()" style="margin-top: 1rem;">
+                        📋 Copy Instructions
+                    </button>
+                </div>
+            `;
+        }
+        
+        function copyInstructions() {
+            const panel = document.getElementById('manualInstructionsPanel');
+            if (!panel) return;
+            
+            const text = panel.innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                showNotification('✅ Instructions copied to clipboard', 'success');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                showNotification('❌ Failed to copy instructions', 'error');
+            });
+        }
             
             // Refresh DDoS data every 5 seconds
             setInterval(refreshDDoSData, 5000);
@@ -4095,6 +6053,42 @@
             
             // Refresh anomalies every 30 seconds
             setInterval(loadAnomalies, 30000);
+            
+            // Refresh predictive maintenance data every 30 seconds
+            setInterval(() => {
+                // Only refresh if predictive tab is active
+                const predictiveTab = document.getElementById('predictive');
+                if (predictiveTab && predictiveTab.classList.contains('active')) {
+                    console.log('⏰ Auto-refreshing predictive maintenance data...');
+                    refreshPredictiveMaintenance();
+                }
+            }, 30000);
+            
+            // Initial load - wait for DOM to be ready
+            setTimeout(() => {
+                console.log('🚀 Initial load of predictive maintenance data...');
+                // Check if predictive tab is already active
+                const predictiveTab = document.getElementById('predictive');
+                if (predictiveTab && predictiveTab.classList.contains('active')) {
+                    refreshPredictiveMaintenance();
+                }
+                // Start demo metrics polling if demo mode is on
+                startDemoMetricsPolling();
+            }, 2000);
+            
+            // Also refresh when predictive tab becomes visible (using IntersectionObserver)
+            const predictiveTabContent = document.getElementById('predictive');
+            if (predictiveTabContent) {
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            console.log('👁️ Predictive tab is now visible, refreshing...');
+                            setTimeout(() => refreshPredictiveMaintenance(), 100);
+                        }
+                    });
+                }, { threshold: 0.1 });
+                observer.observe(predictiveTabContent);
+            }
             
             // Load anomalies on initial load
             loadAnomalies();

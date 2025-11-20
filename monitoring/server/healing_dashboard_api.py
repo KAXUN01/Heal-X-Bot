@@ -3,7 +3,7 @@ Healing Bot Dashboard API
 Comprehensive backend for real-time system monitoring and management
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +15,7 @@ import time
 import os
 import sys
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Callable
 from collections import defaultdict, Counter
 import logging
 import re
@@ -29,7 +29,9 @@ from blocked_ips_db import BlockedIPsDatabase
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
-load_dotenv(dotenv_path=env_path)
+env_path_abs = env_path.resolve()
+# Convert Path to string for load_dotenv and override existing env vars
+load_dotenv(dotenv_path=str(env_path_abs), override=True)
 from system_log_collector import initialize_system_log_collector, get_system_log_collector
 from centralized_logger import initialize_centralized_logging, centralized_logger
 from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
@@ -54,6 +56,13 @@ app.add_middleware(
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Log .env file status
+logger.info(f"Loading .env file from: {env_path_abs}")
+if env_path_abs.exists():
+    logger.info(f"✅ .env file found")
+else:
+    logger.warning(f"⚠️  .env file not found at {env_path_abs}")
 
 # Initialize log collectors (must be after logger is defined)
 system_log_collector = None
@@ -144,15 +153,41 @@ def initialize_log_services():
 initialize_log_services()
 
 # Global configuration
-CONFIG = {
-    "auto_restart": True,
-    "cpu_threshold": 90.0,
-    "memory_threshold": 85.0,
-    "disk_threshold": 80.0,
-    "discord_webhook": os.getenv("DISCORD_WEBHOOK", ""),
-    "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
-    "model_service_url": os.getenv("MODEL_SERVICE_URL", "http://localhost:8080"),
-}
+def load_config():
+    """Load configuration from environment variables"""
+    # Reload .env to ensure we have the latest values
+    load_dotenv(dotenv_path=str(env_path_abs), override=True)
+    
+    # Check for both DISCORD_WEBHOOK and DISCORD_WEBHOOK_URL (for backward compatibility)
+    discord_webhook = os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL", "")
+    discord_webhook = discord_webhook.strip() if discord_webhook else ""
+    # Remove quotes if present
+    if discord_webhook.startswith('"') and discord_webhook.endswith('"'):
+        discord_webhook = discord_webhook[1:-1]
+    if discord_webhook.startswith("'") and discord_webhook.endswith("'"):
+        discord_webhook = discord_webhook[1:-1]
+    
+    return {
+        "auto_restart": True,
+        "cpu_threshold": 90.0,
+        "memory_threshold": 85.0,
+        "disk_threshold": 80.0,
+        "discord_webhook": discord_webhook,
+        "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
+        "model_service_url": os.getenv("MODEL_SERVICE_URL", "http://localhost:8080"),
+    }
+
+CONFIG = load_config()
+
+# Log Discord webhook status on startup
+if CONFIG["discord_webhook"]:
+    # Mask the webhook URL for security (show only first and last few chars)
+    webhook_display = CONFIG["discord_webhook"]
+    if len(webhook_display) > 50:
+        webhook_display = webhook_display[:30] + "..." + webhook_display[-20:]
+    logger.info(f"✅ Discord webhook loaded: {webhook_display}")
+else:
+    logger.warning("⚠️  Discord webhook not configured. Set DISCORD_WEBHOOK in .env file to enable notifications.")
 
 # Service status cache
 service_cache = {}
@@ -164,6 +199,13 @@ log_buffer = []
 
 # Track notified critical errors to avoid duplicates
 notified_critical_errors = set()  # Set of (timestamp, service, message_hash) tuples
+
+# Track last sent warnings and time-to-failure for Discord notifications
+_last_sent_warnings = set()  # Set of warning types that were sent
+_last_sent_warning_count = 0  # Last warning count sent
+_last_sent_time_to_failure = None  # Last time-to-failure value sent
+_last_warning_notification_time = None  # Last time warnings were sent
+_last_time_to_failure_notification_time = None  # Last time time-to-failure was sent
 
 # DDoS Detection Storage
 ddos_statistics = {
@@ -724,7 +766,8 @@ def update_ddos_statistics(attack_data: Dict[str, Any]):
 def send_discord_alert(message: str, severity: str = "info", embed_data: Dict[str, Any] = None):
     """Send alert to Discord with optional detailed embed data"""
     if not CONFIG["discord_webhook"]:
-        return
+        logger.warning("Discord webhook not configured. Notification not sent.")
+        return False
     
     try:
         emoji_map = {
@@ -768,14 +811,256 @@ def send_discord_alert(message: str, severity: str = "info", embed_data: Dict[st
             "embeds": [embed]
         }
         
-        requests.post(CONFIG["discord_webhook"], json=payload, timeout=5)
+        # Send request with proper headers and response checking
+        headers = {
+            "Content-Type": "application/json"
+        }
+        
+        response = requests.post(
+            CONFIG["discord_webhook"], 
+            json=payload, 
+            headers=headers,
+            timeout=10
+        )
+        
+        # Check response status
+        if response.status_code == 204:
+            logger.debug(f"Discord notification sent successfully (severity: {severity})")
+            return True
+        elif response.status_code in [200, 201]:
+            logger.debug(f"Discord notification sent successfully (severity: {severity})")
+            return True
+        else:
+            error_msg = f"Discord webhook returned status {response.status_code}"
+            try:
+                error_body = response.text
+                if error_body:
+                    error_msg += f": {error_body[:200]}"
+            except:
+                pass
+            logger.error(f"Failed to send Discord alert: {error_msg}")
+            return False
+            
+    except requests.exceptions.Timeout:
+        logger.error("Discord webhook request timed out after 10 seconds")
+        return False
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Discord webhook connection error: {e}")
+        return False
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Discord webhook request error: {e}")
+        return False
     except Exception as e:
-        logger.error(f"Error sending Discord alert: {e}")
+        logger.error(f"Error sending Discord alert: {e}", exc_info=True)
+        return False
+
+def send_early_warnings_discord_notification(warnings: List[Dict[str, Any]], warning_count: int, metrics: Dict[str, Any] = None):
+    """Send Discord notification for early warnings"""
+    if not CONFIG["discord_webhook"]:
+        return False
+    
+    try:
+        # Build warning list text
+        warning_texts = []
+        high_severity_count = 0
+        medium_severity_count = 0
+        
+        for warning in warnings:
+            severity = warning.get('severity', 'medium')
+            message = warning.get('message', 'Unknown warning')
+            wtype = warning.get('type', 'unknown')
+            
+            emoji = "🔴" if severity == 'high' else "🟡"
+            warning_texts.append(f"{emoji} **{wtype.replace('_', ' ').title()}**: {message}")
+            
+            if severity == 'high':
+                high_severity_count += 1
+            elif severity == 'medium':
+                medium_severity_count += 1
+        
+        # Determine notification severity
+        if high_severity_count > 0:
+            notif_severity = "critical" if high_severity_count >= 3 else "error"
+        elif medium_severity_count > 0:
+            notif_severity = "warning"
+        else:
+            notif_severity = "info"
+        
+        # Get system metrics if provided
+        cpu = metrics.get('cpu_percent', metrics.get('cpu', 0)) if metrics else 0
+        memory = metrics.get('memory_percent', metrics.get('memory', 0)) if metrics else 0
+        disk = metrics.get('disk_percent', metrics.get('disk', 0)) if metrics else 0
+        
+        # Build embed
+        fields = [
+            {
+                "name": "⚠️ Active Warnings",
+                "value": f"**Total:** {warning_count}\n**High Severity:** {high_severity_count}\n**Medium Severity:** {medium_severity_count}",
+                "inline": True
+            },
+            {
+                "name": "💻 System Metrics",
+                "value": f"**CPU:** {cpu:.1f}%\n**Memory:** {memory:.1f}%\n**Disk:** {disk:.1f}%",
+                "inline": True
+            }
+        ]
+        
+        # Add warning details (limit to 10 most important)
+        warning_details = "\n".join(warning_texts[:10])
+        if len(warnings) > 10:
+            warning_details += f"\n... and {len(warnings) - 10} more warning(s)"
+        
+        fields.append({
+            "name": "📋 Warning Details",
+            "value": warning_details[:1024],  # Discord field limit
+            "inline": False
+        })
+        
+        # Get dashboard URL
+        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:5001")
+        dashboard_link = f"{dashboard_url}/static/healing-dashboard.html#predictive"
+        
+        embed_data = {
+            "title": f"⚠️ Early Warning Indicators Detected ({warning_count} Active)",
+            "description": f"**{warning_count}** early warning{'s' if warning_count != 1 else ''} detected by predictive maintenance system.",
+            "color": 15158332 if high_severity_count > 0 else 16776960,  # Red if high severity, yellow otherwise
+            "fields": fields,
+            "footer": {
+                "text": f"Healing Bot Dashboard • {dashboard_url}",
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+            "url": dashboard_link
+        }
+        
+        success = send_discord_alert("", notif_severity, embed_data)
+        if success:
+            logger.info(f"Discord notification sent for {warning_count} early warnings")
+        return success
+        
+    except Exception as e:
+        logger.error(f"Error sending early warnings Discord notification: {e}", exc_info=True)
+        return False
+
+def send_time_to_failure_discord_notification(hours_until_failure: float, predicted_time: str = None, risk_percentage: float = None, metrics: Dict[str, Any] = None):
+    """Send Discord notification for time-to-failure prediction"""
+    if not CONFIG["discord_webhook"]:
+        return False
+    
+    try:
+        # Determine severity based on hours until failure
+        if hours_until_failure < 1:
+            severity = "critical"
+            emoji = "🚨"
+            urgency = "IMMEDIATE ACTION REQUIRED"
+            color = 10038562  # Dark red
+        elif hours_until_failure < 6:
+            severity = "error"
+            emoji = "🔴"
+            urgency = "URGENT"
+            color = 15158332  # Red
+        elif hours_until_failure < 24:
+            severity = "warning"
+            emoji = "🟠"
+            urgency = "HIGH PRIORITY"
+            color = 16753920  # Orange
+        else:
+            severity = "warning"
+            emoji = "🟡"
+            urgency = "MONITORING"
+            color = 16776960  # Yellow
+        
+        # Format predicted time
+        predicted_time_str = "N/A"
+        if predicted_time:
+            try:
+                dt = datetime.fromisoformat(predicted_time.replace('Z', '+00:00'))
+                predicted_time_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+            except:
+                predicted_time_str = predicted_time
+        
+        # Format hours
+        if hours_until_failure < 1:
+            time_str = f"{hours_until_failure * 60:.1f} minutes"
+        elif hours_until_failure < 24:
+            time_str = f"{hours_until_failure:.1f} hours"
+        else:
+            days = hours_until_failure / 24
+            time_str = f"{days:.1f} days ({hours_until_failure:.1f} hours)"
+        
+        # Get system metrics if provided
+        cpu = metrics.get('cpu_percent', metrics.get('cpu', 0)) if metrics else 0
+        memory = metrics.get('memory_percent', metrics.get('memory', 0)) if metrics else 0
+        disk = metrics.get('disk_percent', metrics.get('disk', 0)) if metrics else 0
+        
+        # Build embed
+        fields = [
+            {
+                "name": f"{emoji} Time to Failure",
+                "value": f"**Estimated:** {time_str}\n**Predicted Time:** {predicted_time_str}\n**Urgency:** {urgency}",
+                "inline": False
+            }
+        ]
+        
+        if risk_percentage is not None:
+            fields.append({
+                "name": "📊 Risk Assessment",
+                "value": f"**Risk Score:** {risk_percentage:.1f}%\n**Level:** {'High' if risk_percentage > 70 else 'Medium' if risk_percentage > 50 else 'Low'}",
+                "inline": True
+            })
+        
+        fields.append({
+            "name": "💻 System Metrics",
+            "value": f"**CPU:** {cpu:.1f}%\n**Memory:** {memory:.1f}%\n**Disk:** {disk:.1f}%",
+            "inline": True
+        })
+        
+        # Add recommended actions
+        recommendations = []
+        if hours_until_failure < 6:
+            recommendations.append("🔴 **Immediate action required** - System failure predicted soon")
+            recommendations.append("📋 **Review system logs** - Check for error patterns")
+            recommendations.append("🔄 **Consider preventive measures** - Restart services if needed")
+        else:
+            recommendations.append("📋 **Monitor system closely** - Watch for warning indicators")
+            recommendations.append("🔍 **Review metrics** - Check dashboard for details")
+        
+        if recommendations:
+            fields.append({
+                "name": "💡 Recommended Actions",
+                "value": "\n".join(recommendations),
+                "inline": False
+            })
+        
+        # Get dashboard URL
+        dashboard_url = os.getenv("DASHBOARD_URL", "http://localhost:5001")
+        dashboard_link = f"{dashboard_url}/static/healing-dashboard.html#predictive"
+        
+        embed_data = {
+            "title": f"{emoji} Predictive Failure Detection - {time_str} Until Failure",
+            "description": f"Predictive maintenance model estimates system failure in **{time_str}**.",
+            "color": color,
+            "fields": fields,
+            "footer": {
+                "text": f"Healing Bot Dashboard • {dashboard_url}",
+            },
+            "timestamp": datetime.utcnow().isoformat(),
+            "url": dashboard_link
+        }
+        
+        success = send_discord_alert("", severity, embed_data)
+        if success:
+            logger.info(f"Discord notification sent for time-to-failure: {hours_until_failure:.1f} hours")
+        return success
+        
+    except Exception as e:
+        logger.error(f"Error sending time-to-failure Discord notification: {e}", exc_info=True)
+        return False
 
 def send_detailed_critical_alert(issue: Dict[str, Any], system_metrics: Dict[str, Any] = None):
     """Send detailed Discord alert for critical errors"""
     if not CONFIG["discord_webhook"]:
-        return
+        logger.warning("Discord webhook not configured. Critical alert not sent.")
+        return False
     
     try:
         # Get issue details
@@ -937,18 +1222,22 @@ def send_detailed_critical_alert(issue: Dict[str, Any], system_metrics: Dict[str
             "url": dashboard_link
         }
         
-        send_discord_alert("", "critical", embed_data)
-        logger.info(f"Detailed Discord notification sent for CRITICAL error: {service_name}")
+        success = send_discord_alert("", "critical", embed_data)
+        if success:
+            logger.info(f"Detailed Discord notification sent for CRITICAL error: {service_name}")
+        else:
+            logger.warning(f"Failed to send detailed Discord notification for CRITICAL error: {service_name}")
+        return success
         
     except Exception as e:
-        logger.error(f"Error sending detailed Discord alert: {e}")
+        logger.error(f"Error sending detailed Discord alert: {e}", exc_info=True)
         # Fallback to simple alert
         try:
             service_name = issue.get('service', 'Unknown Service')
             error_message = issue.get('message', 'No message')[:500]
-            send_discord_alert(f"🚨 CRITICAL ERROR: {service_name}\n\n{error_message}", "critical")
+            return send_discord_alert(f"🚨 CRITICAL ERROR: {service_name}\n\n{error_message}", "critical")
         except:
-            pass
+            return False
 
 # ============================================================================
 # AI Log Analysis (TF-IDF)
@@ -1054,8 +1343,11 @@ async def monitoring_loop():
 
 @app.on_event("startup")
 async def startup_event():
-    """Start background tasks"""
+    """Start background tasks and initialize cloud components"""
     asyncio.create_task(monitoring_loop())
+    
+    # Initialize cloud simulation components
+    initialize_cloud_components()
     
     # Initialize with some sample DDoS data if empty
     if ddos_statistics['total_detections'] == 0:
@@ -1195,16 +1487,98 @@ async def test_discord_endpoint(data: dict):
     """Test Discord webhook"""
     webhook = data.get("webhook")
     if webhook:
+        webhook = webhook.strip()
+        # Remove quotes if present
+        if webhook.startswith('"') and webhook.endswith('"'):
+            webhook = webhook[1:-1]
+        if webhook.startswith("'") and webhook.endswith("'"):
+            webhook = webhook[1:-1]
         CONFIG["discord_webhook"] = webhook
     
-    send_discord_alert("Test notification from Healing Bot Dashboard", "info")
-    return {"success": True}
+    if not CONFIG["discord_webhook"]:
+        return {"success": False, "error": "Discord webhook not configured"}
+    
+    success = send_discord_alert("Test notification from Healing Bot Dashboard", "info")
+    if success:
+        return {"success": True, "message": "Test notification sent successfully"}
+    else:
+        return {"success": False, "error": "Failed to send test notification. Check server logs for details."}
+
+@app.get("/api/discord/status")
+async def get_discord_status():
+    """Get Discord webhook configuration status"""
+    webhook = CONFIG.get("discord_webhook", "")
+    is_configured = bool(webhook)
+    
+    # Check if webhook is in environment (check both variable names)
+    env_webhook = os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL", "")
+    env_webhook = env_webhook.strip() if env_webhook else ""
+    if env_webhook.startswith('"') and env_webhook.endswith('"'):
+        env_webhook = env_webhook[1:-1]
+    if env_webhook.startswith("'") and env_webhook.endswith("'"):
+        env_webhook = env_webhook[1:-1]
+    
+    return {
+        "configured": is_configured,
+        "has_env_var": bool(env_webhook),
+        "webhook_length": len(webhook) if webhook else 0,
+        "env_file_path": str(env_path_abs),
+        "env_file_exists": env_path_abs.exists()
+    }
 
 @app.post("/api/discord/configure")
 async def configure_discord(data: dict):
     """Configure Discord webhook"""
-    CONFIG["discord_webhook"] = data.get("webhook", "")
-    return {"success": True}
+    webhook = data.get("webhook", "").strip()
+    # Remove quotes if present
+    if webhook.startswith('"') and webhook.endswith('"'):
+        webhook = webhook[1:-1]
+    if webhook.startswith("'") and webhook.endswith("'"):
+        webhook = webhook[1:-1]
+    
+    CONFIG["discord_webhook"] = webhook
+    
+    if webhook:
+        # Mask the webhook URL for security
+        webhook_display = webhook
+        if len(webhook_display) > 50:
+            webhook_display = webhook_display[:30] + "..." + webhook_display[-20:]
+        logger.info(f"Discord webhook configured: {webhook_display}")
+    else:
+        logger.info("Discord webhook cleared")
+    
+    return {"success": True, "message": "Discord webhook configured" if webhook else "Discord webhook cleared"}
+
+@app.post("/api/discord/reload")
+async def reload_discord_config():
+    """Reload Discord webhook from environment variables"""
+    # Reload .env file
+    load_dotenv(dotenv_path=str(env_path_abs), override=True)
+    
+    # Reload config
+    new_config = load_config()
+    old_webhook = CONFIG.get("discord_webhook", "")
+    CONFIG["discord_webhook"] = new_config["discord_webhook"]
+    
+    if CONFIG["discord_webhook"]:
+        webhook_display = CONFIG["discord_webhook"]
+        if len(webhook_display) > 50:
+            webhook_display = webhook_display[:30] + "..." + webhook_display[-20:]
+        logger.info(f"Discord webhook reloaded from .env: {webhook_display}")
+        return {
+            "success": True, 
+            "message": "Discord webhook reloaded from .env file",
+            "was_configured": bool(old_webhook),
+            "now_configured": True
+        }
+    else:
+        logger.warning("Discord webhook not found in .env file after reload")
+        return {
+            "success": False,
+            "message": "DISCORD_WEBHOOK not found in .env file",
+            "was_configured": bool(old_webhook),
+            "now_configured": False
+        }
 
 @app.get("/api/logs")
 async def get_logs(limit: int = 100):
@@ -2103,6 +2477,682 @@ async def get_attack_metrics():
             "top_source_ips": {}
         }
 
+# ============================================================================
+# Predictive Maintenance Endpoints
+# ============================================================================
+
+def load_predictive_model():
+    """Load predictive maintenance model if available"""
+    try:
+        model_path = Path(__file__).parent.parent.parent / "model" / "artifacts" / "latest" / "model_loader.py"
+        if model_path.exists():
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("model_loader", model_path)
+            model_loader = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(model_loader)
+            return model_loader
+        return None
+    except Exception as e:
+        logger.warning(f"Could not load predictive model: {e}")
+        return None
+
+predictive_model = load_predictive_model()
+
+@app.get("/api/predict-failure-risk")
+async def predict_failure_risk():
+    """Get current failure risk score based on system metrics"""
+    try:
+        if predictive_model is None:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Predictive model not available",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown",
+                "message": "Train model first using model/train_xgboost_model.py"
+            }
+        
+        # Check if model is actually loaded
+        if not hasattr(predictive_model, 'model') or predictive_model.model is None:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Model not loaded",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown",
+                "message": "Model file exists but model failed to load"
+            }
+        
+        # Check if model functions exist
+        if not hasattr(predictive_model, 'predict_failure_risk'):
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Model functions not available",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown"
+            }
+        
+        # Get current system metrics
+        metrics = get_system_metrics()
+        
+        # Add log pattern metrics
+        metrics['error_count'] = 0  # Would be calculated from logs
+        metrics['warning_count'] = 0
+        metrics['service_failures'] = 0
+        
+        # Predict risk
+        result = predictive_model.predict_failure_risk(metrics)
+        
+        # Ensure all required fields are present
+        if 'timestamp' not in result:
+            result['timestamp'] = datetime.now().isoformat()
+        if 'risk_percentage' not in result:
+            result['risk_percentage'] = result.get('risk_score', 0.0) * 100
+        if 'risk_level' not in result:
+            risk_score = result.get('risk_score', 0.0)
+            if risk_score > 0.7:
+                result['risk_level'] = 'High'
+            elif risk_score > 0.5:
+                result['risk_level'] = 'Medium'
+            elif risk_score > 0.3:
+                result['risk_level'] = 'Low'
+            else:
+                result['risk_level'] = 'Very Low'
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error predicting failure risk: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "risk_score": 0.0,
+            "risk_percentage": 0.0,
+            "has_early_warning": False,
+            "is_high_risk": False,
+            "risk_level": "Unknown"
+        }
+
+@app.get("/api/get-early-warnings")
+async def get_early_warnings():
+    """Get list of active early warning indicators"""
+    try:
+        if predictive_model is None:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Predictive model not available",
+                "warnings": [],
+                "has_warnings": False,
+                "warning_count": 0
+            }
+        
+        # Check if model is actually loaded (warnings can work without model)
+        # But if model exists, check if it's loaded
+        if hasattr(predictive_model, 'model') and predictive_model.model is None:
+            # Still return warnings based on system metrics even if model isn't loaded
+            pass
+        
+        # Check if demo metrics are available (for demo mode)
+        global _last_demo_metrics
+        if _last_demo_metrics and isinstance(_last_demo_metrics, dict) and len(_last_demo_metrics) > 0:
+            # Use demo metrics for warnings
+            metrics = _last_demo_metrics.copy()
+            logger.debug(f"Using demo metrics for early warnings: {metrics}")
+        else:
+            # Get current system metrics
+            system_metrics = get_system_metrics()
+            # Normalize field names to match model expectations
+            metrics = {
+                'cpu_percent': system_metrics.get('cpu', system_metrics.get('cpu_percent', 0)),
+                'memory_percent': system_metrics.get('memory', system_metrics.get('memory_percent', 0)),
+                'disk_percent': system_metrics.get('disk', system_metrics.get('disk_percent', 0)),
+                'error_count': system_metrics.get('error_count', 0),
+                'warning_count': system_metrics.get('warning_count', 0),
+                'service_failures': system_metrics.get('service_failures', 0),
+                'network_in_mbps': system_metrics.get('network_in_mbps', 0),
+                'network_out_mbps': system_metrics.get('network_out_mbps', 0)
+            }
+        
+        # Ensure all required fields are present and normalize field names
+        if 'cpu_percent' not in metrics:
+            metrics['cpu_percent'] = metrics.get('cpu', 0)
+        if 'memory_percent' not in metrics:
+            metrics['memory_percent'] = metrics.get('memory', 0)
+        if 'disk_percent' not in metrics:
+            metrics['disk_percent'] = metrics.get('disk', 0)
+        if 'error_count' not in metrics:
+            metrics['error_count'] = 0
+        if 'warning_count' not in metrics:
+            metrics['warning_count'] = 0
+        if 'service_failures' not in metrics:
+            metrics['service_failures'] = 0
+        
+        # Check if model functions exist
+        if not hasattr(predictive_model, 'get_early_warnings'):
+            # Return basic warnings based on metrics (demo or real)
+            warnings = []
+            cpu = metrics.get('cpu_percent', metrics.get('cpu', 0))
+            memory = metrics.get('memory_percent', metrics.get('memory', 0))
+            disk = metrics.get('disk_percent', metrics.get('disk', 0))
+            
+            if cpu > 90:
+                warnings.append({
+                    'type': 'cpu_high',
+                    'severity': 'high',
+                    'message': f"CPU usage at {cpu:.1f}% - Critical threshold exceeded"
+                })
+            elif cpu > 75:
+                warnings.append({
+                    'type': 'cpu_elevated',
+                    'severity': 'medium',
+                    'message': f"CPU usage at {cpu:.1f}% - Elevated load detected"
+                })
+            
+            if memory > 90:
+                warnings.append({
+                    'type': 'memory_high',
+                    'severity': 'high',
+                    'message': f"Memory usage at {memory:.1f}% - Critical threshold exceeded"
+                })
+            elif memory > 80:
+                warnings.append({
+                    'type': 'memory_elevated',
+                    'severity': 'medium',
+                    'message': f"Memory usage at {memory:.1f}% - Elevated usage detected"
+                })
+            
+            if disk > 95:
+                warnings.append({
+                    'type': 'disk_high',
+                    'severity': 'high',
+                    'message': f"Disk usage at {disk:.1f}% - Critical threshold exceeded"
+                })
+            elif disk > 85:
+                warnings.append({
+                    'type': 'disk_elevated',
+                    'severity': 'medium',
+                    'message': f"Disk usage at {disk:.1f}% - Elevated usage detected"
+                })
+            
+            # Check error and warning counts
+            error_count = metrics.get('error_count', 0)
+            warning_count = metrics.get('warning_count', 0)
+            service_failures = metrics.get('service_failures', 0)
+            
+            if error_count > 10:
+                warnings.append({
+                    'type': 'error_spike',
+                    'severity': 'high',
+                    'message': f"High error count: {error_count} errors detected"
+                })
+            elif error_count > 5:
+                warnings.append({
+                    'type': 'error_elevated',
+                    'severity': 'medium',
+                    'message': f"Elevated error count: {error_count} errors"
+                })
+            
+            if warning_count > 20:
+                warnings.append({
+                    'type': 'warning_spike',
+                    'severity': 'medium',
+                    'message': f"High warning count: {warning_count} warnings"
+                })
+            
+            if service_failures > 0:
+                warnings.append({
+                    'type': 'service_failure',
+                    'severity': 'high',
+                    'message': f"Service failures detected: {service_failures} service(s) failed"
+                })
+            
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "warnings": warnings,
+                "has_warnings": len(warnings) > 0,
+                "warning_count": len(warnings)
+            }
+        
+        # Get warnings using model function
+        try:
+            # Log metrics being sent to model
+            logger.debug(f"Calling get_early_warnings with metrics: CPU={metrics.get('cpu_percent', 0)}%, Memory={metrics.get('memory_percent', 0)}%, Disk={metrics.get('disk_percent', 0)}%, Errors={metrics.get('error_count', 0)}")
+            result = predictive_model.get_early_warnings(metrics)
+            logger.info(f"Model get_early_warnings returned {result.get('warning_count', 0)} warnings: {result}")
+            # Ensure result is a dict
+            if not isinstance(result, dict):
+                logger.error(f"Model get_early_warnings returned non-dict: {type(result)}")
+                raise ValueError(f"Model function returned {type(result)}, expected dict")
+        except Exception as e:
+            logger.error(f"Error calling model get_early_warnings: {e}")
+            # If model function fails, use fallback warnings
+            warnings = []
+            cpu = metrics.get('cpu_percent', 0)
+            memory = metrics.get('memory_percent', 0)
+            disk = metrics.get('disk_percent', 0)
+            error_count = metrics.get('error_count', 0)
+            warning_count = metrics.get('warning_count', 0)
+            service_failures = metrics.get('service_failures', 0)
+            
+            if cpu > 90:
+                warnings.append({'type': 'cpu_high', 'severity': 'high', 'message': f"CPU usage at {cpu:.1f}% - Critical threshold exceeded"})
+            elif cpu > 75:
+                warnings.append({'type': 'cpu_elevated', 'severity': 'medium', 'message': f"CPU usage at {cpu:.1f}% - Elevated load detected"})
+            
+            if memory > 90:
+                warnings.append({'type': 'memory_high', 'severity': 'high', 'message': f"Memory usage at {memory:.1f}% - Critical threshold exceeded"})
+            elif memory > 80:
+                warnings.append({'type': 'memory_elevated', 'severity': 'medium', 'message': f"Memory usage at {memory:.1f}% - Elevated usage detected"})
+            
+            if disk > 95:
+                warnings.append({'type': 'disk_high', 'severity': 'high', 'message': f"Disk usage at {disk:.1f}% - Critical threshold exceeded"})
+            elif disk > 85:
+                warnings.append({'type': 'disk_elevated', 'severity': 'medium', 'message': f"Disk usage at {disk:.1f}% - Elevated usage detected"})
+            
+            if error_count > 10:
+                warnings.append({'type': 'error_spike', 'severity': 'high', 'message': f"High error count: {error_count} errors detected"})
+            elif error_count > 5:
+                warnings.append({'type': 'error_elevated', 'severity': 'medium', 'message': f"Elevated error count: {error_count} errors"})
+            
+            if warning_count > 20:
+                warnings.append({'type': 'warning_spike', 'severity': 'medium', 'message': f"High warning count: {warning_count} warnings"})
+            
+            if service_failures > 0:
+                warnings.append({'type': 'service_failure', 'severity': 'high', 'message': f"Service failures detected: {service_failures} service(s) failed"})
+            
+            result = {
+                "timestamp": datetime.now().isoformat(),
+                "warnings": warnings,
+                "has_warnings": len(warnings) > 0,
+                "warning_count": len(warnings)
+            }
+        
+        # Ensure all required fields are present
+        if 'timestamp' not in result:
+            result['timestamp'] = datetime.now().isoformat()
+        
+        # Ensure warnings list exists
+        if 'warnings' not in result:
+            result['warnings'] = []
+        
+        # Recalculate counts to ensure they match
+        warning_count = len(result.get('warnings', []))
+        result['warning_count'] = warning_count
+        result['has_warnings'] = warning_count > 0
+        
+        # If no warnings from model but metrics indicate issues, add fallback warnings
+        if warning_count == 0:
+            cpu = metrics.get('cpu_percent', 0)
+            memory = metrics.get('memory_percent', 0)
+            disk = metrics.get('disk_percent', 0)
+            error_count = metrics.get('error_count', 0)
+            warning_count_val = metrics.get('warning_count', 0)
+            service_failures = metrics.get('service_failures', 0)
+            
+            # Add warnings if thresholds are exceeded (even if model didn't catch them)
+            fallback_warnings = []
+            if cpu > 90:
+                fallback_warnings.append({'type': 'cpu_high', 'severity': 'high', 'message': f"CPU usage at {cpu:.1f}% - Critical threshold exceeded"})
+            elif cpu > 75:
+                fallback_warnings.append({'type': 'cpu_elevated', 'severity': 'medium', 'message': f"CPU usage at {cpu:.1f}% - Elevated load detected"})
+            
+            if memory > 90:
+                fallback_warnings.append({'type': 'memory_high', 'severity': 'high', 'message': f"Memory usage at {memory:.1f}% - Critical threshold exceeded"})
+            elif memory > 80:
+                fallback_warnings.append({'type': 'memory_elevated', 'severity': 'medium', 'message': f"Memory usage at {memory:.1f}% - Elevated usage detected"})
+            
+            if disk > 95:
+                fallback_warnings.append({'type': 'disk_high', 'severity': 'high', 'message': f"Disk usage at {disk:.1f}% - Critical threshold exceeded"})
+            elif disk > 85:
+                fallback_warnings.append({'type': 'disk_elevated', 'severity': 'medium', 'message': f"Disk usage at {disk:.1f}% - Elevated usage detected"})
+            
+            if error_count > 10:
+                fallback_warnings.append({'type': 'error_spike', 'severity': 'high', 'message': f"High error count: {error_count} errors detected"})
+            elif error_count > 5:
+                fallback_warnings.append({'type': 'error_elevated', 'severity': 'medium', 'message': f"Elevated error count: {error_count} errors"})
+            
+            if warning_count_val > 20:
+                fallback_warnings.append({'type': 'warning_spike', 'severity': 'medium', 'message': f"High warning count: {warning_count_val} warnings"})
+            
+            if service_failures > 0:
+                fallback_warnings.append({'type': 'service_failure', 'severity': 'high', 'message': f"Service failures detected: {service_failures} service(s) failed"})
+            
+            if fallback_warnings:
+                logger.warning(f"Model returned no warnings but metrics indicate issues. Adding {len(fallback_warnings)} fallback warnings: CPU={cpu}%, Memory={memory}%, Disk={disk}%, Errors={error_count}, Failures={service_failures}")
+                # Use fallback warnings
+                result['warnings'] = fallback_warnings
+                result['warning_count'] = len(fallback_warnings)
+                result['has_warnings'] = True
+        
+        logger.debug(f"Final warnings result: {result}")
+        
+        # Send Discord notification for new/changed warnings (rate-limited)
+        warning_count = result.get('warning_count', 0)
+        current_warning_types = set(w.get('type', '') for w in result.get('warnings', []))
+        
+        # Only send notification if:
+        # 1. There are warnings AND
+        # 2. (Warning count changed OR warning types changed) AND
+        # 3. Not sent in last 5 minutes (rate limiting)
+        should_send_notification = False
+        global _last_sent_warnings, _last_sent_warning_count, _last_warning_notification_time
+        
+        if warning_count > 0:
+            current_time = datetime.now()
+            time_since_last = None
+            if _last_warning_notification_time:
+                time_since_last = (current_time - _last_warning_notification_time).total_seconds() / 60
+            
+            # Check if warnings changed significantly
+            warnings_changed = (
+                warning_count != _last_sent_warning_count or
+                current_warning_types != _last_sent_warnings
+            )
+            
+            # Send if warnings changed and (never sent before OR 5+ minutes since last)
+            if warnings_changed and (time_since_last is None or time_since_last >= 5):
+                should_send_notification = True
+                _last_sent_warnings = current_warning_types.copy()
+                _last_sent_warning_count = warning_count
+                _last_warning_notification_time = current_time
+        elif warning_count == 0 and _last_sent_warning_count > 0:
+            # Warnings cleared - reset tracking
+            _last_sent_warnings = set()
+            _last_sent_warning_count = 0
+        
+        if should_send_notification:
+            try:
+                send_early_warnings_discord_notification(
+                    result.get('warnings', []),
+                    warning_count,
+                    metrics
+                )
+            except Exception as e:
+                logger.error(f"Error sending Discord notification for warnings: {e}")
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error getting early warnings: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "warnings": [],
+            "has_warnings": False,
+            "warning_count": 0
+        }
+
+@app.get("/api/predict-time-to-failure")
+async def predict_time_to_failure():
+    """Predict estimated hours until next failure"""
+    try:
+        if predictive_model is None:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Predictive model not available",
+                "hours_until_failure": None,
+                "message": "No failure predicted - model not available"
+            }
+        
+        # Check if model is actually loaded
+        if not hasattr(predictive_model, 'model') or predictive_model.model is None:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Model not loaded",
+                "hours_until_failure": None,
+                "message": "No failure predicted - model failed to load"
+            }
+        
+        # Check if model functions exist
+        if not hasattr(predictive_model, 'predict_time_to_failure'):
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Model functions not available",
+                "hours_until_failure": None,
+                "message": "No failure predicted"
+            }
+        
+        # Check if demo metrics are available (for demo mode)
+        global _last_demo_metrics
+        if _last_demo_metrics and isinstance(_last_demo_metrics, dict) and len(_last_demo_metrics) > 0:
+            # Use demo metrics for time-to-failure prediction
+            metrics = _last_demo_metrics.copy()
+            logger.debug(f"Using demo metrics for time-to-failure: {metrics}")
+        else:
+            # Get current system metrics
+            system_metrics = get_system_metrics()
+            # Normalize field names to match model expectations
+            metrics = {
+                'cpu_percent': system_metrics.get('cpu', system_metrics.get('cpu_percent', 0)),
+                'memory_percent': system_metrics.get('memory', system_metrics.get('memory_percent', 0)),
+                'disk_percent': system_metrics.get('disk', system_metrics.get('disk_percent', 0)),
+                'error_count': system_metrics.get('error_count', 0),
+                'warning_count': system_metrics.get('warning_count', 0),
+                'service_failures': system_metrics.get('service_failures', 0),
+                'network_in_mbps': system_metrics.get('network_in_mbps', 0),
+                'network_out_mbps': system_metrics.get('network_out_mbps', 0)
+            }
+        
+        # Ensure all required fields are present and normalize field names
+        if 'cpu_percent' not in metrics:
+            metrics['cpu_percent'] = metrics.get('cpu', 0)
+        if 'memory_percent' not in metrics:
+            metrics['memory_percent'] = metrics.get('memory', 0)
+        if 'disk_percent' not in metrics:
+            metrics['disk_percent'] = metrics.get('disk', 0)
+        if 'error_count' not in metrics:
+            metrics['error_count'] = 0
+        if 'warning_count' not in metrics:
+            metrics['warning_count'] = 0
+        if 'service_failures' not in metrics:
+            metrics['service_failures'] = 0
+        
+        # Predict time to failure
+        result = predictive_model.predict_time_to_failure(metrics)
+        
+        # Ensure timestamp is present
+        if 'timestamp' not in result:
+            result['timestamp'] = datetime.now().isoformat()
+        
+        # Send Discord notification for significant time-to-failure changes
+        hours_until_failure = result.get('hours_until_failure')
+        if hours_until_failure is not None:
+            global _last_sent_time_to_failure, _last_time_to_failure_notification_time
+            
+            current_time = datetime.now()
+            should_send_notification = False
+            
+            # Determine if notification should be sent
+            if _last_sent_time_to_failure is None:
+                # First prediction with a value - send if < 48 hours
+                if hours_until_failure < 48:
+                    should_send_notification = True
+            else:
+                # Check if time-to-failure changed significantly
+                time_diff = abs(hours_until_failure - _last_sent_time_to_failure)
+                time_since_last = None
+                if _last_time_to_failure_notification_time:
+                    time_since_last = (current_time - _last_time_to_failure_notification_time).total_seconds() / 3600  # in hours
+                
+                # Send notification if:
+                # 1. Time-to-failure decreased significantly (>25% or <6 hours difference) OR
+                # 2. Time-to-failure is <24 hours and changed by >2 hours AND
+                # 3. Not sent in last 30 minutes (rate limiting for urgent cases) OR 2 hours (for less urgent)
+                if hours_until_failure < 24:
+                    # Urgent: send if changed by >2 hours and not sent in last 30 minutes
+                    if time_diff > 2 and (time_since_last is None or time_since_last >= 0.5):
+                        should_send_notification = True
+                elif hours_until_failure < 48:
+                    # Moderate: send if changed significantly and not sent in last 2 hours
+                    if (time_diff > max(6, _last_sent_time_to_failure * 0.25)) and (time_since_last is None or time_since_last >= 2):
+                        should_send_notification = True
+                else:
+                    # Less urgent: send if changed significantly and not sent in last 6 hours
+                    if (time_diff > max(12, _last_sent_time_to_failure * 0.3)) and (time_since_last is None or time_since_last >= 6):
+                        should_send_notification = True
+            
+            if should_send_notification:
+                try:
+                    # Get risk percentage if available from last prediction
+                    risk_percentage = None
+                    try:
+                        risk_response = predictive_model.predict_failure_risk(metrics)
+                        risk_percentage = risk_response.get('risk_percentage')
+                    except:
+                        pass
+                    
+                    send_time_to_failure_discord_notification(
+                        hours_until_failure,
+                        result.get('predicted_failure_time'),
+                        risk_percentage,
+                        metrics
+                    )
+                    _last_sent_time_to_failure = hours_until_failure
+                    _last_time_to_failure_notification_time = current_time
+                except Exception as e:
+                    logger.error(f"Error sending Discord notification for time-to-failure: {e}")
+        elif _last_sent_time_to_failure is not None:
+            # Time-to-failure cleared (no failure predicted) - reset tracking
+            _last_sent_time_to_failure = None
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error predicting time to failure: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "hours_until_failure": None,
+            "message": "No failure predicted"
+        }
+
+@app.post("/api/predict-anomaly")
+async def predict_anomaly(request: Request):
+    """Real-time anomaly detection from provided metrics"""
+    try:
+        if predictive_model is None:
+            return {
+                "error": "Predictive model not available",
+                "is_anomaly": False
+            }
+        
+        data = await request.json()
+        metrics = data.get('metrics', {})
+        
+        # Store for dashboard demo mode
+        global _last_demo_metrics
+        _last_demo_metrics = metrics
+        
+        # Predict anomaly
+        result = predictive_model.predict_anomaly(metrics)
+        return result
+    except Exception as e:
+        logger.error(f"Error predicting anomaly: {e}")
+        return {
+            "error": str(e),
+            "is_anomaly": False
+        }
+
+# Store last demo metrics for dashboard polling
+_last_demo_metrics = None
+
+@app.get("/api/get-last-demo-metrics")
+async def get_last_demo_metrics():
+    """Get last demo metrics sent (for dashboard demo mode)"""
+    global _last_demo_metrics
+    if _last_demo_metrics:
+        return {"metrics": _last_demo_metrics, "timestamp": datetime.now().isoformat()}
+    return {"metrics": None}
+
+@app.post("/api/predict-failure-risk-custom")
+async def predict_failure_risk_custom(request: Request):
+    """Get failure risk score from custom metrics (for demonstrations)"""
+    try:
+        if predictive_model is None or not hasattr(predictive_model, 'model') or predictive_model.model is None:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Predictive model not available",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown"
+            }
+        
+        if not hasattr(predictive_model, 'predict_failure_risk'):
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "Model functions not available",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown"
+            }
+        
+        data = await request.json()
+        metrics = data.get('metrics', {})
+        
+        # Store for dashboard demo mode
+        global _last_demo_metrics
+        _last_demo_metrics = metrics
+        
+        # Ensure all required metrics are present
+        if not metrics:
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "error": "No metrics provided",
+                "risk_score": 0.0,
+                "risk_percentage": 0.0,
+                "has_early_warning": False,
+                "is_high_risk": False,
+                "risk_level": "Unknown"
+            }
+        
+        # Predict risk with custom metrics
+        result = predictive_model.predict_failure_risk(metrics)
+        
+        # Ensure all required fields are present
+        if 'timestamp' not in result:
+            result['timestamp'] = datetime.now().isoformat()
+        if 'risk_percentage' not in result:
+            result['risk_percentage'] = result.get('risk_score', 0.0) * 100
+        if 'risk_level' not in result:
+            risk_score = result.get('risk_score', 0.0)
+            if risk_score > 0.7:
+                result['risk_level'] = 'High'
+            elif risk_score > 0.5:
+                result['risk_level'] = 'Medium'
+            elif risk_score > 0.3:
+                result['risk_level'] = 'Low'
+            else:
+                result['risk_level'] = 'Very Low'
+        
+        return result
+    except Exception as e:
+        logger.error(f"Error predicting failure risk with custom metrics: {e}")
+        import traceback
+        logger.debug(traceback.format_exc())
+        return {
+            "timestamp": datetime.now().isoformat(),
+            "error": str(e),
+            "risk_score": 0.0,
+            "risk_percentage": 0.0,
+            "has_early_warning": False,
+            "is_high_risk": False,
+            "risk_level": "Unknown"
+        }
+
 @app.get("/api/history/ml")
 async def get_ml_history():
     """Get ML model performance history"""
@@ -2277,6 +3327,297 @@ async def get_ip_details(ip_address: str):
             return {"success": False, "error": "IP not found"}
     except Exception as e:
         logger.error(f"Error getting IP details: {e}")
+        return {"success": False, "error": str(e)}
+
+# ============================================================================
+# Cloud Simulation & Fault Detection API Endpoints
+# ============================================================================
+
+# Initialize cloud simulation components
+fault_detector = None
+fault_injector = None
+container_healer = None
+auto_healer = None
+root_cause_analyzer = None
+container_monitor = None
+resource_monitor = None
+
+def initialize_cloud_components():
+    """Initialize cloud simulation and fault detection components"""
+    global fault_detector, fault_injector, container_healer, auto_healer
+    global root_cause_analyzer, container_monitor, resource_monitor
+    
+    try:
+        from fault_detector import initialize_fault_detector
+        from fault_injector import initialize_fault_injector
+        from container_healer import initialize_container_healer
+        from auto_healer import initialize_auto_healer
+        from root_cause_analyzer import initialize_root_cause_analyzer
+        from container_monitor import ContainerMonitor
+        from resource_monitor import ResourceMonitor
+        
+        # Discord notifier function
+        def discord_notifier(message, severity="info", embed_data=None):
+            return send_discord_alert(message, severity, embed_data)
+        
+        # Event emitter for WebSocket (wrapper to make it callable from sync code)
+        def event_emitter(event):
+            # Schedule async broadcast in the event loop
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(broadcast_event(event))
+                else:
+                    asyncio.run(broadcast_event(event))
+            except RuntimeError:
+                # No event loop running, create a new one
+                asyncio.run(broadcast_event(event))
+        
+        # Initialize components
+        fault_detector = initialize_fault_detector(
+            discord_notifier=discord_notifier,
+            event_emitter=event_emitter
+        )
+        fault_detector.start_monitoring(interval=30)
+        
+        fault_injector = initialize_fault_injector()
+        container_healer = initialize_container_healer(
+            discord_notifier=discord_notifier,
+            event_emitter=event_emitter
+        )
+        
+        root_cause_analyzer = initialize_root_cause_analyzer(
+            gemini_analyzer=_gemini_analyzer
+        )
+        
+        auto_healer = initialize_auto_healer(
+            gemini_analyzer=_gemini_analyzer,
+            container_healer=container_healer,
+            root_cause_analyzer=root_cause_analyzer,
+            discord_notifier=discord_notifier,
+            event_emitter=event_emitter
+        )
+        auto_healer.start_monitoring(interval=60)
+        
+        container_monitor = ContainerMonitor()
+        resource_monitor = ResourceMonitor()
+        
+        logger.info("✅ Cloud simulation components initialized")
+    except Exception as e:
+        logger.error(f"Error initializing cloud components: {e}", exc_info=True)
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+    
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+    
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+    
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except:
+                pass
+
+manager = ConnectionManager()
+
+async def broadcast_event(event: dict):
+    """Broadcast event to all WebSocket connections"""
+    await manager.broadcast(event)
+
+# Cloud components will be initialized in the startup event handler
+
+@app.websocket("/ws/faults")
+async def websocket_faults(websocket: WebSocket):
+    """WebSocket endpoint for real-time fault and healing updates"""
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Send periodic updates
+            if fault_detector:
+                faults = fault_detector.get_detected_faults(limit=10)
+                stats = fault_detector.get_fault_statistics()
+                
+                await websocket.send_json({
+                    'type': 'faults_update',
+                    'faults': faults,
+                    'statistics': stats,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            if auto_healer:
+                history = auto_healer.get_healing_history(limit=10)
+                healing_stats = auto_healer.get_healing_statistics()
+                
+                await websocket.send_json({
+                    'type': 'healing_update',
+                    'history': history,
+                    'statistics': healing_stats,
+                    'timestamp': datetime.now().isoformat()
+                })
+            
+            await asyncio.sleep(5)  # Update every 5 seconds
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+@app.get("/api/cloud/services/status")
+async def get_cloud_services_status():
+    """Get status of all cloud simulation services"""
+    try:
+        if not container_monitor:
+            return {"success": False, "error": "Container monitor not initialized"}
+        
+        services = container_monitor.get_all_containers_status()
+        return {
+            "success": True,
+            "services": services,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting cloud services status: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/cloud/faults")
+async def get_detected_faults(limit: int = 50):
+    """Get detected faults"""
+    try:
+        if not fault_detector:
+            return {"success": False, "error": "Fault detector not initialized"}
+        
+        faults = fault_detector.get_detected_faults(limit=limit)
+        stats = fault_detector.get_fault_statistics()
+        
+        return {
+            "success": True,
+            "faults": faults,
+            "statistics": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting detected faults: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/cloud/resources")
+async def get_resource_metrics():
+    """Get current resource metrics"""
+    try:
+        if not resource_monitor:
+            return {"success": False, "error": "Resource monitor not initialized"}
+        
+        resources = resource_monitor.get_all_resources()
+        anomalies = resource_monitor.detect_resource_anomalies()
+        
+        return {
+            "success": True,
+            "resources": resources,
+            "anomalies": anomalies,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting resource metrics: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/cloud/faults/inject")
+async def inject_fault(request: Request):
+    """Inject a fault for testing"""
+    try:
+        if not fault_injector:
+            return {"success": False, "error": "Fault injector not initialized"}
+        
+        data = await request.json()
+        fault_type = data.get('type', 'crash')
+        container = data.get('container', 'cloud-sim-api-server')
+        
+        if fault_type == 'crash':
+            success, message = fault_injector.inject_service_crash(container)
+        elif fault_type == 'cpu':
+            duration = data.get('duration', 60)
+            success, message = fault_injector.inject_cpu_exhaustion(duration)
+        elif fault_type == 'memory':
+            size = data.get('size', 2.0)
+            success, message = fault_injector.inject_memory_exhaustion(size)
+        elif fault_type == 'disk':
+            size = data.get('size', 5.0)
+            success, message = fault_injector.inject_disk_full(size)
+        elif fault_type == 'network':
+            port = data.get('port')
+            success, message = fault_injector.inject_network_issue(container, port)
+        else:
+            return {"success": False, "error": f"Unknown fault type: {fault_type}"}
+        
+        return {
+            "success": success,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error injecting fault: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/cloud/healing/history")
+async def get_healing_history(limit: int = 50):
+    """Get healing history"""
+    try:
+        if not auto_healer:
+            return {"success": False, "error": "Auto-healer not initialized"}
+        
+        history = auto_healer.get_healing_history(limit=limit)
+        stats = auto_healer.get_healing_statistics()
+        
+        return {
+            "success": True,
+            "history": history,
+            "statistics": stats,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting healing history: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/cloud/faults/{fault_id}/heal")
+async def heal_fault(fault_id: int):
+    """Manually trigger healing for a specific fault"""
+    try:
+        if not auto_healer or not fault_detector:
+            return {"success": False, "error": "Auto-healer or fault detector not initialized"}
+        
+        faults = fault_detector.get_detected_faults(limit=100)
+        if fault_id < len(faults):
+            fault = faults[fault_id]
+            result = auto_healer.heal_cloud_fault(fault)
+            return {
+                "success": True,
+                "healing_result": result,
+                "timestamp": datetime.now().isoformat()
+            }
+        else:
+            return {"success": False, "error": "Fault not found"}
+    except Exception as e:
+        logger.error(f"Error healing fault: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/cloud/faults/cleanup")
+async def cleanup_injected_faults():
+    """Clean up all injected faults"""
+    try:
+        if not fault_injector:
+            return {"success": False, "error": "Fault injector not initialized"}
+        
+        success, message = fault_injector.cleanup_injected_faults()
+        return {
+            "success": success,
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error cleaning up faults: {e}")
         return {"success": False, "error": str(e)}
 
 if __name__ == "__main__":

@@ -193,7 +193,7 @@ echo -e "${GREEN}✅ Project structure verified${NC}"
 
 # Check if ports are available
 echo -e "${YELLOW}🔍 Checking port availability...${NC}"
-PORTS=(8080 8000 8001 3001 5000 5001 8888)
+PORTS=(8080 8000 8001 5000 5001 8888)
 OCCUPIED_PORTS=()
 
 for port in "${PORTS[@]}"; do
@@ -299,7 +299,7 @@ mkdir -p logs
 # Note: Using different ports to avoid conflicts
 start_service "DDoS Model API" "model" "main.py" "8080" "MODEL_PORT=8080"
 start_service "Network Analyzer" "monitoring/server" "network_analyzer.py" "8000" "PORT=8000"
-start_service "ML Dashboard" "monitoring/dashboard" "app.py" "3001" "DASHBOARD_PORT=3001"
+# Removed ML Dashboard (port 3001) - using Healing Dashboard (port 5001) instead
 start_service "Incident Bot" "incident-bot" "main.py" "8001" "PORT=8001"
 start_service "Monitoring Server" "monitoring/server" "app.py" "5000"
 start_service "Healing Dashboard API" "monitoring/server" "healing_dashboard_api.py" "5001" "HEALING_DASHBOARD_PORT=5001"
@@ -315,7 +315,6 @@ echo -e "${BLUE}╔════════════════════�
 echo -e "${BLUE}║                    🌐 ACCESS POINTS                          ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${GREEN}📊 Dashboard:${NC}              http://localhost:3001"
 echo -e "${GREEN}🛡️  Healing Dashboard:${NC}      http://localhost:5001"
 echo -e "${GREEN}🤖 Model API:${NC}               http://localhost:8080"
 echo -e "${GREEN}🔍 Network Analyzer:${NC}        http://localhost:8000"

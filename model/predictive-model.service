@@ -1,0 +1,17 @@
+[Unit]
+Description=Predictive Maintenance Model Retraining Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/home/kasun/Documents/Heal-X-Bot/model
+Environment="PATH=/home/kasun/Documents/Heal-X-Bot/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+ExecStart=/home/kasun/Documents/Heal-X-Bot/model/train_model_service.sh --no-tuning --no-shap
+StandardOutput=append:/home/kasun/Documents/Heal-X-Bot/logs/model-training.log
+StandardError=append:/home/kasun/Documents/Heal-X-Bot/logs/model-training.log
+
+[Install]
+WantedBy=multi-user.target
+

@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 import json
 import logging
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 import uvicorn
 from datetime import datetime
@@ -21,11 +22,13 @@ from fastapi.responses import Response
 load_dotenv()
 
 # Set up logging
+log_dir = Path(__file__).parent.parent / "logs"
+log_dir.mkdir(exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("incident_bot.log"),
+        logging.FileHandler(log_dir / "incident_bot.log"),
         logging.StreamHandler()
     ]
 )
@@ -119,8 +122,8 @@ def get_ai_suggestion(alert_info):
         indicating how confident you are in your suggestion.
         """
         
-        # Call Gemini API
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        # Call Gemini API - using Gemini 2.5 Flash-Lite for explainable AI
+        model = genai.GenerativeModel('gemini-2.5-flash-lite')
         response = model.generate_content(prompt)
         
         suggestion = response.text

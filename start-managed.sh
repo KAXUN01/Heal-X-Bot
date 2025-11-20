@@ -31,7 +31,7 @@ STATUS_FILE="$SCRIPT_DIR/.service_status.json"
 declare -A SERVICES
 SERVICES[model]="DDoS Model API|model|main.py|8080|MODEL_PORT=8080|http://localhost:8080/health"
 SERVICES[network-analyzer]="Network Analyzer|monitoring/server|network_analyzer.py|8000|PORT=8000|http://localhost:8000/health"
-SERVICES[dashboard]="ML Dashboard|monitoring/dashboard|app.py|3001|DASHBOARD_PORT=3001|http://localhost:3001/"
+# Removed dashboard service (port 3001) - using healing-dashboard (port 5001) instead
 SERVICES[incident-bot]="Incident Bot|incident-bot|main.py|8001|PORT=8001|http://localhost:8001/health"
 SERVICES[monitoring-server]="Monitoring Server|monitoring/server|app.py|5000||http://localhost:5000/health"
 SERVICES[healing-dashboard]="Healing Dashboard API|monitoring/server|healing_dashboard_api.py|5001|HEALING_DASHBOARD_PORT=5001|http://localhost:5001/"
@@ -505,7 +505,6 @@ main() {
     echo -e "${BLUE}║                    🌐 ACCESS POINTS                          ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "${GREEN}📊 ML Dashboard:${NC}              http://localhost:3001"
     echo -e "${GREEN}🛡️  Healing Dashboard:${NC}      http://localhost:5001"
     echo -e "${GREEN}🤖 DDoS Model API:${NC}               http://localhost:8080"
     echo -e "${GREEN}🔍 Network Analyzer:${NC}        http://localhost:8000"

@@ -48,7 +48,7 @@ class Config:
         
         # Port Configuration
         self.model_port = int(os.getenv('MODEL_PORT', '8080'))
-        self.dashboard_port = int(os.getenv('DASHBOARD_PORT', '3001'))
+        self.dashboard_port = int(os.getenv('DASHBOARD_PORT', '5001'))  # Using healing dashboard port
         self.network_analyzer_port = int(os.getenv('NETWORK_ANALYZER_PORT', '8000'))
         self.incident_bot_port = int(os.getenv('INCIDENT_BOT_PORT', '8000'))
         self.monitoring_server_port = int(os.getenv('MONITORING_SERVER_PORT', '5000'))

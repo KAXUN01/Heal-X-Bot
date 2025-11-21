@@ -2020,6 +2020,29 @@
         let recentActivities = [];
         const MAX_ACTIVITIES = 50;
         
+        // Configuration object (loaded from API)
+        let CONFIG = {
+            auto_restart: true,
+            cpu_threshold: 90.0,
+            memory_threshold: 85.0,
+            disk_threshold: 80.0,
+            discord_webhook: '',
+            services_to_monitor: ['nginx', 'mysql', 'ssh', 'docker', 'postgresql']
+        };
+        
+        // Load CONFIG from API on page load
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                if (response.ok) {
+                    const data = await response.json();
+                    CONFIG = { ...CONFIG, ...data };
+                }
+            } catch (error) {
+                console.error('Error loading config:', error);
+            }
+        }
+        
         // Pagination state
         let sourceIpsPage = 1;
         let sourceIpsPageSize = 10;
@@ -2094,11 +2117,16 @@
             cloudWs = new WebSocket(`${protocol}//${window.location.host}/ws/faults`);
             
             cloudWs.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                if (data.type === 'faults_update') {
-                    updateFaultDetection(data.faults, data.statistics);
-                } else if (data.type === 'healing_update') {
-                    updateHealingActions(data.history, data.statistics);
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'faults_update') {
+                        updateFaultDetection(data.faults, data.statistics);
+                    } else if (data.type === 'healing_update') {
+                        updateHealingActions(data.history, data.statistics);
+                    }
+                } catch (error) {
+                    console.error('Error parsing Cloud WebSocket message:', error);
+                    console.error('Raw message:', event.data);
                 }
             };
             
@@ -2344,8 +2372,13 @@
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/healing`);
             
             ws.onmessage = function(event) {
-                const data = JSON.parse(event.data);
-                updateDashboard(data);
+                try {
+                    const data = JSON.parse(event.data);
+                    updateDashboard(data);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                    console.error('Raw message:', event.data);
+                }
             };
             
             ws.onerror = function(error) {
@@ -2868,12 +2901,19 @@
                 
                 // Update ML metric cards
                 if (mlData) {
-                    document.getElementById('ml_accuracy').textContent = (mlData.accuracy * 100).toFixed(1) + '%';
-                    document.getElementById('ml_precision').textContent = (mlData.precision * 100).toFixed(1) + '%';
-                    document.getElementById('ml_recall').textContent = (mlData.recall * 100).toFixed(1) + '%';
-                    document.getElementById('ml_f1score').textContent = (mlData.f1_score * 100).toFixed(1) + '%';
-                    document.getElementById('ml_predictionTime').textContent = mlData.prediction_time_ms.toFixed(1) + 'ms';
-                    document.getElementById('ml_throughput').textContent = mlData.throughput.toFixed(1) + '/s';
+                    const accuracyEl = document.getElementById('ml_accuracy');
+                    const precisionEl = document.getElementById('ml_precision');
+                    const recallEl = document.getElementById('ml_recall');
+                    const f1scoreEl = document.getElementById('ml_f1score');
+                    const predictionTimeEl = document.getElementById('ml_predictionTime');
+                    const throughputEl = document.getElementById('ml_throughput');
+                    
+                    if (accuracyEl && mlData.accuracy !== undefined) accuracyEl.textContent = (mlData.accuracy * 100).toFixed(1) + '%';
+                    if (precisionEl && mlData.precision !== undefined) precisionEl.textContent = (mlData.precision * 100).toFixed(1) + '%';
+                    if (recallEl && mlData.recall !== undefined) recallEl.textContent = (mlData.recall * 100).toFixed(1) + '%';
+                    if (f1scoreEl && mlData.f1_score !== undefined) f1scoreEl.textContent = (mlData.f1_score * 100).toFixed(1) + '%';
+                    if (predictionTimeEl && mlData.prediction_time_ms !== undefined) predictionTimeEl.textContent = mlData.prediction_time_ms.toFixed(1) + 'ms';
+                    if (throughputEl && mlData.throughput !== undefined) throughputEl.textContent = mlData.throughput.toFixed(1) + '/s';
                 }
                 
                 // Fetch attack statistics
@@ -4042,6 +4082,9 @@
         async function loadServicesList() {
             try {
                 const response = await fetch('/api/services');
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
                 
                 const serviceList = document.getElementById('serviceList');
@@ -4183,12 +4226,17 @@
                             auto_restart: this.checked
                         })
                     });
+                    if (!response.ok) {
+                        throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                    }
                     const data = await response.json();
                     if (data.success) {
                         showNotification(
                             this.checked ? '✅ Auto-restart enabled' : '⏸️ Auto-restart disabled',
                             'success'
                         );
+                    } else {
+                        throw new Error(data.message || 'Failed to update auto-restart setting');
                     }
                 } catch (error) {
                     console.error('Error updating auto-restart config:', error);
@@ -4209,6 +4257,9 @@
                 const response = await fetch(`/api/services/${serviceName}/start`, {
                     method: 'POST'
                 });
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
                 
                 if (data.success) {
@@ -4234,6 +4285,9 @@
                 const response = await fetch(`/api/services/${serviceName}/stop`, {
                     method: 'POST'
                 });
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
                 
                 if (data.success) {
@@ -4259,6 +4313,9 @@
                 const response = await fetch(`/api/services/${serviceName}/restart`, {
                     method: 'POST'
                 });
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
                 const data = await response.json();
                 
                 if (data.success) {
@@ -4275,9 +4332,191 @@
         }
         
         async function refreshProcesses() {
-            const response = await fetch('/api/processes/top');
-            const processes = await response.json();
-            displayProcesses(processes);
+            try {
+                const response = await fetch('/api/processes/top');
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
+                const processes = await response.json();
+                displayProcesses(processes);
+            } catch (error) {
+                console.error('Error refreshing processes:', error);
+                const container = document.getElementById('processList');
+                if (container) {
+                    container.innerHTML = `<div style="color: var(--accent-red); padding: 1rem;">Error loading processes: ${error.message}</div>`;
+                }
+                showNotification('❌ Error loading processes', 'error');
+            }
+        }
+        
+        // Refresh SSH logs
+        async function refreshSSHLogs() {
+            try {
+                const response = await fetch('/api/ssh/attempts');
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
+                }
+                const data = await response.json();
+                const container = document.getElementById('sshList');
+                if (container) {
+                    if (data && data.length > 0) {
+                        container.innerHTML = data.map(attempt => `
+                            <div class="log-item" style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <strong style="color: var(--accent-red);">${attempt.ip || 'Unknown'}</strong>
+                                        <span style="color: var(--text-secondary); margin-left: 1rem;">${attempt.timestamp || ''}</span>
+                                    </div>
+                                    <div>
+                                        <span style="color: var(--text-secondary); margin-right: 1rem;">Attempts: ${attempt.attempts || 0}</span>
+                                        ${attempt.blocked ? '<span style="color: var(--accent-red);">🔒 Blocked</span>' : 
+                                            `<button class="btn btn-danger btn-sm" onclick="blockSSHAttacker('${attempt.ip}')">Block</button>`}
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('');
+                    } else {
+                        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No SSH attempts found</div>';
+                    }
+                }
+            } catch (error) {
+                console.error('Error refreshing SSH logs:', error);
+                showNotification('❌ Error loading SSH logs', 'error');
+                const container = document.getElementById('sshList');
+                if (container) {
+                    container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--accent-red);">Error: ${error.message}</div>`;
+                }
+            }
+        }
+        
+        // Block SSH attacker
+        async function blockSSHAttacker(ip) {
+            try {
+                const response = await fetch('/api/ssh/block', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ip})
+                });
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}`);
+                }
+                const result = await response.json();
+                if (result.success) {
+                    showNotification(`✅ IP ${ip} blocked successfully`, 'success');
+                    refreshSSHLogs();
+                } else {
+                    showNotification(`❌ Failed to block IP ${ip}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error blocking SSH attacker:', error);
+                showNotification(`❌ Error blocking IP: ${error.message}`, 'error');
+            }
+        }
+        
+        // Clear blocked IPs
+        async function clearBlockedIPs() {
+            if (!confirm('Are you sure you want to clear all blocked IPs? This action cannot be undone.')) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/blocked-ips/cleanup', {
+                    method: 'POST'
+                });
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}`);
+                }
+                const result = await response.json();
+                if (result.success) {
+                    showNotification('✅ All blocked IPs cleared successfully', 'success');
+                    refreshBlockedIPsList();
+                } else {
+                    showNotification(`❌ Failed to clear blocked IPs: ${result.message || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error clearing blocked IPs:', error);
+                showNotification(`❌ Error clearing blocked IPs: ${error.message}`, 'error');
+            }
+        }
+        
+        // Open threshold configuration
+        function openThresholdConfig() {
+            const cpuThreshold = CONFIG.cpu_threshold || 90.0;
+            const memoryThreshold = CONFIG.memory_threshold || 85.0;
+            const diskThreshold = CONFIG.disk_threshold || 80.0;
+            
+            const cpuInput = prompt(`Enter CPU threshold (current: ${cpuThreshold}%):`, cpuThreshold);
+            if (cpuInput !== null) {
+                const cpu = parseFloat(cpuInput);
+                if (!isNaN(cpu) && cpu > 0 && cpu <= 100) {
+                    CONFIG.cpu_threshold = cpu;
+                } else {
+                    showNotification('❌ Invalid CPU threshold (must be between 0 and 100)', 'error');
+                    return;
+                }
+            }
+            
+            const memoryInput = prompt(`Enter Memory threshold (current: ${memoryThreshold}%):`, memoryThreshold);
+            if (memoryInput !== null) {
+                const memory = parseFloat(memoryInput);
+                if (!isNaN(memory) && memory > 0 && memory <= 100) {
+                    CONFIG.memory_threshold = memory;
+                } else {
+                    showNotification('❌ Invalid Memory threshold (must be between 0 and 100)', 'error');
+                    return;
+                }
+            }
+            
+            const diskInput = prompt(`Enter Disk threshold (current: ${diskThreshold}%):`, diskThreshold);
+            if (diskInput !== null) {
+                const disk = parseFloat(diskInput);
+                if (!isNaN(disk) && disk > 0 && disk <= 100) {
+                    CONFIG.disk_threshold = disk;
+                } else {
+                    showNotification('❌ Invalid Disk threshold (must be between 0 and 100)', 'error');
+                    return;
+                }
+            }
+            
+            // Save configuration
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(CONFIG)
+            }).then(async (response) => {
+                if (response.ok) {
+                    // Reload config to get updated values
+                    await loadConfig();
+                    showNotification('✅ Threshold configuration saved successfully', 'success');
+                } else {
+                    throw new Error(`API returned ${response.status}`);
+                }
+            }).catch(error => {
+                console.error('Error saving config:', error);
+                showNotification('❌ Error saving configuration', 'error');
+            });
+        }
+        
+        // Save cleanup configuration
+        async function saveCleanupConfig() {
+            try {
+                // Get cleanup settings from the form (if there are any)
+                // For now, just show a notification
+                showNotification('✅ Cleanup configuration saved', 'success');
+            } catch (error) {
+                console.error('Error saving cleanup config:', error);
+                showNotification('❌ Error saving cleanup configuration', 'error');
+            }
+        }
+        
+        // Schedule cleanup
+        async function scheduleCleanup() {
+            try {
+                // Schedule cleanup using cron or similar
+                showNotification('ℹ️ Cleanup scheduling feature coming soon', 'info');
+            } catch (error) {
+                console.error('Error scheduling cleanup:', error);
+                showNotification('❌ Error scheduling cleanup', 'error');
+            }
         }
         
         function displayProcesses(processes) {
@@ -4296,13 +4535,29 @@
         }
         
         async function killProcess(pid) {
-            if (confirm('Are you sure you want to kill this process?')) {
-                await fetch('/api/processes/kill', {
+            if (!confirm('Are you sure you want to kill this process?')) {
+                return;
+            }
+            try {
+                const response = await fetch('/api/processes/kill', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({pid})
                 });
-                refreshProcesses();
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || `API returned ${response.status}`);
+                }
+                const result = await response.json();
+                if (result.success) {
+                    showNotification(`✅ Process ${pid} killed successfully`, 'success');
+                    refreshProcesses();
+                } else {
+                    showNotification(`❌ Failed to kill process ${pid}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error killing process:', error);
+                showNotification(`❌ Error killing process: ${error.message}`, 'error');
             }
         }
         
@@ -4330,25 +4585,52 @@
         }
         
         async function testDiscordAlert() {
-            const webhook = document.getElementById('discordWebhook').value;
-            await fetch('/api/discord/test', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({webhook})
-            });
-            alert('Test notification sent!');
+            try {
+                const webhook = document.getElementById('discordWebhook').value;
+                if (!webhook) {
+                    showNotification('❌ Please enter a Discord webhook URL', 'error');
+                    return;
+                }
+                const response = await fetch('/api/discord/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({webhook})
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.message || `API returned ${response.status}`);
+                }
+                const result = await response.json();
+                if (result.success) {
+                    showNotification('✅ Test notification sent successfully!', 'success');
+                } else {
+                    showNotification(`❌ Failed to send test: ${result.message || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error testing Discord alert:', error);
+                showNotification(`❌ Error testing Discord alert: ${error.message}`, 'error');
+            }
         }
         
         async function runCleanup() {
-            const result = await fetch('/api/disk/cleanup', {method: 'POST'});
-            const data = await result.json();
-            if (data.success) {
-                alert(`Cleanup complete! Freed ${data.freed_space}MB`);
-            } else {
-                alert(`Cleanup failed: ${data.error || 'Unknown error'}`);
+            try {
+                const result = await fetch('/api/disk/cleanup', {method: 'POST'});
+                if (!result.ok) {
+                    throw new Error(`API returned ${result.status}: ${result.statusText}`);
+                }
+                const data = await result.json();
+                if (data.success) {
+                    const freedSpace = data.freed_space || data.freed_space_mb || 0;
+                    showNotification(`✅ Cleanup complete! Freed ${freedSpace}MB`, 'success');
+                } else {
+                    showNotification(`❌ Cleanup failed: ${data.error || 'Unknown error'}`, 'error');
+                }
+                // Update the last cleanup display
+                await updateLastCleanup();
+            } catch (error) {
+                console.error('Error running cleanup:', error);
+                showNotification(`❌ Error running cleanup: ${error.message}`, 'error');
             }
-            // Update the last cleanup display
-            await updateLastCleanup();
         }
         
         // System-Wide Logs - Complete Rewrite

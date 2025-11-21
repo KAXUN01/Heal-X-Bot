@@ -354,6 +354,96 @@ def get_all_services_status() -> List[Dict[str, Any]]:
         services.append(status)
     return services
 
+def start_service(service_name: str) -> bool:
+    """Start a service"""
+    try:
+        logger.info(f"▶️ Attempting to start service: {service_name}")
+        
+        # First try without sudo (in case user has permissions)
+        result = subprocess.run(
+            ["systemctl", "start", service_name],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        # If that fails, try with sudo
+        if result.returncode != 0:
+            logger.info(f"Non-sudo start failed, trying with sudo for {service_name}")
+            result = subprocess.run(
+                ["sudo", "systemctl", "start", service_name],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+        
+        if result.returncode == 0:
+            logger.info(f"✅ Successfully started {service_name}")
+            log_event("info", f"Service {service_name} started successfully")
+            send_discord_alert(f"✅ Service Started: {service_name}")
+            
+            # Verify the service actually started
+            time.sleep(1)  # Give it a moment to start
+            status_check = check_service_status(service_name)
+            is_active = status_check.get("active", False)
+            status = status_check.get("status", "unknown")
+            
+            if is_active:
+                logger.info(f"✅ Verified: {service_name} is now running")
+            else:
+                logger.warning(f"⚠️  Warning: {service_name} start command succeeded but service status is: {status}")
+            
+            return True
+        else:
+            error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+            logger.error(f"❌ Failed to start {service_name}: {error_msg}")
+            return False
+    except subprocess.TimeoutExpired:
+        logger.error(f"⏱️  Timeout while starting service {service_name}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Error starting service {service_name}: {e}", exc_info=True)
+        return False
+
+def stop_service(service_name: str) -> bool:
+    """Stop a service"""
+    try:
+        logger.info(f"⏹️ Attempting to stop service: {service_name}")
+        
+        # First try without sudo (in case user has permissions)
+        result = subprocess.run(
+            ["systemctl", "stop", service_name],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        # If that fails, try with sudo
+        if result.returncode != 0:
+            logger.info(f"Non-sudo stop failed, trying with sudo for {service_name}")
+            result = subprocess.run(
+                ["sudo", "systemctl", "stop", service_name],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+        
+        if result.returncode == 0:
+            logger.info(f"✅ Successfully stopped {service_name}")
+            log_event("info", f"Service {service_name} stopped successfully")
+            send_discord_alert(f"⏹️ Service Stopped: {service_name}")
+            return True
+        else:
+            error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+            logger.error(f"❌ Failed to stop {service_name}: {error_msg}")
+            return False
+    except subprocess.TimeoutExpired:
+        logger.error(f"⏱️  Timeout while stopping service {service_name}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Error stopping service {service_name}: {e}", exc_info=True)
+        return False
+
 def restart_service(service_name: str) -> bool:
     """Restart a failed service"""
     try:
@@ -1604,11 +1694,35 @@ async def get_services():
     non_running_services = [s for s in all_services if not s.get("active", False)]
     return {"services": non_running_services}
 
+@app.post("/api/services/{service_name}/start")
+async def start_service_endpoint(service_name: str):
+    """Start a specific service"""
+    try:
+        success = start_service(service_name)
+        return {"success": success, "service": service_name}
+    except Exception as e:
+        logger.error(f"Error starting service {service_name}: {e}")
+        return {"success": False, "service": service_name, "error": str(e)}
+
+@app.post("/api/services/{service_name}/stop")
+async def stop_service_endpoint(service_name: str):
+    """Stop a specific service"""
+    try:
+        success = stop_service(service_name)
+        return {"success": success, "service": service_name}
+    except Exception as e:
+        logger.error(f"Error stopping service {service_name}: {e}")
+        return {"success": False, "service": service_name, "error": str(e)}
+
 @app.post("/api/services/{service_name}/restart")
 async def restart_service_endpoint(service_name: str):
     """Restart a specific service"""
-    success = restart_service(service_name)
-    return {"success": success, "service": service_name}
+    try:
+        success = restart_service(service_name)
+        return {"success": success, "service": service_name}
+    except Exception as e:
+        logger.error(f"Error restarting service {service_name}: {e}")
+        return {"success": False, "service": service_name, "error": str(e)}
 
 @app.get("/api/processes/top")
 async def get_top_processes_endpoint(limit: int = 10):
@@ -2671,16 +2785,49 @@ async def get_attack_metrics():
 def load_predictive_model():
     """Load predictive maintenance model if available"""
     try:
-        model_path = Path(__file__).parent.parent.parent / "model" / "artifacts" / "latest" / "model_loader.py"
-        if model_path.exists():
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("model_loader", model_path)
-            model_loader = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(model_loader)
-            return model_loader
-        return None
+        artifacts_dir = Path(__file__).parent.parent.parent / "model" / "artifacts"
+        latest_path = artifacts_dir / "latest"
+        
+        # Handle case where 'latest' might be a text file, symlink, or directory
+        if latest_path.exists():
+            # If it's a symlink, resolve it
+            if latest_path.is_symlink():
+                target_dir = latest_path.readlink()
+                # If it's a relative symlink, resolve it relative to artifacts_dir
+                if not target_dir.is_absolute():
+                    target_dir = artifacts_dir / target_dir
+                model_path = target_dir / "model_loader.py"
+            # If it's a regular file (text file), read the version name
+            elif latest_path.is_file():
+                try:
+                    version_name = latest_path.read_text().strip()
+                    # Remove quotes if present
+                    version_name = version_name.strip('"\'')
+                    target_dir = artifacts_dir / version_name
+                    model_path = target_dir / "model_loader.py"
+                    logger.info(f"Found 'latest' as text file pointing to {version_name}")
+                except Exception as e:
+                    logger.warning(f"Could not read version from 'latest' file: {e}")
+                    return None
+            # If it's a directory, use it directly
+            else:
+                model_path = latest_path / "model_loader.py"
+            
+            if model_path.exists() and model_path.is_file():
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("model_loader", model_path)
+                model_loader = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(model_loader)
+                logger.info(f"Successfully loaded predictive model from {model_path}")
+                return model_loader
+            else:
+                logger.warning(f"Model loader file not found at {model_path}")
+                return None
+        else:
+            logger.debug(f"Model artifacts directory 'latest' not found at {latest_path}")
+            return None
     except Exception as e:
-        logger.warning(f"Could not load predictive model: {e}")
+        logger.warning(f"Could not load predictive model: {e}", exc_info=True)
         return None
 
 predictive_model = load_predictive_model()

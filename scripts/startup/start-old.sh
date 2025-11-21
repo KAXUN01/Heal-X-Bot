@@ -1,0 +1,403 @@
+#!/bin/bash
+# Healing-Bot Startup Script
+# This script starts the entire healing-bot application
+# Uses native Python for services, Docker only for Fluent Bit
+
+set -e  # Exit on error
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Get the script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
+# Array to store background process PIDs
+declare -a PIDS=()
+
+# Cleanup function
+cleanup() {
+    echo ""
+    echo -e "${YELLOW}🛑 Shutting down services...${NC}"
+    
+    # Kill all background Python processes
+    for pid in "${PIDS[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            echo -e "${YELLOW}   Stopping process $pid...${NC}"
+            kill "$pid" 2>/dev/null || true
+        fi
+    done
+    
+    # Stop Fluent Bit Docker container
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        if docker ps 2>/dev/null | grep -q "fluent-bit"; then
+            echo -e "${YELLOW}   Stopping Fluent Bit container...${NC}"
+            if docker compose version >/dev/null 2>&1; then
+                docker compose -f config/docker-compose-fluent-bit.yml down 2>/dev/null || true
+            elif command -v docker-compose >/dev/null 2>&1; then
+                docker-compose -f config/docker-compose-fluent-bit.yml down 2>/dev/null || true
+            fi
+        fi
+    fi
+    
+    # Wait a bit for processes to terminate
+    sleep 2
+    
+    # Force kill if still running
+    for pid in "${PIDS[@]}"; do
+        if kill -0 "$pid" 2>/dev/null; then
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done
+    
+    echo -e "${GREEN}✅ All services stopped${NC}"
+    exit 0
+}
+
+# Set trap to cleanup on script exit
+trap cleanup SIGINT SIGTERM EXIT
+
+echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║                    🛡️  HEALING-BOT  🛡️                      ║${NC}"
+echo -e "${BLUE}║                                                              ║${NC}"
+echo -e "${BLUE}║        AI-Powered DDoS Detection & IP Blocking System       ║${NC}"
+echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+# Check Python version
+echo -e "${YELLOW}🔍 Checking Python version...${NC}"
+if ! command -v python3 &> /dev/null; then
+    echo -e "${RED}❌ ERROR: Python 3 is not installed${NC}"
+    exit 1
+fi
+
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+echo -e "${GREEN}✅ Python ${PYTHON_VERSION} detected${NC}"
+
+# Check if Python version is 3.8 or higher
+PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
+PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
+
+if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 8 ]); then
+    echo -e "${RED}❌ ERROR: Python 3.8 or higher is required${NC}"
+    exit 1
+fi
+
+# Check Docker for Fluent Bit
+echo -e "${YELLOW}🔍 Checking Docker for Fluent Bit...${NC}"
+DOCKER_OK=1
+COMPOSE_CMD=""
+if ! command -v docker &> /dev/null; then
+    echo -e "${RED}❌ ERROR: Docker is not installed (required for Fluent Bit)${NC}"
+    DOCKER_OK=0
+else
+    # Verify Docker daemon access/permissions
+    if ! docker info >/dev/null 2>&1; then
+        echo -e "${YELLOW}⚠️  WARNING: Docker is installed but not accessible by this user or daemon isn't running${NC}"
+        echo -e "${YELLOW}   Try:${NC}"
+        echo -e "${YELLOW}   - Start daemon: sudo systemctl start docker${NC}"
+        echo -e "${YELLOW}   - Add your user: sudo usermod -aG docker $USER && newgrp docker${NC}"
+        DOCKER_OK=0
+    fi
+fi
+
+if [ "$DOCKER_OK" -eq 1 ]; then
+    if docker compose version >/dev/null 2>&1; then
+        COMPOSE_CMD="docker compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        COMPOSE_CMD="docker-compose"
+    else
+        echo -e "${YELLOW}⚠️  WARNING: Docker Compose not found (v2 or legacy). Fluent Bit will be skipped.${NC}"
+        DOCKER_OK=0
+    fi
+fi
+
+if [ "$DOCKER_OK" -eq 1 ]; then
+    echo -e "${GREEN}✅ Docker and Docker Compose detected${NC}"
+else
+    echo -e "${YELLOW}⚠️  Proceeding without Fluent Bit due to Docker/Compose issue${NC}"
+fi
+
+# Ensure and activate virtual environment, then install Python deps
+VENV_DIR=""
+if [ -d ".venv" ]; then
+    VENV_DIR=".venv"
+elif [ -d "venv" ]; then
+    VENV_DIR="venv"
+else
+    VENV_DIR=".venv"
+fi
+
+if [ ! -f "$VENV_DIR/bin/activate" ]; then
+    echo -e "${YELLOW}📦 Creating virtual environment (${VENV_DIR})...${NC}"
+    python3 -m venv "$VENV_DIR"
+fi
+
+if [ -f "$VENV_DIR/bin/activate" ]; then
+    # shellcheck disable=SC1090
+    source "$VENV_DIR/bin/activate"
+    echo -e "${GREEN}✅ Virtual environment activated (${VENV_DIR})${NC}"
+else
+    echo -e "${RED}❌ ERROR: Failed to prepare virtual environment at ${VENV_DIR}${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}📦 Installing Python dependencies...${NC}"
+python3 -m pip install --upgrade pip >/dev/null
+if [ -f "requirements.txt" ]; then
+    python3 -m pip install -r requirements.txt
+fi
+# Install per-service requirements if present
+if [ -f "model/requirements.txt" ]; then
+    python3 -m pip install -r model/requirements.txt
+fi
+if [ -f "monitoring/server/requirements.txt" ]; then
+    python3 -m pip install -r monitoring/server/requirements.txt
+fi
+if [ -f "monitoring/dashboard/requirements.txt" ]; then
+    python3 -m pip install -r monitoring/dashboard/requirements.txt
+fi
+if [ -f "incident-bot/requirements.txt" ]; then
+    python3 -m pip install -r incident-bot/requirements.txt
+fi
+# Ensure protobuf is compatible with TensorFlow (TensorFlow 2.20+ requires protobuf>=5.28.0)
+# Install protobuf>=5.28.0 for TensorFlow compatibility
+python3 -m pip install --upgrade "protobuf>=5.28.0,<6.0.0" googleapis-common-protos >/dev/null || true
+echo -e "${GREEN}✅ Virtual environment ready${NC}"
+
+# Check if .env file exists
+if [ ! -f ".env" ]; then
+    echo -e "${YELLOW}⚠️  WARNING: .env file not found${NC}"
+    if [ -f "config/env.template" ]; then
+        echo -e "${YELLOW}📝 Creating .env file from template...${NC}"
+        cp config/env.template .env
+        echo -e "${GREEN}✅ Created .env file - please configure your API keys${NC}"
+    else
+        echo -e "${YELLOW}⚠️  No env.template found - continuing without .env${NC}"
+    fi
+fi
+
+# Check for required directories
+echo -e "${YELLOW}🔍 Checking project structure...${NC}"
+REQUIRED_DIRS=("monitoring/server" "model" "incident-bot" "config" "monitoring/dashboard")
+for dir in "${REQUIRED_DIRS[@]}"; do
+    if [ ! -d "$dir" ]; then
+        echo -e "${RED}❌ ERROR: Required directory not found: $dir${NC}"
+        exit 1
+    fi
+done
+echo -e "${GREEN}✅ Project structure verified${NC}"
+
+# Check if ports are available
+echo -e "${YELLOW}🔍 Checking port availability...${NC}"
+PORTS=(8080 8000 8001 5000 5001 8888)
+OCCUPIED_PORTS=()
+
+for port in "${PORTS[@]}"; do
+    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1 || netstat -an 2>/dev/null | grep -q ":$port.*LISTEN"; then
+        OCCUPIED_PORTS+=($port)
+    fi
+done
+
+if [ ${#OCCUPIED_PORTS[@]} -gt 0 ]; then
+    echo -e "${YELLOW}⚠️  WARNING: Ports ${OCCUPIED_PORTS[@]} are already in use${NC}"
+    echo -e "${YELLOW}   The application may not start properly if these ports are needed${NC}"
+    read -p "Continue anyway? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo -e "${RED}❌ Startup cancelled${NC}"
+        exit 1
+    fi
+fi
+
+# Create Docker network for Fluent Bit if it doesn't exist
+if [ "$DOCKER_OK" -eq 1 ]; then
+    echo -e "${YELLOW}🔍 Setting up Docker network for Fluent Bit...${NC}"
+    if ! docker network ls | grep -q "healing-network"; then
+        echo -e "${YELLOW}   Creating healing-network...${NC}"
+        docker network create healing-network 2>/dev/null || true
+        echo -e "${GREEN}✅ Docker network created${NC}"
+    else
+        echo -e "${GREEN}✅ Docker network already exists${NC}"
+    fi
+fi
+
+# Start Fluent Bit with Docker (only if Docker/Compose available)
+if [ "$DOCKER_OK" -eq 1 ]; then
+    echo -e "${YELLOW}🐳 Starting Fluent Bit with Docker...${NC}"
+    cd config
+    if $COMPOSE_CMD -f docker-compose-fluent-bit.yml up -d; then
+        echo -e "${GREEN}✅ Fluent Bit started${NC}"
+    else
+        echo -e "${RED}❌ ERROR: Failed to start Fluent Bit${NC}"
+        exit 1
+    fi
+    cd "$SCRIPT_DIR"
+else
+    echo -e "${YELLOW}⏭️  Skipping Fluent Bit startup (Docker/Compose unavailable)${NC}"
+fi
+
+# Start Python services natively
+echo ""
+echo -e "${GREEN}🚀 Starting Python services...${NC}"
+echo ""
+
+# Function to start a service
+start_service() {
+    local service_name=$1
+    local service_path=$2
+    local script_name=$3
+    local port=$4
+    local env_vars="${5:-}"  # Optional environment variables
+    local health_url="${6:-}"  # Optional health check URL
+    
+    if [ ! -f "$service_path/$script_name" ]; then
+        echo -e "${RED}❌ ERROR: Script not found: $service_path/$script_name${NC}"
+        return 1
+    fi
+    
+    echo -e "${YELLOW}🚀 Starting $service_name...${NC}"
+    
+    # Start the service in background with environment variables
+    # Set PYTHONUNBUFFERED and any service-specific env vars
+    local pid
+    
+    # Ensure PYTHONPATH includes project root for imports
+    export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
+    
+    if [ -n "$env_vars" ]; then
+        # Export variables for this service (will be used by the python process)
+        eval "export PYTHONUNBUFFERED=1; export $env_vars"
+        cd "$service_path"
+        python3 -u "$script_name" > "$SCRIPT_DIR/logs/${service_name}.log" 2>&1 &
+        pid=$!
+        cd "$SCRIPT_DIR"
+    else
+        export PYTHONUNBUFFERED=1
+        cd "$service_path"
+        python3 -u "$script_name" > "$SCRIPT_DIR/logs/${service_name}.log" 2>&1 &
+        pid=$!
+        cd "$SCRIPT_DIR"
+    fi
+    
+    PIDS+=($pid)
+    
+    # Wait a moment to check if it started successfully
+    sleep 2
+    if kill -0 "$pid" 2>/dev/null; then
+        # If health URL provided, check if service is responding
+        if [ -n "$health_url" ]; then
+            local max_attempts=10
+            local attempt=0
+            local health_ok=0
+            
+            while [ $attempt -lt $max_attempts ]; do
+                sleep 1
+                if curl -s --max-time 2 "$health_url" >/dev/null 2>&1; then
+                    health_ok=1
+                    break
+                fi
+                attempt=$((attempt + 1))
+            done
+            
+            if [ $health_ok -eq 1 ]; then
+                echo -e "${GREEN}✅ $service_name started and healthy (PID: $pid, Port: $port)${NC}"
+            else
+                echo -e "${YELLOW}⚠️  $service_name started but health check failed (PID: $pid, Port: $port)${NC}"
+                echo -e "${YELLOW}   Check logs/${service_name}.log for details${NC}"
+            fi
+        else
+            echo -e "${GREEN}✅ $service_name started (PID: $pid, Port: $port)${NC}"
+        fi
+        return 0
+    else
+        echo -e "${RED}❌ $service_name failed to start - check logs/${service_name}.log${NC}"
+        if [ -f "$SCRIPT_DIR/logs/${service_name}.log" ]; then
+            echo -e "${YELLOW}   Last 5 lines of log:${NC}"
+            tail -5 "$SCRIPT_DIR/logs/${service_name}.log" | sed 's/^/   /'
+        fi
+        return 1
+    fi
+}
+
+# Create logs directory if it doesn't exist
+mkdir -p logs
+
+# Start all services
+# Note: Using different ports to avoid conflicts
+# Format: service_name path script port env_vars health_url
+
+start_service "DDoS Model API" "model" "main.py" "8080" "MODEL_PORT=8080" "http://localhost:8080/health"
+start_service "Network Analyzer" "monitoring/server" "network_analyzer.py" "8000" "PORT=8000" "http://localhost:8000/active-threats"
+# Removed ML Dashboard (port 3001) - using Healing Dashboard (port 5001) instead
+start_service "Incident Bot" "incident-bot" "main.py" "8001" "PORT=8001" "http://localhost:8001/"
+start_service "Monitoring Server" "monitoring/server" "app.py" "5000" "" "http://localhost:5000/health"
+start_service "Healing Dashboard API" "monitoring/server" "healing_dashboard_api.py" "5001" "HEALING_DASHBOARD_PORT=5001" "http://localhost:5001/api/health"
+
+# Wait a bit for services to initialize
+echo ""
+echo -e "${YELLOW}⏳ Waiting for services to fully initialize...${NC}"
+sleep 3
+
+# Verify services are accessible
+echo -e "${YELLOW}🔍 Verifying service health...${NC}"
+SERVICES_OK=0
+SERVICES_TOTAL=5
+
+check_service() {
+    local name=$1
+    local url=$2
+    if curl -s --max-time 2 "$url" >/dev/null 2>&1; then
+        echo -e "${GREEN}   ✅ $name is responding${NC}"
+        SERVICES_OK=$((SERVICES_OK + 1))
+        return 0
+    else
+        echo -e "${YELLOW}   ⚠️  $name not responding yet${NC}"
+        return 1
+    fi
+}
+
+check_service "Model API" "http://localhost:8080/health"
+check_service "Network Analyzer" "http://localhost:8000/active-threats"
+check_service "Incident Bot" "http://localhost:8001/"
+check_service "Monitoring Server" "http://localhost:5000/health"
+check_service "Healing Dashboard" "http://localhost:5001/api/health"
+
+echo ""
+if [ $SERVICES_OK -eq $SERVICES_TOTAL ]; then
+    echo -e "${GREEN}✅ All services are healthy!${NC}"
+else
+    echo -e "${YELLOW}⚠️  Some services may still be starting. Check logs/ for details.${NC}"
+fi
+sleep 2
+
+# Print access information
+echo ""
+echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║                    🌐 ACCESS POINTS                          ║${NC}"
+echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${GREEN}🛡️  Healing Dashboard (Main UI):${NC}"
+echo -e "${GREEN}   http://localhost:5001/static/healing-dashboard.html${NC}"
+echo ""
+echo -e "${GREEN}📊 API Endpoints:${NC}"
+echo -e "${GREEN}   Monitoring Server:     http://localhost:5000${NC}"
+echo -e "${GREEN}   Healing Dashboard API: http://localhost:5001${NC}"
+echo -e "${GREEN}   Model API:             http://localhost:8080${NC}"
+echo -e "${GREEN}   Network Analyzer:      http://localhost:8000${NC}"
+echo -e "${GREEN}   Incident Bot:          http://localhost:8001${NC}"
+echo -e "${GREEN}   Fluent Bit:            http://localhost:8888${NC}"
+echo ""
+echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║         🛡️  HEALING-BOT IS RUNNING! 🛡️                        ║${NC}"
+echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}"
+echo ""
+
+# Keep script running and wait for all background processes
+wait

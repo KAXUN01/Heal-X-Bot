@@ -2372,6 +2372,11 @@
                 tabContent.classList.add('active');
             }
             
+            // Refresh services when services tab is opened
+            if (tabName === 'services') {
+                loadServicesList();
+            }
+            
             // Refresh predictive maintenance data when tab is opened
             if (tabName === 'predictive') {
                 console.log('🔮 Predictive Maintenance tab opened - refreshing data...');
@@ -4032,6 +4037,242 @@
             }
         `;
         document.head.appendChild(style);
+        
+        // Load and display services in the services tab (only non-running services)
+        async function loadServicesList() {
+            try {
+                const response = await fetch('/api/services');
+                const data = await response.json();
+                
+                const serviceList = document.getElementById('serviceList');
+                if (!serviceList) return;
+                
+                // Show all services (running and stopped) to allow full management
+                let allServices = data.services || [];
+                
+                // Sort services: running services first, then stopped/unknown
+                allServices.sort((a, b) => {
+                    const aRunning = a.status === 'running' || a.active === true;
+                    const bRunning = b.status === 'running' || b.active === true;
+                    if (aRunning && !bRunning) return -1;
+                    if (!aRunning && bRunning) return 1;
+                    return 0;
+                });
+                
+                if (allServices.length === 0) {
+                    serviceList.innerHTML = `
+                        <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">📋</div>
+                            <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 0.5rem;">No Services Found</div>
+                            <div>No services are configured for monitoring</div>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Separate running and non-running services
+                const runningServices = allServices.filter(s => s.status === 'running' || s.active === true);
+                const otherServices = allServices.filter(s => s.status !== 'running' && s.active !== true);
+                
+                // Debug: log services to console
+                console.log('Services loaded - Running:', runningServices.length, 'Other:', otherServices.length);
+                
+                let html = '';
+                
+                // Always show running services first with a header
+                if (runningServices.length > 0) {
+                    html += runningServices.map(service => {
+                        const statusClass = 'running';
+                        const statusText = 'Running';
+                        const isRunning = true;
+                        
+                        return `
+                            <div class="service-item" style="border-left: 4px solid var(--accent-green);">
+                                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                    <span class="service-status ${statusClass}"></span>
+                                    <div>
+                                        <div style="font-weight: bold; font-size: 1.1rem;">${service.name}</div>
+                                        <div style="font-size: 0.85rem; color: var(--accent-green);">${statusText}</div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button class="btn btn-danger btn-sm" onclick="stopService('${service.name}')" 
+                                            style="white-space: nowrap;" title="Stop Service">
+                                        ⏹️ Stop
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" onclick="restartService('${service.name}')" 
+                                            style="white-space: nowrap;" title="Restart Service">
+                                        🔄 Restart
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+                
+                // Show other services (stopped/unknown)
+                if (otherServices.length > 0) {
+                    html += otherServices.map(service => {
+                        const statusClass = service.status === 'stopped' ? 'stopped' : 'restarting';
+                        const statusText = service.status === 'stopped' ? 'Stopped' : 
+                                          service.status === 'restarting' ? 'Restarting' : 'Unknown';
+                        const isRunning = false;
+                        
+                        return `
+                            <div class="service-item">
+                                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                    <span class="service-status ${statusClass}"></span>
+                                    <div>
+                                        <div style="font-weight: bold; font-size: 1.1rem;">${service.name}</div>
+                                        <div style="font-size: 0.85rem; color: var(--text-secondary);">${statusText}</div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button class="btn btn-success btn-sm" onclick="startService('${service.name}')" 
+                                            style="white-space: nowrap;" title="Start Service">
+                                        ▶️ Start
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" onclick="restartService('${service.name}')" 
+                                            style="white-space: nowrap;" title="Restart Service">
+                                        🔄 Restart
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+                
+                serviceList.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading services:', error);
+                const serviceList = document.getElementById('serviceList');
+                if (serviceList) {
+                    serviceList.innerHTML = `
+                        <div style="padding: 2rem; text-align: center; color: var(--accent-red);">
+                            <div>❌ Error loading services: ${error.message}</div>
+                        </div>
+                    `;
+                }
+            }
+        }
+        
+        // Setup auto-restart toggle
+        function setupAutoRestartToggle() {
+            const toggle = document.getElementById('autoRestartToggle');
+            if (!toggle) return;
+            
+            // Load current state
+            fetch('/api/config')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.auto_restart !== undefined) {
+                        toggle.checked = data.auto_restart;
+                    }
+                })
+                .catch(err => console.error('Error loading auto-restart config:', err));
+            
+            // Handle toggle change
+            toggle.addEventListener('change', async function() {
+                try {
+                    const response = await fetch('/api/config', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            auto_restart: this.checked
+                        })
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        showNotification(
+                            this.checked ? '✅ Auto-restart enabled' : '⏸️ Auto-restart disabled',
+                            'success'
+                        );
+                    }
+                } catch (error) {
+                    console.error('Error updating auto-restart config:', error);
+                    showNotification('❌ Failed to update auto-restart setting', 'error');
+                    // Revert toggle
+                    this.checked = !this.checked;
+                }
+            });
+        }
+        
+        // Start a service
+        async function startService(serviceName) {
+            if (!confirm(`Are you sure you want to start ${serviceName}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/services/${serviceName}/start`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification(`▶️ Service ${serviceName} started successfully`, 'success');
+                    // Reload services list after a short delay
+                    setTimeout(loadServicesList, 2000);
+                } else {
+                    showNotification(`❌ Failed to start ${serviceName}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error starting service:', error);
+                showNotification(`❌ Error starting ${serviceName}: ${error.message}`, 'error');
+            }
+        }
+        
+        // Stop a service
+        async function stopService(serviceName) {
+            if (!confirm(`Are you sure you want to stop ${serviceName}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/services/${serviceName}/stop`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification(`⏹️ Service ${serviceName} stopped successfully`, 'success');
+                    // Reload services list after a short delay
+                    setTimeout(loadServicesList, 2000);
+                } else {
+                    showNotification(`❌ Failed to stop ${serviceName}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error stopping service:', error);
+                showNotification(`❌ Error stopping ${serviceName}: ${error.message}`, 'error');
+            }
+        }
+        
+        // Restart a service
+        async function restartService(serviceName) {
+            if (!confirm(`Are you sure you want to restart ${serviceName}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/services/${serviceName}/restart`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification(`✅ Service ${serviceName} restarted successfully`, 'success');
+                    // Reload services list after a short delay
+                    setTimeout(loadServicesList, 2000);
+                } else {
+                    showNotification(`❌ Failed to restart ${serviceName}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error restarting service:', error);
+                showNotification(`❌ Error restarting ${serviceName}: ${error.message}`, 'error');
+            }
+        }
         
         async function refreshProcesses() {
             const response = await fetch('/api/processes/top');
@@ -6202,6 +6443,7 @@
             updateStatistics(); // Initial statistics load
             updateLastCleanup(); // Initial last cleanup load
             refreshSystemLogs(); // Initial system logs load
+            loadServicesList(); // Initial services load
             
             // Initialize cloud simulation visualizations
             updateServiceStatus();
@@ -6211,6 +6453,7 @@
             updateAutoHealingDashboard();
             loadAutoHealingConfig(); // Load configuration on page load
             setupAutoHealingConfigListeners(); // Setup event listeners
+            setupAutoRestartToggle(); // Setup auto-restart toggle
             setInterval(updateAutoHealingDashboard, 10000); // Update every 10 seconds
             setInterval(loadAutoHealingConfig, 30000); // Refresh configuration every 30 seconds
             
@@ -6282,6 +6525,14 @@
             
             // Update statistics every 3 seconds for real-time feel
             setInterval(updateStatistics, 3000);
+            
+            // Refresh services list periodically (only when services tab is active)
+            setInterval(() => {
+                const servicesTab = document.getElementById('services');
+                if (servicesTab && servicesTab.classList.contains('active')) {
+                    loadServicesList();
+                }
+            }, 5000); // Refresh every 5 seconds when tab is active
             
             // Note: Auto-refresh is now controlled by the toggle button in the UI
             

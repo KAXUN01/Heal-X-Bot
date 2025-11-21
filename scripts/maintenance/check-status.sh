@@ -21,7 +21,7 @@ SERVICES[network-analyzer]="Network Analyzer|8000|http://localhost:8000/health"
 SERVICES[dashboard]="ML Dashboard|3001|http://localhost:3001/"
 SERVICES[incident-bot]="Incident Bot|8001|http://localhost:8001/health"
 SERVICES[monitoring-server]="Monitoring Server|5000|http://localhost:5000/health"
-SERVICES[healing-dashboard]="Healing Dashboard API|5001|http://localhost:5001/"
+SERVICES[healing-dashboard]="Healing Dashboard API|5001|http://localhost:5001/api/health"
 
 check_service() {
     local service=$1

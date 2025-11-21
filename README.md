@@ -47,9 +47,51 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
 
 ## 🚀 Quick Start
 
-### 🎯 **NEW: Modular CLI Interface (Recommended)**
+### ⚡ **Unified Startup Script (Recommended)**
 
-**Single command-line interface for managing Heal-X-Bot:**
+**The simplest way to start Heal-X-Bot - one command does everything:**
+
+```bash
+# Start all services (first time setup included)
+./start.sh
+
+# Check service status
+./start.sh status
+
+# Stop all services
+./start.sh stop
+
+# Restart all services
+./start.sh restart
+
+# Get help
+./start.sh --help
+```
+
+**What the script does automatically:**
+- ✅ Checks Python version (requires 3.8+)
+- ✅ Creates virtual environment
+- ✅ Installs all dependencies
+- ✅ Sets up environment file
+- ✅ Starts all services in correct order
+- ✅ Verifies health of each service
+- ✅ Handles port conflicts
+- ✅ Provides clear error messages
+
+**Access Points:**
+- 🛡️ **Healing Dashboard**: http://localhost:5001
+- 📈 **Monitoring Server**: http://localhost:5000
+- 🤖 **DDoS Model API**: http://localhost:8080
+- 🔍 **Network Analyzer**: http://localhost:8000
+- 🚨 **Incident Bot**: http://localhost:8001
+
+📖 **See [QUICK_START.md](QUICK_START.md) for detailed setup instructions**
+
+---
+
+### 🎯 **Alternative: Modular CLI Interface**
+
+**Python-based command-line interface:**
 
 ```bash
 # Start all services
@@ -63,20 +105,9 @@ python3 -m healx status
 
 # View service logs
 python3 -m healx logs <service_name>
-
-# List available log files
-python3 -m healx logs
 ```
 
-**Or use the direct CLI:**
-```bash
-python3 healx/cli.py start
-python3 healx/cli.py stop
-python3 healx/cli.py status
-python3 healx/cli.py logs
-```
-
-The new modular structure provides:
+The modular structure provides:
 - **Unified configuration**: Centralized config management via `monitoring/server/core/config.py`
 - **Service manager**: Unified service initialization and health checking
 - **Modular healing**: Healing actions organized in `monitoring/server/healing/actions/`
@@ -148,8 +179,9 @@ sudo ./scripts/deployment/start-healing-bot-ubuntu.sh --install-deps
 ```
 
 ### Prerequisites
-- Python 3.8 or higher
-- pip (Python package manager)
+- **Python 3.8 or higher** (check with `python3 --version`)
+- **pip** (Python package manager)
+- **curl** (for health checks, usually pre-installed)
 - Docker (optional, for containerized deployment)
 
 ### Installation
@@ -157,34 +189,35 @@ sudo ./scripts/deployment/start-healing-bot-ubuntu.sh --install-deps
 1. **Clone the repository:**
    ```bash
    git clone <repository-url>
-   cd Healing-bot
+   cd Heal-X-Bot
    ```
 
-2. **Quick Start (NEW):**
+2. **Start the system:**
    ```bash
-   # Auto-detect and start everything
-   python run-healing-bot.py
+   ./start.sh
    ```
-
-3. **Traditional Setup:**
-   ```bash
-   # Run setup script
-   python setup.py
    
-   # Start with individual scripts
-   # Windows: start-dev.bat
-   # Linux/Mac: ./start-dev.sh
+   That's it! The script handles everything automatically.
+
+3. **Alternative methods:**
+   ```bash
+   # Python launcher
+   python3 run-healing-bot.py
+   
+   # Or use the CLI module
+   python3 -m healx start
    ```
 
 ### 🌐 Access Points
 
 Once running, access the system at:
 
-- **📊 Dashboard**: http://localhost:3001 (Main UI)
-- **🤖 Model API**: http://localhost:8080
-- **🚨 Incident Bot**: http://localhost:8000
-- **📈 Monitoring Server**: http://localhost:5000 (API-only)
-- **📊 Prometheus**: http://localhost:9090 (Docker mode)
+- **🛡️ Healing Dashboard**: http://localhost:5001 (Main UI)
+- **📈 Monitoring Server**: http://localhost:5000
+- **🤖 DDoS Model API**: http://localhost:8080
+- **🔍 Network Analyzer**: http://localhost:8000
+- **🚨 Incident Bot**: http://localhost:8001
+- **📊 Prometheus**: http://localhost:9090 (Docker mode only)
 
 ### 🎛️ **Unified Launcher Features**
 

@@ -294,15 +294,30 @@ def check_service_status(service_name: str) -> Dict[str, Any]:
             text=True,
             timeout=5
         )
-        is_active = result.stdout.strip() == "active"
+        status_output = result.stdout.strip().lower()
+        is_active = status_output == "active"
+        
+        # Also check is-enabled to get more info
+        try:
+            enabled_result = subprocess.run(
+                ["systemctl", "is-enabled", service_name],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            is_enabled = enabled_result.stdout.strip().lower() in ["enabled", "enabled-runtime"]
+        except:
+            is_enabled = False
         
         return {
             "name": service_name,
             "status": "running" if is_active else "stopped",
-            "active": is_active
+            "active": is_active,
+            "enabled": is_enabled
         }
-    except:
-        return {"name": service_name, "status": "unknown", "active": False}
+    except Exception as e:
+        logger.error(f"Error checking service status for {service_name}: {e}")
+        return {"name": service_name, "status": "unknown", "active": False, "enabled": False}
 
 def get_all_services_status() -> List[Dict[str, Any]]:
     services = []
@@ -310,6 +325,46 @@ def get_all_services_status() -> List[Dict[str, Any]]:
         status = check_service_status(service)
         services.append(status)
     return services
+
+def start_service(service_name: str) -> bool:
+    try:
+        logger.info(f"Starting service: {service_name}")
+        result = subprocess.run(
+            ["sudo", "systemctl", "start", service_name],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            logger.info(f"Successfully started {service_name}")
+            log_event("info", f"Service {service_name} started")
+            send_discord_alert(f"▶️ Service Started: {service_name}")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error starting {service_name}: {e}")
+        return False
+
+def stop_service(service_name: str) -> bool:
+    try:
+        logger.info(f"Stopping service: {service_name}")
+        result = subprocess.run(
+            ["sudo", "systemctl", "stop", service_name],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            logger.info(f"Successfully stopped {service_name}")
+            log_event("info", f"Service {service_name} stopped")
+            send_discord_alert(f"⏹️ Service Stopped: {service_name}")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error stopping {service_name}: {e}")
+        return False
 
 def restart_service(service_name: str) -> bool:
     try:
@@ -751,6 +806,16 @@ async def unblock_ip_endpoint(request: dict):
 @app.get("/api/services")
 async def get_services():
     return {"services": get_all_services_status()}
+
+@app.post("/api/services/{service_name}/start")
+async def start_service_endpoint(service_name: str):
+    success = start_service(service_name)
+    return {"success": success, "service": service_name}
+
+@app.post("/api/services/{service_name}/stop")
+async def stop_service_endpoint(service_name: str):
+    success = stop_service(service_name)
+    return {"success": success, "service": service_name}
 
 @app.post("/api/services/{service_name}/restart")
 async def restart_service_endpoint(service_name: str):

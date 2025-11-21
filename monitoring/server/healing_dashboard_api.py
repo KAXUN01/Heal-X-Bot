@@ -26,6 +26,7 @@ import random
 import hashlib
 from dotenv import load_dotenv
 from blocked_ips_db import BlockedIPsDatabase
+from healing.notification_manager import NotificationManager
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
@@ -167,6 +168,18 @@ def load_config():
     if discord_webhook.startswith("'") and discord_webhook.endswith("'"):
         discord_webhook = discord_webhook[1:-1]
     
+    # Notification cooldown configuration
+    notification_cooldown_minutes = int(os.getenv("NOTIFICATION_COOLDOWN_MINUTES", "15"))
+    notification_max_retention_hours = int(os.getenv("NOTIFICATION_MAX_RETENTION_HOURS", "24"))
+    
+    # Severity-specific cooldowns (in minutes)
+    severity_cooldowns = {
+        "critical": int(os.getenv("NOTIFICATION_CRITICAL_COOLDOWN_MINUTES", "5")),
+        "error": int(os.getenv("NOTIFICATION_ERROR_COOLDOWN_MINUTES", "10")),
+        "warning": int(os.getenv("NOTIFICATION_WARNING_COOLDOWN_MINUTES", "15")),
+        "info": int(os.getenv("NOTIFICATION_INFO_COOLDOWN_MINUTES", "15"))
+    }
+    
     return {
         "auto_restart": True,
         "cpu_threshold": 90.0,
@@ -175,9 +188,19 @@ def load_config():
         "discord_webhook": discord_webhook,
         "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
         "model_service_url": os.getenv("MODEL_SERVICE_URL", "http://localhost:8080"),
+        "notification_cooldown_minutes": notification_cooldown_minutes,
+        "notification_severity_cooldowns": severity_cooldowns,
+        "notification_max_retention_hours": notification_max_retention_hours,
     }
 
 CONFIG = load_config()
+
+# Initialize notification manager for CPU/Memory hog detection
+notification_manager = NotificationManager(
+    default_cooldown_minutes=CONFIG["notification_cooldown_minutes"],
+    severity_cooldowns=CONFIG["notification_severity_cooldowns"],
+    max_retention_hours=CONFIG["notification_max_retention_hours"]
+)
 
 # Log Discord webhook status on startup
 if CONFIG["discord_webhook"]:
@@ -295,14 +318,29 @@ def check_service_status(service_name: str) -> Dict[str, Any]:
             text=True,
             timeout=5
         )
-        is_active = result.stdout.strip() == "active"
+        # systemctl is-active returns:
+        # - exit code 0 and stdout "active" if service is running
+        # - exit code non-zero if service is not running (stopped, failed, etc.)
+        output = result.stdout.strip().lower()
+        is_active = result.returncode == 0 and output == "active"
+        
+        # Determine status string
+        if is_active:
+            status = "running"
+        elif output == "inactive":
+            status = "stopped"
+        elif output == "failed":
+            status = "failed"
+        else:
+            status = "stopped"  # Default to stopped for any non-active state
         
         return {
             "name": service_name,
-            "status": "running" if is_active else "stopped",
+            "status": status,
             "active": is_active
         }
     except subprocess.TimeoutExpired:
+        logger.warning(f"Timeout checking service {service_name}")
         return {"name": service_name, "status": "timeout", "active": False}
     except Exception as e:
         logger.error(f"Error checking service {service_name}: {e}")
@@ -319,24 +357,52 @@ def get_all_services_status() -> List[Dict[str, Any]]:
 def restart_service(service_name: str) -> bool:
     """Restart a failed service"""
     try:
-        logger.info(f"Attempting to restart service: {service_name}")
+        logger.info(f"🔄 Attempting to restart service: {service_name}")
+        
+        # First try without sudo (in case user has permissions)
         result = subprocess.run(
-            ["sudo", "systemctl", "restart", service_name],
+            ["systemctl", "restart", service_name],
             capture_output=True,
             text=True,
             timeout=30
         )
         
+        # If that fails, try with sudo
+        if result.returncode != 0:
+            logger.info(f"Non-sudo restart failed, trying with sudo for {service_name}")
+            result = subprocess.run(
+                ["sudo", "systemctl", "restart", service_name],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+        
         if result.returncode == 0:
-            logger.info(f"Successfully restarted {service_name}")
+            logger.info(f"✅ Successfully restarted {service_name}")
             log_event("info", f"Service {service_name} restarted successfully")
             send_discord_alert(f"✅ Service Restarted: {service_name}")
+            
+            # Verify the service actually started
+            time.sleep(1)  # Give it a moment to start
+            status_check = check_service_status(service_name)
+            is_active = status_check.get("active", False)
+            status = status_check.get("status", "unknown")
+            
+            if is_active:
+                logger.info(f"✅ Verified: {service_name} is now running")
+            else:
+                logger.warning(f"⚠️  Warning: {service_name} restart command succeeded but service status is: {status}")
+            
             return True
         else:
-            logger.error(f"Failed to restart {service_name}: {result.stderr}")
+            error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+            logger.error(f"❌ Failed to restart {service_name}: {error_msg}")
             return False
+    except subprocess.TimeoutExpired:
+        logger.error(f"⏱️  Timeout while restarting service {service_name}")
+        return False
     except Exception as e:
-        logger.error(f"Error restarting service {service_name}: {e}")
+        logger.error(f"❌ Error restarting service {service_name}: {e}", exc_info=True)
         return False
 
 # ============================================================================
@@ -400,13 +466,77 @@ def auto_detect_resource_hogs():
         for proc in psutil.process_iter(['pid', 'name', 'cpu_percent', 'memory_percent']):
             try:
                 pinfo = proc.info
-                if pinfo['cpu_percent'] > CONFIG['cpu_threshold']:
-                    logger.warning(f"CPU hog detected: {pinfo['name']} ({pinfo['cpu_percent']}%)")
-                    send_discord_alert(f"⚠️ CPU Hog Detected: {pinfo['name']} using {pinfo['cpu_percent']}% CPU")
+                process_key = f"{pinfo['pid']}_{pinfo['name']}"
                 
+                # Check CPU usage
+                if pinfo['cpu_percent'] > CONFIG['cpu_threshold']:
+                    should_notify, reason = notification_manager.should_notify(
+                        process_key, 
+                        'cpu', 
+                        pinfo['cpu_percent'], 
+                        CONFIG['cpu_threshold']
+                    )
+                    
+                    if should_notify:
+                        severity = notification_manager.get_severity(
+                            pinfo['cpu_percent'], 
+                            CONFIG['cpu_threshold']
+                        )
+                        logger.warning(
+                            f"CPU hog detected: {pinfo['name']} ({pinfo['cpu_percent']}%) "
+                            f"[Reason: {reason}, Severity: {severity}]"
+                        )
+                        send_discord_alert(
+                            f"⚠️ CPU Hog Detected: {pinfo['name']} using {pinfo['cpu_percent']}% CPU",
+                            severity=severity
+                        )
+                        notification_manager.record_notification(
+                            process_key, 
+                            'cpu', 
+                            pinfo['cpu_percent'], 
+                            severity
+                        )
+                    else:
+                        # Log debug info but don't notify
+                        logger.debug(
+                            f"CPU hog still active: {pinfo['name']} ({pinfo['cpu_percent']}%) "
+                            f"- notification suppressed (cooldown active)"
+                        )
+                
+                # Check Memory usage
                 if pinfo['memory_percent'] > CONFIG['memory_threshold']:
-                    logger.warning(f"Memory hog detected: {pinfo['name']} ({pinfo['memory_percent']}%)")
-                    send_discord_alert(f"⚠️ Memory Hog Detected: {pinfo['name']} using {pinfo['memory_percent']}% RAM")
+                    should_notify, reason = notification_manager.should_notify(
+                        process_key, 
+                        'memory', 
+                        pinfo['memory_percent'], 
+                        CONFIG['memory_threshold']
+                    )
+                    
+                    if should_notify:
+                        severity = notification_manager.get_severity(
+                            pinfo['memory_percent'], 
+                            CONFIG['memory_threshold']
+                        )
+                        logger.warning(
+                            f"Memory hog detected: {pinfo['name']} ({pinfo['memory_percent']}%) "
+                            f"[Reason: {reason}, Severity: {severity}]"
+                        )
+                        send_discord_alert(
+                            f"⚠️ Memory Hog Detected: {pinfo['name']} using {pinfo['memory_percent']}% RAM",
+                            severity=severity
+                        )
+                        notification_manager.record_notification(
+                            process_key, 
+                            'memory', 
+                            pinfo['memory_percent'], 
+                            severity
+                        )
+                    else:
+                        # Log debug info but don't notify
+                        logger.debug(
+                            f"Memory hog still active: {pinfo['name']} ({pinfo['memory_percent']}%) "
+                            f"- notification suppressed (cooldown active)"
+                        )
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
     except Exception as e:
@@ -1323,12 +1453,24 @@ async def monitoring_loop():
             # Check services
             if CONFIG["auto_restart"]:
                 services = get_all_services_status()
-                for service in services:
-                    if not service["active"]:
-                        restart_service(service["name"])
+                stopped_services = [s for s in services if not s.get("active", False)]
+                if stopped_services:
+                    logger.info(f"🔍 Monitoring loop detected {len(stopped_services)} stopped service(s): {[s['name'] for s in stopped_services]}")
+                    for service in stopped_services:
+                        service_name = service["name"]
+                        service_status = service.get("status", "unknown")
+                        logger.info(f"🔄 Auto-restarting service: {service_name} (status: {service_status})")
+                        restart_service(service_name)
             
             # Check resource hogs
             auto_detect_resource_hogs()
+            
+            # Cleanup old notification history entries (every 100 iterations = ~3.3 minutes)
+            if loop_counter % 100 == 0:
+                try:
+                    notification_manager.cleanup_old_entries()
+                except Exception as e:
+                    logger.error(f"Error cleaning up notification history: {e}")
             
             # Check disk usage (only run cleanup once per hour)
             disk_usage = psutil.disk_usage('/')
@@ -1368,10 +1510,27 @@ async def monitoring_loop():
 @app.on_event("startup")
 async def startup_event():
     """Start background tasks and initialize cloud components"""
-    asyncio.create_task(monitoring_loop())
-    
-    # Initialize cloud simulation components
-    initialize_cloud_components()
+    try:
+        # Start monitoring loop (non-blocking)
+        asyncio.create_task(monitoring_loop())
+        logger.info("✅ Monitoring loop started")
+        
+        # Initialize cloud simulation components in background (don't block startup)
+        async def init_cloud_components_async():
+            try:
+                # Run synchronous function in executor to avoid blocking
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, initialize_cloud_components)
+                logger.info("✅ Cloud components initialized")
+            except Exception as e:
+                logger.error(f"⚠️  Error initializing cloud components (service will continue): {e}", exc_info=True)
+        
+        # Start cloud components initialization in background
+        asyncio.create_task(init_cloud_components_async())
+        
+    except Exception as e:
+        logger.error(f"⚠️  Error during startup (service will continue): {e}", exc_info=True)
+        # Don't fail startup if initialization fails
     
     # Initialize with some sample DDoS data if empty
     if ddos_statistics['total_detections'] == 0:
@@ -1439,8 +1598,11 @@ async def get_metrics():
 
 @app.get("/api/services")
 async def get_services():
-    """Get all services status"""
-    return {"services": get_all_services_status()}
+    """Get all services status (only non-running services)"""
+    all_services = get_all_services_status()
+    # Filter out running services - only show stopped/failed services
+    non_running_services = [s for s in all_services if not s.get("active", False)]
+    return {"services": non_running_services}
 
 @app.post("/api/services/{service_name}/restart")
 async def restart_service_endpoint(service_name: str):
@@ -3426,7 +3588,7 @@ def initialize_cloud_components():
             discord_notifier=discord_notifier,
             event_emitter=event_emitter
         )
-        auto_healer.start_monitoring(interval=60)
+        auto_healer.start_monitoring(interval_seconds=60)
         
         container_monitor = ContainerMonitor()
         resource_monitor = ResourceMonitor()

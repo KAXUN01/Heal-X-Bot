@@ -36,6 +36,10 @@ VENV_DIR="$SCRIPT_DIR/.venv"
 SERVICES_CONFIG="$SCRIPT_DIR/config/services.yaml"
 ENV_FILE="$SCRIPT_DIR/.env"
 ENV_TEMPLATE="$SCRIPT_DIR/config/env.template"
+RESOURCE_CONFIG="$SCRIPT_DIR/config/resource_config.json"
+
+# Resource profile (can be set via RESOURCE_PROFILE env var or --resource-profile flag)
+RESOURCE_PROFILE="${RESOURCE_PROFILE:-medium}"
 
 # Create necessary directories
 mkdir -p "$LOG_DIR" "$PID_DIR"
@@ -190,9 +194,27 @@ setup_venv() {
     fi
     
     # Fix protobuf compatibility (critical for TensorFlow)
-    log_info "Fixing protobuf compatibility..."
-    python3 -m pip install --force-reinstall "protobuf>=5.28.0,<6.0.0" --no-cache-dir -q 2>/dev/null || true
+    log_info "Fixing protobuf compatibility for TensorFlow..."
+    # TensorFlow 2.20.0 requires protobuf 5.28.0 specifically
+    # Uninstall any existing protobuf first, then install correct version
+    python3 -m pip uninstall -y protobuf 2>/dev/null || true
+    python3 -m pip install --no-cache-dir "protobuf==5.28.0" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || {
+        log_error "Failed to install protobuf 5.28.0 - TensorFlow may not work"
+    }
     python3 -m pip install --upgrade "numpy<2" "typing-extensions>=4.12.0" googleapis-common-protos -q 2>/dev/null || true
+    
+    # Verify protobuf version and test import
+    PROTOBUF_VERSION=$(python3 -m pip show protobuf 2>/dev/null | grep Version | awk '{print $2}' || echo "unknown")
+    log_info "Protobuf version: $PROTOBUF_VERSION"
+    
+    # Test protobuf import
+    if python3 -c "from google.protobuf import runtime_version" 2>/dev/null; then
+        log_success "Protobuf is compatible with TensorFlow"
+    else
+        log_warning "Protobuf runtime_version not available - TensorFlow may have issues"
+        log_info "Trying to fix by reinstalling protobuf..."
+        python3 -m pip install --force-reinstall --no-deps "protobuf==5.28.0" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || true
+    fi
     
     # Install google-generativeai separately (required for incident bot)
     # Newer versions (>=0.6.0) should work with protobuf 5.x
@@ -214,6 +236,45 @@ setup_env_file() {
         log_warning ".env file not found, creating from template..."
         cp "$ENV_TEMPLATE" "$ENV_FILE"
         log_success "Created .env file - please configure your API keys if needed"
+    fi
+}
+
+load_resource_profile() {
+    # Load resource profile configuration
+    if [ ! -f "$RESOURCE_CONFIG" ]; then
+        log_warning "Resource config not found: $RESOURCE_CONFIG - using defaults"
+        return
+    fi
+    
+    # Use Python to parse JSON (more reliable than jq which may not be installed)
+    local profile_json=$(python3 -c "
+import json
+import sys
+try:
+    with open('$RESOURCE_CONFIG', 'r') as f:
+        config = json.load(f)
+    profile = config['profiles'].get('$RESOURCE_PROFILE', config['profiles'][config['default_profile']])
+    print(json.dumps(profile))
+except Exception as e:
+    print('{}', file=sys.stderr)
+    sys.exit(1)
+" 2>/dev/null)
+    
+    if [ -z "$profile_json" ] || [ "$profile_json" = "{}" ]; then
+        log_warning "Failed to load resource profile '$RESOURCE_PROFILE' - using defaults"
+        return
+    fi
+    
+    # Extract and export configuration values
+    export MONITOR_INTERVAL=$(echo "$profile_json" | python3 -c "import json, sys; print(json.load(sys.stdin)['monitoring']['health_check_interval_seconds'])" 2>/dev/null || echo "30")
+    export LOG_COLLECTION_INTERVAL=$(echo "$profile_json" | python3 -c "import json, sys; print(json.load(sys.stdin)['monitoring']['log_collection_interval_seconds'])" 2>/dev/null || echo "60")
+    export CRITICAL_SERVICES_INTERVAL=$(echo "$profile_json" | python3 -c "import json, sys; print(json.load(sys.stdin)['monitoring']['critical_services_monitor_interval_seconds'])" 2>/dev/null || echo "30")
+    export ESSENTIAL_ONLY=$(echo "$profile_json" | python3 -c "import json, sys; print(json.load(sys.stdin)['services']['essential_only'])" 2>/dev/null || echo "false")
+    
+    log_info "Resource profile: $RESOURCE_PROFILE (monitor interval: ${MONITOR_INTERVAL}s)"
+    
+    if [ "$ESSENTIAL_ONLY" = "true" ]; then
+        log_info "Essential services only mode enabled"
     fi
 }
 
@@ -239,7 +300,14 @@ parse_services_config() {
     
     # Startup order
     declare -ga STARTUP_ORDER
-    STARTUP_ORDER=("model" "network-analyzer" "monitoring-server" "incident-bot" "healing-dashboard")
+    if [ "${ESSENTIAL_ONLY:-false}" = "true" ]; then
+        # Essential services only (model, monitoring-server, healing-dashboard)
+        STARTUP_ORDER=("model" "monitoring-server" "healing-dashboard")
+        log_info "Starting in essential-only mode (skipping network-analyzer and incident-bot)"
+    else
+        # All services
+        STARTUP_ORDER=("model" "network-analyzer" "monitoring-server" "incident-bot" "healing-dashboard")
+    fi
 }
 
 start_service() {
@@ -280,7 +348,7 @@ start_service() {
     
     # Prepare environment
     export PYTHONUNBUFFERED=1
-    export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
+    export PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}"
     
     if [ -n "$env_vars" ]; then
         eval "export $env_vars"
@@ -320,7 +388,7 @@ wait_for_service() {
     fi
     
     log_info "Waiting for $service_name to be healthy..."
-    local max_attempts=30
+    local max_attempts=60
     local attempt=0
     
     while [ $attempt -lt $max_attempts ]; do
@@ -329,11 +397,17 @@ wait_for_service() {
             return 0
         fi
         attempt=$((attempt + 1))
+        # Show progress every 10 attempts
+        if [ $((attempt % 10)) -eq 0 ]; then
+            log_info "Still waiting for $service_name... (attempt $attempt/$max_attempts)"
+        fi
         sleep 1
     done
     
-    log_warning "$service_name health check timeout (may still be starting)"
-    return 1
+    log_warning "$service_name health check timeout after ${max_attempts}s (service may still be starting)"
+    log_info "Check $LOG_DIR/${service_name}.log for details"
+    # Don't fail - service might still be starting (especially TensorFlow models take time)
+    return 0
 }
 
 start_all_services() {
@@ -363,9 +437,15 @@ start_all_services() {
         fi
         
         if start_service "$service"; then
-            wait_for_service "$service"
+            # Wait for service health, but don't fail if it times out
+            # (services like TensorFlow models can take a while to load)
+            if ! wait_for_service "$service"; then
+                log_warning "$service health check failed, but continuing startup..."
+                log_info "Service may still be initializing. Check logs if issues persist."
+            fi
         else
             log_error "Failed to start $service"
+            # Continue with other services even if one fails
         fi
     done
 }
@@ -489,11 +569,13 @@ Commands:
     stop         Stop all services
     restart      Restart all services
     --help       Show this help message
+    --resource-profile [low|medium|high]  Set resource usage profile
 
 Examples:
-    ./start.sh              # Start all services
-    ./start.sh status       # Check service status
-    ./start.sh stop         # Stop all services
+    ./start.sh                          # Start all services (medium profile)
+    ./start.sh --resource-profile low   # Start with low resource usage
+    ./start.sh status                   # Check service status
+    ./start.sh stop                     # Stop all services
 
 Access Points (after startup):
     🛡️  Healing Dashboard:    http://localhost:5001
@@ -536,6 +618,7 @@ main() {
         check_project_structure
         setup_env_file
         setup_venv
+        load_resource_profile
         check_ports
         
         log_info "Starting all services..."

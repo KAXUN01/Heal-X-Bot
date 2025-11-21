@@ -59,7 +59,7 @@ class CriticalServicesMonitor:
         # Initialize log file
         self._init_log_file()
         
-    def start_monitoring(self, interval_seconds: int = 10):
+    def start_monitoring(self, interval_seconds: int = 30):
         """Start continuous monitoring"""
         self.running = True
         self.collection_thread = threading.Thread(

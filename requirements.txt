@@ -58,9 +58,8 @@ typing-extensions>=4.12.0
 
 # AI & Cloud Services
 # Note: google-generativeai is installed separately after TensorFlow to avoid protobuf conflicts
-protobuf>=5.28.0,<6.0.0
-boto3==1.28.53
-botocore==1.31.53
+# TensorFlow 2.20.0 requires protobuf 5.28.0 specifically (not 5.29.x)
+protobuf==5.28.0
 
 # Utilities
 python-dateutil==2.8.2

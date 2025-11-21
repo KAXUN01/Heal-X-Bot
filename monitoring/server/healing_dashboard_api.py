@@ -1688,11 +1688,10 @@ async def get_metrics():
 
 @app.get("/api/services")
 async def get_services():
-    """Get all services status (only non-running services)"""
+    """Get all services status (all services - running and stopped)"""
     all_services = get_all_services_status()
-    # Filter out running services - only show stopped/failed services
-    non_running_services = [s for s in all_services if not s.get("active", False)]
-    return {"services": non_running_services}
+    # Return all services (both running and stopped) for full management
+    return {"services": all_services}
 
 @app.post("/api/services/{service_name}/start")
 async def start_service_endpoint(service_name: str):

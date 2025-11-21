@@ -102,6 +102,51 @@ check_python() {
     log_success "Python ${PYTHON_VERSION} detected"
 }
 
+kill_processes_on_port() {
+    local port=$1
+    local killed=0
+    
+    # Check for Docker containers using this port
+    if command -v docker >/dev/null 2>&1; then
+        local container=$(docker ps --format "{{.ID}}\t{{.Ports}}" 2>/dev/null | grep ":$port" | awk '{print $1}' | head -1 || true)
+        if [ -n "$container" ]; then
+            log_info "Stopping Docker container $container using port $port..."
+            docker stop "$container" >/dev/null 2>&1 || true
+            killed=1
+        fi
+    fi
+    
+    # Try using lsof to find and kill processes
+    if command -v lsof >/dev/null 2>&1; then
+        local pids=$(lsof -ti :$port 2>/dev/null || true)
+        if [ -n "$pids" ]; then
+            for pid in $pids; do
+                # Skip docker-proxy if we already tried to stop the container
+                if ps -p "$pid" -o comm= 2>/dev/null | grep -q "docker-proxy"; then
+                    if [ $killed -eq 0 ]; then
+                        log_info "Port $port is used by docker-proxy. Try: docker ps | grep $port"
+                    fi
+                    continue
+                fi
+                if kill -0 "$pid" 2>/dev/null; then
+                    log_info "Killing process $pid on port $port..."
+                    kill -TERM "$pid" 2>/dev/null || kill -9 "$pid" 2>/dev/null || true
+                    killed=1
+                fi
+            done
+        fi
+    fi
+    
+    # Try using fuser as fallback (requires sudo)
+    if [ $killed -eq 0 ] && command -v fuser >/dev/null 2>&1; then
+        if sudo -n fuser -k $port/tcp >/dev/null 2>&1 2>/dev/null; then
+            killed=1
+        fi
+    fi
+    
+    return $killed
+}
+
 check_ports() {
     log_info "Checking port availability..."
     local ports=(8080 8000 5000 5001 8001)
@@ -116,7 +161,17 @@ check_ports() {
     if [ ${#ports_in_use[@]} -gt 0 ]; then
         log_warning "The following ports are already in use: ${ports_in_use[*]}"
         log_info "Attempting to stop existing services..."
+        
+        # First, try stopping services via PID files
         stop_all_services_quiet
+        sleep 2
+        
+        # Then, aggressively kill processes on those specific ports
+        for port in "${ports_in_use[@]}"; do
+            log_info "Killing processes on port $port..."
+            kill_processes_on_port "$port"
+        done
+        
         sleep 2
         
         # Check again
@@ -129,7 +184,25 @@ check_ports() {
         
         if [ ${#ports_in_use[@]} -gt 0 ]; then
             log_error "Ports still in use: ${ports_in_use[*]}"
-            log_error "Please stop the processes using these ports or modify the configuration"
+            log_error ""
+            log_error "Please stop the processes using these ports manually:"
+            for port in "${ports_in_use[@]}"; do
+                log_error ""
+                log_error "  Port $port:"
+                log_error "    Check: sudo lsof -i :$port"
+                log_error "    Kill: sudo kill -9 \$(sudo lsof -ti :$port)"
+                
+                # Check if it's a Docker container
+                if command -v docker >/dev/null 2>&1; then
+                    local container=$(docker ps --format "{{.ID}}\t{{.Names}}\t{{.Ports}}" 2>/dev/null | grep ":$port" | head -1 || true)
+                    if [ -n "$container" ]; then
+                        local container_id=$(echo "$container" | awk '{print $1}')
+                        local container_name=$(echo "$container" | awk '{print $2}')
+                        log_error "    Docker: docker stop $container_id  # ($container_name)"
+                    fi
+                fi
+            done
+            log_error ""
             exit 1
         fi
     fi
@@ -501,17 +574,34 @@ stop_all_services_quiet() {
         if [ -f "$pid_file" ]; then
             local pid=$(cat "$pid_file" 2>/dev/null || echo "0")
             if [ "$pid" -ne 0 ] && kill -0 "$pid" 2>/dev/null; then
-                kill "$pid" 2>/dev/null || true
+                kill "$pid" 2>/dev/null || kill -9 "$pid" 2>/dev/null || true
             fi
             rm -f "$pid_file"
         fi
     done
     
-    # Kill any remaining processes
+    # Kill any remaining processes by pattern
     pkill -f "python3.*main.py" 2>/dev/null || true
     pkill -f "python3.*app.py" 2>/dev/null || true
     pkill -f "python3.*network_analyzer.py" 2>/dev/null || true
     pkill -f "python3.*healing_dashboard_api.py" 2>/dev/null || true
+    pkill -f "uvicorn.*healing_dashboard_api" 2>/dev/null || true
+    pkill -f "uvicorn.*app" 2>/dev/null || true
+    
+    # Kill processes on specific ports (more aggressive)
+    for port in 8080 8000 5000 5001 8001; do
+        if command -v lsof >/dev/null 2>&1; then
+            local pids=$(lsof -ti :$port 2>/dev/null || true)
+            if [ -n "$pids" ]; then
+                for pid in $pids; do
+                    # Skip if it's a docker-proxy (might be from other containers)
+                    if ! ps -p "$pid" -o comm= 2>/dev/null | grep -q "docker-proxy"; then
+                        kill -TERM "$pid" 2>/dev/null || kill -9 "$pid" 2>/dev/null || true
+                    fi
+                done
+            fi
+        fi
+    done
 }
 
 stop_all_services() {
@@ -523,17 +613,35 @@ stop_all_services() {
             local pid=$(cat "$pid_file" 2>/dev/null || echo "0")
             if [ "$pid" -ne 0 ] && kill -0 "$pid" 2>/dev/null; then
                 log_info "Stopping $service (PID: $pid)..."
-                kill "$pid" 2>/dev/null || true
+                kill "$pid" 2>/dev/null || kill -9 "$pid" 2>/dev/null || true
             fi
             rm -f "$pid_file"
         fi
     done
     
-    # Force kill any remaining processes
+    # Force kill any remaining processes by pattern
     pkill -f "python3.*main.py" 2>/dev/null || true
     pkill -f "python3.*app.py" 2>/dev/null || true
     pkill -f "python3.*network_analyzer.py" 2>/dev/null || true
     pkill -f "python3.*healing_dashboard_api.py" 2>/dev/null || true
+    pkill -f "uvicorn.*healing_dashboard_api" 2>/dev/null || true
+    pkill -f "uvicorn.*app" 2>/dev/null || true
+    
+    # Kill processes on specific ports
+    for port in 8080 8000 5000 5001 8001; do
+        if command -v lsof >/dev/null 2>&1; then
+            local pids=$(lsof -ti :$port 2>/dev/null || true)
+            if [ -n "$pids" ]; then
+                for pid in $pids; do
+                    # Skip docker-proxy processes (might be from other containers)
+                    if ! ps -p "$pid" -o comm= 2>/dev/null | grep -q "docker-proxy"; then
+                        log_info "Killing process $pid on port $port..."
+                        kill -TERM "$pid" 2>/dev/null || kill -9 "$pid" 2>/dev/null || true
+                    fi
+                done
+            fi
+        fi
+    done
     
     sleep 2
     log_success "All services stopped"

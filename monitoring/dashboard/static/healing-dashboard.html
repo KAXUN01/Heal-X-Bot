@@ -905,11 +905,9 @@
             <button class="tab" onclick="switchTab('ddos')">🛡️ DDoS Detection</button>
             <button class="tab" onclick="switchTab('services')">⚙️ Services</button>
             <button class="tab" onclick="switchTab('processes')">🔍 Processes</button>
-            <button class="tab" onclick="switchTab('ssh')">🔐 SSH Security</button>
             <button class="tab" onclick="switchTab('disk')">💿 Disk Management</button>
             <button class="tab" onclick="switchTab('logs')">📝 Logs & AI</button>
             <button class="tab" onclick="switchTab('predictive')">🔮 Predictive Maintenance</button>
-            <button class="tab" onclick="switchTab('alerts')">🔔 Alerts</button>
             <button class="tab" onclick="switchTab('cli')">⚡ CLI Terminal</button>
             <button class="tab" onclick="switchTab('auto-healing')">🤖 Autonomous Self-Healing</button>
             <button class="tab" onclick="switchTab('cloud-sim')">☁️ Cloud Simulation</button>
@@ -1292,18 +1290,6 @@
             </div>
         </div>
 
-        <div id="ssh" class="tab-content">
-            <h2 style="margin-bottom: 1.5rem;">SSH Intrusion Detection</h2>
-            
-            <div class="filter-bar">
-                <input type="text" class="search-input" placeholder="Search by IP or location..." id="sshSearch">
-                <button class="btn btn-primary" onclick="refreshSSHLogs()">🔄 Refresh</button>
-                <button class="btn btn-danger" onclick="clearBlockedIPs()">🚫 Clear Blocked IPs</button>
-            </div>
-            
-            <div class="ip-list scrollbar" id="sshList"></div>
-        </div>
-
         <div id="disk" class="tab-content">
             <h2 style="margin-bottom: 1.5rem;">Disk Cleanup Management</h2>
             
@@ -1593,27 +1579,6 @@
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <div id="alerts" class="tab-content">
-            <h2 style="margin-bottom: 1.5rem;">Discord Alert Configuration</h2>
-            
-            <div class="card" style="margin-bottom: 1.5rem;">
-                <h3>Discord Webhook</h3>
-                <input type="text" class="search-input" placeholder="Discord Webhook URL" 
-                       id="discordWebhook" style="margin: 1rem 0;">
-                <button class="btn btn-primary" onclick="testDiscordAlert()">🔔 Test Notification</button>
-            </div>
-            
-            <div class="alert-config">
-                <h3 style="margin-bottom: 1rem;">Alert Modules</h3>
-                <div id="alertModules"></div>
-            </div>
-            
-            <div class="card">
-                <h3>Recent Alerts</h3>
-                <div class="log-container scrollbar" id="recentAlerts"></div>
             </div>
         </div>
 
@@ -4117,6 +4082,12 @@
                 const runningServices = allServices.filter(s => s.status === 'running' || s.active === true);
                 const otherServices = allServices.filter(s => s.status !== 'running' && s.active !== true);
                 
+                // Update service count in overview card
+                const serviceCountElement = document.getElementById('serviceCount');
+                if (serviceCountElement) {
+                    serviceCountElement.textContent = `${runningServices.length} / ${allServices.length}`;
+                }
+                
                 // Debug: log services to console
                 console.log('Services loaded - Running:', runningServices.length, 'Other:', otherServices.length);
                 
@@ -4349,95 +4320,6 @@
             }
         }
         
-        // Refresh SSH logs
-        async function refreshSSHLogs() {
-            try {
-                const response = await fetch('/api/ssh/attempts');
-                if (!response.ok) {
-                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
-                }
-                const data = await response.json();
-                const container = document.getElementById('sshList');
-                if (container) {
-                    if (data && data.length > 0) {
-                        container.innerHTML = data.map(attempt => `
-                            <div class="log-item" style="padding: 0.75rem; border-bottom: 1px solid var(--border-color);">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <div>
-                                        <strong style="color: var(--accent-red);">${attempt.ip || 'Unknown'}</strong>
-                                        <span style="color: var(--text-secondary); margin-left: 1rem;">${attempt.timestamp || ''}</span>
-                                    </div>
-                                    <div>
-                                        <span style="color: var(--text-secondary); margin-right: 1rem;">Attempts: ${attempt.attempts || 0}</span>
-                                        ${attempt.blocked ? '<span style="color: var(--accent-red);">🔒 Blocked</span>' : 
-                                            `<button class="btn btn-danger btn-sm" onclick="blockSSHAttacker('${attempt.ip}')">Block</button>`}
-                                    </div>
-                                </div>
-                            </div>
-                        `).join('');
-                    } else {
-                        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No SSH attempts found</div>';
-                    }
-                }
-            } catch (error) {
-                console.error('Error refreshing SSH logs:', error);
-                showNotification('❌ Error loading SSH logs', 'error');
-                const container = document.getElementById('sshList');
-                if (container) {
-                    container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--accent-red);">Error: ${error.message}</div>`;
-                }
-            }
-        }
-        
-        // Block SSH attacker
-        async function blockSSHAttacker(ip) {
-            try {
-                const response = await fetch('/api/ssh/block', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ip})
-                });
-                if (!response.ok) {
-                    throw new Error(`API returned ${response.status}`);
-                }
-                const result = await response.json();
-                if (result.success) {
-                    showNotification(`✅ IP ${ip} blocked successfully`, 'success');
-                    refreshSSHLogs();
-                } else {
-                    showNotification(`❌ Failed to block IP ${ip}`, 'error');
-                }
-            } catch (error) {
-                console.error('Error blocking SSH attacker:', error);
-                showNotification(`❌ Error blocking IP: ${error.message}`, 'error');
-            }
-        }
-        
-        // Clear blocked IPs
-        async function clearBlockedIPs() {
-            if (!confirm('Are you sure you want to clear all blocked IPs? This action cannot be undone.')) {
-                return;
-            }
-            try {
-                const response = await fetch('/api/blocked-ips/cleanup', {
-                    method: 'POST'
-                });
-                if (!response.ok) {
-                    throw new Error(`API returned ${response.status}`);
-                }
-                const result = await response.json();
-                if (result.success) {
-                    showNotification('✅ All blocked IPs cleared successfully', 'success');
-                    refreshBlockedIPsList();
-                } else {
-                    showNotification(`❌ Failed to clear blocked IPs: ${result.message || 'Unknown error'}`, 'error');
-                }
-            } catch (error) {
-                console.error('Error clearing blocked IPs:', error);
-                showNotification(`❌ Error clearing blocked IPs: ${error.message}`, 'error');
-            }
-        }
-        
         // Open threshold configuration
         function openThresholdConfig() {
             const cpuThreshold = CONFIG.cpu_threshold || 90.0;
@@ -4584,33 +4466,6 @@
             output.scrollTop = output.scrollHeight;
         }
         
-        async function testDiscordAlert() {
-            try {
-                const webhook = document.getElementById('discordWebhook').value;
-                if (!webhook) {
-                    showNotification('❌ Please enter a Discord webhook URL', 'error');
-                    return;
-                }
-                const response = await fetch('/api/discord/test', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({webhook})
-                });
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.message || `API returned ${response.status}`);
-                }
-                const result = await response.json();
-                if (result.success) {
-                    showNotification('✅ Test notification sent successfully!', 'success');
-                } else {
-                    showNotification(`❌ Failed to send test: ${result.message || 'Unknown error'}`, 'error');
-                }
-            } catch (error) {
-                console.error('Error testing Discord alert:', error);
-                showNotification(`❌ Error testing Discord alert: ${error.message}`, 'error');
-            }
-        }
         
         async function runCleanup() {
             try {
@@ -5510,9 +5365,29 @@
                     });
                     
                     displayAnomalies(criticalIssues);
+                    
+                    // Update alert count in overview card
+                    const alertCountElement = document.getElementById('alertCount');
+                    if (alertCountElement) {
+                        alertCountElement.textContent = criticalIssues.length;
+                    }
+                    
                     console.log(`✅ Loaded ${criticalIssues.length} CRITICAL issues out of ${data.count || 0} total issues`);
+                } else if (data.status === 'success' && (!data.issues || data.issues.length === 0)) {
+                    // No issues found - update alert count to 0
+                    const alertCountElement = document.getElementById('alertCount');
+                    if (alertCountElement) {
+                        alertCountElement.textContent = '0';
+                    }
                 } else if (data.status === 'error') {
                     console.error('Error loading anomalies:', data.message);
+                    
+                    // Update alert count to 0 on error
+                    const alertCountElement = document.getElementById('alertCount');
+                    if (alertCountElement) {
+                        alertCountElement.textContent = '0';
+                    }
+                    
                     const tbody = document.getElementById('anomaliesTable');
                     if (tbody) {
                         tbody.innerHTML = `
@@ -5527,6 +5402,13 @@
                 }
             } catch (error) {
                 console.error('Error loading anomalies:', error);
+                
+                // Update alert count to 0 on error
+                const alertCountElement = document.getElementById('alertCount');
+                if (alertCountElement) {
+                    alertCountElement.textContent = '0';
+                }
+                
                 const tbody = document.getElementById('anomaliesTable');
                 if (tbody) {
                     tbody.innerHTML = `

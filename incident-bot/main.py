@@ -128,13 +128,21 @@ def get_ai_suggestion(alert_info):
         
         suggestion = response.text
         
-        # Extract confidence score
-        confidence_match = re.search(r"CONFIDENCE:\s*(0\.\d+)", suggestion)
+        # Extract confidence score (matches decimal numbers 0.0 to 1.0)
+        # Pattern matches: 0.0, 0.8, 1.0, etc. (requires decimal point)
+        confidence_match = re.search(r"CONFIDENCE:\s*([01]\.\d+)", suggestion)
         confidence = float(confidence_match.group(1)) if confidence_match else 0.0
         
         # Remove the confidence line from the suggestion
+        # Pattern handles multiple cases:
+        # 1. CONFIDENCE: X.XX\n (with newline)
+        # 2. CONFIDENCE: X.XX (no newline, at end of text)
+        # 3. CONFIDENCE: X.XX (no newline, followed by text)
+        # 4. CONFIDENCE: X.XX\n\n (with multiple newlines)
         if confidence_match:
-            suggestion = re.sub(r"CONFIDENCE:\s*0\.\d+\n", "", suggestion, 1)
+            # Match CONFIDENCE: followed by number, then optional whitespace and optional newline(s)
+            # Use [\r\n]* to match any combination of newlines (including \r\n, \n, \r)
+            suggestion = re.sub(r"CONFIDENCE:\s*[01]\.\d+\s*[\r\n]*", "", suggestion, 1)
         
         # Record metrics
         ai_suggestions_total.inc()

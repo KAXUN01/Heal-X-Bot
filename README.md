@@ -134,11 +134,10 @@ The modular structure provides:
 - 🤖 AI Log Analysis (TF-IDF)
 - ⚡ CLI Terminal Integration
 
-**Two Dashboards in One:**
-- **ML Monitoring**: `http://localhost:3001` (Original features)
-- **Healing Dashboard**: `http://localhost:3001/static/healing-dashboard.html` (New features)
+**Healing Dashboard:**
+- **Main Dashboard**: `http://localhost:5001` (All features including ML monitoring, healing, and system management)
 
-📖 **[Unified Guide](docs/guides/UNIFIED_DASHBOARD_GUIDE.md)** | 🧪 **Test**: `python3 test-unified-dashboard.py`
+📖 **[Healing Dashboard Guide](docs/guides/HEALING_DASHBOARD_GUIDE.md)**
 
 ---
 
@@ -257,7 +256,7 @@ python run-healing-bot.py --setup-only
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Dashboard     │    │  Network        │    │   ML Model      │
-│   (Port 3001)   │◄──►│  Analyzer       │◄──►│   (Port 8080)   │
+│   (Port 5001)   │◄──►│  Analyzer       │◄──►│   (Port 8080)   │
 │                 │    │  (Port 8000)    │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
@@ -294,9 +293,10 @@ S3_BUCKET_NAME=your_bucket_name
 ### Port Configuration
 
 The system uses the following ports by default:
-- **Dashboard**: 3001 (Main UI)
+- **Healing Dashboard**: 5001 (Main UI)
 - **Model API**: 8080
-- **Incident Bot**: 8000
+- **Incident Bot**: 8001
+- **Network Analyzer**: 8000
 - **Monitoring Server**: 5000 (API-only)
 - **Prometheus**: 9090
 
@@ -440,7 +440,7 @@ Healing-bot/
 
 ### **Common Issues**
 
-1. **Port Conflicts**: Ensure ports 3001, 8080, 8000 are available
+1. **Port Conflicts**: Ensure ports 5001, 8080, 8000, 8001 are available
 2. **Python Dependencies**: Run `pip install -r requirements.txt`
 3. **Database Issues**: Check SQLite file permissions
 4. **API Connectivity**: Verify service communication
@@ -491,14 +491,15 @@ docker-compose -f config/docker-compose.yml up -d
 
 # 3. Test service health
 curl http://localhost:8080/health    # Model API
-curl http://localhost:8000/health    # Incident Bot
-curl http://localhost:3001/api/health # Dashboard
+curl http://localhost:8000/health    # Network Analyzer
+curl http://localhost:5001/api/health # Healing Dashboard
 curl http://localhost:5000/health    # Monitoring Server
+curl http://localhost:8001/health    # Incident Bot
 
 # 4. Test metrics endpoints
 curl http://localhost:8080/metrics   # Model API metrics
-curl http://localhost:8000/metrics   # Incident Bot metrics
-curl http://localhost:3001/metrics   # Dashboard metrics
+curl http://localhost:8000/metrics   # Network Analyzer metrics
+curl http://localhost:5001/metrics   # Healing Dashboard metrics
 curl http://localhost:5000/metrics   # Monitoring Server metrics
 
 # 5. Access Prometheus (Docker mode)

@@ -168,13 +168,13 @@ def get_system_metrics():
 
 @app.route('/')
 def index():
-    """API Server - No web UI, use dashboard at port 3001"""
+    """API Server - No web UI, use dashboard at port 5001"""
     REQUEST_COUNT.labels(endpoint="/").inc()
     return jsonify({
         'status': 'success',
         'message': 'Healing-bot Monitoring API Server',
         'version': '2.0',
-        'info': 'This is an API-only server. For the web UI, visit http://localhost:3001',
+        'info': 'This is an API-only server. For the web UI, visit http://localhost:5001',
         'endpoints': {
             'health': '/health',
             'metrics': '/metrics (Prometheus)',

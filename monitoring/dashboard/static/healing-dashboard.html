@@ -4,7 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🛡️ Heal-X Dashboard</title>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Preconnect to CDN resources for faster loading -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="https://cdnjs.cloudflare.com">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    <!-- Defer non-critical CSS loading -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet"></noscript>
     <style>
         * {
             margin: 0;
@@ -827,6 +834,7 @@
             </div>
         </div>
     </div>
+    
     <div class="header">
         <h1>🛡️ Healing Bot Dashboard</h1>
         <div class="status-badge healthy" id="systemStatus">
@@ -871,22 +879,22 @@
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card" style="cursor: pointer;" onclick="switchTab('services')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0, 0, 0, 0.3)'" onmouseout="this.style.transform=''; this.style.boxShadow=''">
                 <div class="card-header">
                     <span class="card-title">Running Services</span>
                     <span style="font-size: 1.5rem;">⚙️</span>
                 </div>
                 <div class="card-value" id="serviceCount">0</div>
-                <div class="card-subtitle">Active / Total</div>
+                <div class="card-subtitle">Active / Total (Click to view)</div>
             </div>
 
-            <div class="card">
+            <div class="card" style="cursor: pointer;" onclick="switchTab('alerts')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0, 0, 0, 0.3)'" onmouseout="this.style.transform=''; this.style.boxShadow=''">
                 <div class="card-header">
                     <span class="card-title">Active Alerts</span>
                     <span style="font-size: 1.5rem;">🚨</span>
                 </div>
                 <div class="card-value" id="alertCount">0</div>
-                <div class="card-subtitle">Requires attention</div>
+                <div class="card-subtitle">Requires attention (Click to view)</div>
             </div>
 
             <div class="card">
@@ -901,16 +909,16 @@
 
         <!-- Tabs -->
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('overview')">📊 Overview</button>
-            <button class="tab" onclick="switchTab('ddos')">🛡️ DDoS Detection</button>
-            <button class="tab" onclick="switchTab('services')">⚙️ Services</button>
-            <button class="tab" onclick="switchTab('processes')">🔍 Processes</button>
-            <button class="tab" onclick="switchTab('disk')">💿 Disk Management</button>
-            <button class="tab" onclick="switchTab('logs')">📝 Logs & AI</button>
-            <button class="tab" onclick="switchTab('predictive')">🔮 Predictive Maintenance</button>
-            <button class="tab" onclick="switchTab('cli')">⚡ CLI Terminal</button>
-            <button class="tab" onclick="switchTab('auto-healing')">🤖 Autonomous Self-Healing</button>
-            <button class="tab" onclick="switchTab('cloud-sim')">☁️ Cloud Simulation</button>
+            <button class="tab active" onclick="switchTab('overview', event)">📊 Overview</button>
+            <button class="tab" onclick="switchTab('alerts', event)">🚨 Active Alerts</button>
+            <button class="tab" onclick="switchTab('ddos', event)">🛡️ DDoS Detection</button>
+            <button class="tab" onclick="switchTab('services', event)">⚙️ Services</button>
+            <button class="tab" onclick="switchTab('processes', event)">🔍 Processes</button>
+            <button class="tab" onclick="switchTab('disk', event)">💿 Disk Management</button>
+            <button class="tab" onclick="switchTab('logs', event)">📝 Logs & AI</button>
+            <button class="tab" onclick="switchTab('predictive', event)">🔮 Predictive Maintenance</button>
+            <button class="tab" onclick="switchTab('cli', event)">⚡ CLI Terminal</button>
+            <button class="tab" onclick="switchTab('auto-healing', event)">🤖 Autonomous Self-Healing & Cloud Simulation</button>
         </div>
 
         <!-- Tab Content -->
@@ -1606,7 +1614,7 @@
 
         <!-- Autonomous Self-Healing System Tab -->
         <div id="auto-healing" class="tab-content">
-            <h2 style="margin-bottom: 1.5rem;">🤖 Autonomous Self-Healing System</h2>
+            <h2 style="margin-bottom: 1.5rem;">🤖 Autonomous Self-Healing & Cloud Simulation</h2>
             
             <!-- System Status Overview -->
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
@@ -1823,7 +1831,7 @@
             </div>
 
             <!-- Manual Healing Instructions -->
-            <div class="card">
+            <div class="card" style="margin-bottom: 2rem;">
                 <h3 style="margin-top: 0;">📖 Manual Healing Instructions</h3>
                 <div id="manualHealingInstructionsAuto" class="log-container scrollbar" style="max-height: 300px; overflow-y: auto; background: rgba(251, 191, 36, 0.1); padding: 1rem; border-radius: 8px;">
                     <div style="color: var(--text-secondary); padding: 1rem;">
@@ -1831,148 +1839,212 @@
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Cloud Simulation Tab -->
-        <div id="cloud-sim" class="tab-content">
-            <h2 style="margin-bottom: 1.5rem;">☁️ Cloud Simulation - Autonomous Self-Healing</h2>
-            
-            <!-- Service Status Dashboard -->
-            <div class="card" style="margin-bottom: 2rem;">
-                <h3 style="margin-top: 0;">📊 Service Status Dashboard</h3>
-                <div id="serviceStatusGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-                    <!-- Service cards will be populated here -->
-                </div>
-            </div>
-
-            <!-- Fault Detection & AI Diagnosis Row -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
-                <!-- Fault Detection Panel -->
-                <div class="card">
-                    <h3 style="margin-top: 0;">🔍 Fault Detection Timeline</h3>
-                    <div id="faultDetectionFeed" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
-                        <!-- Fault feed will be populated here -->
+            <!-- Cloud Simulation Features Section -->
+            <div style="border-top: 2px solid var(--border-color); padding-top: 2rem; margin-top: 2rem;">
+                <h2 style="margin-bottom: 1.5rem; color: var(--accent-blue);">☁️ Cloud Simulation Features</h2>
+                
+                <!-- Service Status Dashboard -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <h3 style="margin-top: 0;">📊 Service Status Dashboard</h3>
+                    <div id="serviceStatusGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                        <!-- Service cards will be populated here -->
                     </div>
                 </div>
 
-                <!-- AI Diagnosis Display -->
-                <div class="card">
-                    <h3 style="margin-top: 0;">🧠 AI Diagnosis</h3>
-                    <div id="aiDiagnosisDisplay">
-                        <!-- AI analysis results will be shown here -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Self-Healing Action Log & Discord Notifications Row -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
-                <!-- Self-Healing Action Log -->
-                <div class="card">
-                    <h3 style="margin-top: 0;">🔧 Self-Healing Action Log</h3>
-                    <div id="healingActionLog" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
-                        <!-- Healing actions will be shown here -->
-                    </div>
-                </div>
-
-                <!-- Discord Notification Status -->
-                <div class="card">
-                    <h3 style="margin-top: 0;">🔔 Discord Notifications</h3>
-                    <div id="discordNotificationFeed" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
-                        <!-- Discord notifications will be shown here -->
-                    </div>
-                </div>
-            </div>
-
-            <!-- Resource Monitoring Charts -->
-            <div class="card" style="margin-bottom: 2rem;">
-                <h3 style="margin-top: 0;">📈 Resource Monitoring</h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
-                    <div>
-                        <h4>CPU Usage</h4>
-                        <div style="position: relative; height: 200px;">
-                            <canvas id="cpuChart"></canvas>
+                <!-- Fault Detection & AI Diagnosis Row -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                    <!-- Fault Detection Panel -->
+                    <div class="card">
+                        <h3 style="margin-top: 0;">🔍 Fault Detection Timeline</h3>
+                        <div id="faultDetectionFeed" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Fault feed will be populated here -->
                         </div>
                     </div>
-                    <div>
-                        <h4>Memory Usage</h4>
-                        <div style="position: relative; height: 200px;">
-                            <canvas id="memoryChart"></canvas>
-                        </div>
-                    </div>
-                    <div>
-                        <h4>Disk Usage</h4>
-                        <div style="position: relative; height: 200px;">
-                            <canvas id="diskChart"></canvas>
-                        </div>
-                    </div>
-                    <div>
-                        <h4>Network Traffic</h4>
-                        <div style="position: relative; height: 200px;">
-                            <canvas id="networkChart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Healing Statistics & Manual Instructions Row -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
-                <!-- Healing Statistics -->
-                <div class="card">
-                    <h3 style="margin-top: 0;">📊 Healing Statistics</h3>
-                    <div id="healingStatistics">
-                        <!-- Statistics will be shown here -->
-                    </div>
-                    <div style="margin-top: 1rem;">
-                        <div style="position: relative; height: 250px;">
-                            <canvas id="healingStatsChart"></canvas>
+                    <!-- AI Diagnosis Display -->
+                    <div class="card">
+                        <h3 style="margin-top: 0;">🧠 AI Diagnosis</h3>
+                        <div id="aiDiagnosisDisplay">
+                            <!-- AI analysis results will be shown here -->
                         </div>
                     </div>
                 </div>
 
-                <!-- Manual Instructions Panel -->
-                <div class="card">
-                    <h3 style="margin-top: 0;">📖 Manual Instructions</h3>
-                    <div id="manualInstructionsPanel" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto; background: rgba(251, 191, 36, 0.1); padding: 1rem; border-radius: 8px;">
-                        <p style="color: var(--text-secondary);">Manual instructions will appear here when auto-healing fails or is not possible.</p>
+                <!-- Self-Healing Action Log & Discord Notifications Row -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                    <!-- Self-Healing Action Log -->
+                    <div class="card">
+                        <h3 style="margin-top: 0;">🔧 Self-Healing Action Log</h3>
+                        <div id="healingActionLog" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Healing actions will be shown here -->
+                        </div>
+                    </div>
+
+                    <!-- Discord Notification Status -->
+                    <div class="card">
+                        <h3 style="margin-top: 0;">🔔 Discord Notifications</h3>
+                        <div id="discordNotificationFeed" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Discord notifications will be shown here -->
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Fault Injection Controls -->
-            <div class="card">
-                <h3 style="margin-top: 0;">💥 Fault Injection (Testing)</h3>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-                    <button class="btn btn-danger" onclick="injectFault('crash', 'cloud-sim-api-server')">
-                        💥 Inject Service Crash
-                    </button>
-                    <button class="btn btn-warning" onclick="injectFault('cpu')">
-                        🔥 Inject CPU Exhaustion
-                    </button>
-                    <button class="btn btn-warning" onclick="injectFault('memory')">
-                        💾 Inject Memory Exhaustion
-                    </button>
-                    <button class="btn btn-warning" onclick="injectFault('disk')">
-                        💿 Inject Disk Full
-                    </button>
-                    <button class="btn btn-warning" onclick="injectFault('network', 'cloud-sim-api-server', 8082)">
-                        🌐 Inject Network Issue
-                    </button>
-                    <button class="btn btn-secondary" onclick="cleanupFaults()">
-                        🧹 Cleanup All Faults
-                    </button>
+                <!-- Resource Monitoring Charts -->
+                <div class="card" style="margin-bottom: 2rem;">
+                    <h3 style="margin-top: 0;">📈 Resource Monitoring</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                        <div>
+                            <h4>CPU Usage</h4>
+                            <div style="position: relative; height: 200px;">
+                                <canvas id="cpuChart"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4>Memory Usage</h4>
+                            <div style="position: relative; height: 200px;">
+                                <canvas id="memoryChart"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4>Disk Usage</h4>
+                            <div style="position: relative; height: 200px;">
+                                <canvas id="diskChart"></canvas>
+                            </div>
+                        </div>
+                        <div>
+                            <h4>Network Traffic</h4>
+                            <div style="position: relative; height: 200px;">
+                                <canvas id="networkChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div style="padding: 1rem; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
-                    <small style="color: var(--text-secondary);">
-                        ⚠️ These buttons inject real faults into the simulated cloud environment. 
-                        The AI Bot will automatically detect, diagnose, and attempt to heal them.
-                    </small>
+
+                <!-- Fault Injection Controls -->
+                <div class="card">
+                    <h3 style="margin-top: 0;">💥 Fault Injection (Testing)</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                        <button class="btn btn-danger" onclick="injectFault('crash', 'cloud-sim-api-server')">
+                            💥 Inject Service Crash
+                        </button>
+                        <button class="btn btn-warning" onclick="injectFault('cpu')">
+                            🔥 Inject CPU Exhaustion
+                        </button>
+                        <button class="btn btn-warning" onclick="injectFault('memory')">
+                            💾 Inject Memory Exhaustion
+                        </button>
+                        <button class="btn btn-warning" onclick="injectFault('disk')">
+                            💿 Inject Disk Full
+                        </button>
+                        <button class="btn btn-warning" onclick="injectFault('network', 'cloud-sim-api-server', 8082)">
+                            🌐 Inject Network Issue
+                        </button>
+                        <button class="btn btn-secondary" onclick="cleanupFaults()">
+                            🧹 Cleanup All Faults
+                        </button>
+                    </div>
+                    <div style="padding: 1rem; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
+                        <small style="color: var(--text-secondary);">
+                            ⚠️ These buttons inject real faults into the simulated cloud environment. 
+                            The AI Bot will automatically detect, diagnose, and attempt to heal them.
+                        </small>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Defer Chart.js loading -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
     <script>
+        // ============================================================================
+        // Client-side API Response Cache
+        // ============================================================================
+        const apiCache = {
+            cache: new Map(),
+            defaultTTL: 30000, // 30 seconds default cache time
+            
+            set(key, value, ttl = this.defaultTTL) {
+                const expiry = Date.now() + ttl;
+                this.cache.set(key, { value, expiry });
+            },
+            
+            get(key) {
+                const item = this.cache.get(key);
+                if (!item) return null;
+                if (Date.now() > item.expiry) {
+                    this.cache.delete(key);
+                    return null;
+                }
+                return item.value;
+            },
+            
+            clear() {
+                this.cache.clear();
+            },
+            
+            // Clear expired entries
+            cleanup() {
+                const now = Date.now();
+                for (const [key, item] of this.cache.entries()) {
+                    if (now > item.expiry) {
+                        this.cache.delete(key);
+                    }
+                }
+            }
+        };
+        
+        // Cleanup cache every minute
+        setInterval(() => apiCache.cleanup(), 60000);
+        
+        // ============================================================================
+        // Optimized Fetch with Caching and Timeout
+        // ============================================================================
+        async function cachedFetch(url, options = {}, cacheTTL = 5000) {
+            const cacheKey = `${url}_${JSON.stringify(options)}`;
+            
+            // Check cache first
+            const cached = apiCache.get(cacheKey);
+            if (cached !== null) {
+                return cached;
+            }
+            
+            // Create abort controller for timeout
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), options.timeout || 10000);
+            
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                // Cache successful responses
+                if (cacheTTL > 0) {
+                    apiCache.set(cacheKey, data, cacheTTL);
+                }
+                
+                return data;
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    throw new Error('Request timeout');
+                }
+                throw error;
+            }
+        }
+        
+        // Track which tabs have been loaded
+        const loadedTabs = new Set(['overview']); // Overview is always loaded
+        
         // WebSocket connection for real-time updates
         let ws = null;
         let metricsChart, mlPerformanceChart, attackTypesChart, predictiveTimelineChart;
@@ -2076,45 +2148,137 @@
         
         // Cloud Simulation WebSocket
         let cloudWs = null;
+        let cloudWsRetryCount = 0;
+        let cloudWsRetryTimeout = null;
+        let cloudWsConnecting = false;
+        const MAX_CLOUD_WS_RETRIES = 10;
+        const INITIAL_CLOUD_WS_RETRY_DELAY = 3000;
         
         function initializeCloudWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            cloudWs = new WebSocket(`${protocol}//${window.location.host}/ws/faults`);
+            // Check if WebSocket is supported
+            if (!window.WebSocket) {
+                console.warn('WebSocket not supported in this browser');
+                return;
+            }
             
-            cloudWs.onmessage = function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    if (data.type === 'faults_update') {
-                        updateFaultDetection(data.faults, data.statistics);
-                    } else if (data.type === 'healing_update') {
-                        updateHealingActions(data.history, data.statistics);
+            // Prevent multiple simultaneous connection attempts
+            if (cloudWsConnecting || (cloudWs && cloudWs.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+            
+            // Check if we've exceeded max retries
+            if (cloudWsRetryCount >= MAX_CLOUD_WS_RETRIES) {
+                console.warn('Cloud WebSocket: Max retry attempts reached. Stopping reconnection attempts.');
+                updateCloudWebSocketStatus('disconnected', 'Max retries reached');
+                return;
+            }
+            
+            // Only connect if auto-healing tab is active
+            const autoHealingTab = document.getElementById('auto-healing');
+            if (autoHealingTab && !autoHealingTab.classList.contains('active')) {
+                return;
+            }
+            
+            cloudWsConnecting = true;
+            cloudWsRetryCount++;
+            
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                cloudWs = new WebSocket(`${protocol}//${window.location.host}/ws/faults`);
+                
+                cloudWs.onopen = function() {
+                    cloudWsConnecting = false;
+                    cloudWsRetryCount = 0; // Reset retry count on successful connection
+                    updateCloudWebSocketStatus('connected', 'Connected');
+                };
+                
+                cloudWs.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === 'faults_update') {
+                            updateFaultDetection(data.faults, data.statistics);
+                        } else if (data.type === 'healing_update') {
+                            updateHealingActions(data.history, data.statistics);
+                        }
+                    } catch (error) {
+                        console.error('Error parsing Cloud WebSocket message:', error);
                     }
-                } catch (error) {
-                    console.error('Error parsing Cloud WebSocket message:', error);
-                    console.error('Raw message:', event.data);
-                }
-            };
-            
-            cloudWs.onerror = function(error) {
-                console.error('Cloud WebSocket error:', error);
-            };
-            
-            cloudWs.onclose = function() {
-                console.log('Cloud WebSocket closed, reconnecting...');
-                setTimeout(initializeCloudWebSocket, 3000);
-            };
+                };
+                
+                cloudWs.onerror = function(error) {
+                    cloudWsConnecting = false;
+                    updateCloudWebSocketStatus('error', 'Connection error');
+                };
+                
+                cloudWs.onclose = function() {
+                    cloudWsConnecting = false;
+                    cloudWs = null;
+                    
+                    if (cloudWsRetryCount < MAX_CLOUD_WS_RETRIES) {
+                        // Exponential backoff: 3s, 6s, 12s, 24s, 48s, max 60s
+                        const delay = Math.min(
+                            INITIAL_CLOUD_WS_RETRY_DELAY * Math.pow(2, cloudWsRetryCount - 1),
+                            60000
+                        );
+                        
+                        updateCloudWebSocketStatus('reconnecting', `Reconnecting in ${delay/1000}s...`);
+                        
+                        if (cloudWsRetryTimeout) {
+                            clearTimeout(cloudWsRetryTimeout);
+                        }
+                        cloudWsRetryTimeout = setTimeout(initializeCloudWebSocket, delay);
+                    } else {
+                        updateCloudWebSocketStatus('disconnected', 'Connection failed');
+                    }
+                };
+            } catch (error) {
+                cloudWsConnecting = false;
+                console.error('Error initializing Cloud WebSocket:', error);
+                updateCloudWebSocketStatus('error', 'Initialization error');
+            }
+        }
+        
+        function updateCloudWebSocketStatus(status, message) {
+            // Update UI status indicator if element exists
+            const statusEl = document.getElementById('cloudWsStatus');
+            if (statusEl) {
+                const statusColors = {
+                    'connected': 'var(--accent-green)',
+                    'reconnecting': 'var(--accent-yellow)',
+                    'disconnected': 'var(--accent-red)',
+                    'error': 'var(--accent-red)'
+                };
+                statusEl.style.color = statusColors[status] || 'var(--text-secondary)';
+                statusEl.textContent = message;
+            }
         }
         
         // Cloud Simulation Functions
         async function updateServiceStatus() {
+            const grid = document.getElementById('serviceStatusGrid');
+            if (!grid) return;
+            
             try {
-                const response = await fetch('/api/cloud/services/status');
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                const response = await fetch('/api/cloud/services/status', {
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    if (response.status === 404 || response.status === 503) {
+                        grid.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem; text-align: center;">Cloud simulation service unavailable</p>';
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 
-                if (data.success) {
-                    const grid = document.getElementById('serviceStatusGrid');
-                    if (!grid) return;
-                    
+                if (data.success && data.services) {
                     grid.innerHTML = data.services.map(service => {
                         const statusColor = service.is_running ? 'var(--accent-green)' : 'var(--accent-red)';
                         const statusIcon = service.is_running ? '🟢' : '🔴';
@@ -2136,9 +2300,17 @@
                             </div>
                         `;
                     }).join('');
+                } else {
+                    grid.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem; text-align: center;">No service data available</p>';
                 }
             } catch (error) {
-                console.error('Error updating service status:', error);
+                if (error.name === 'AbortError') {
+                    grid.innerHTML = '<p style="color: var(--accent-yellow); padding: 1rem; text-align: center;">Request timeout - service may be unavailable</p>';
+                } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    grid.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem; text-align: center;">Unable to connect to cloud simulation service</p>';
+                } else {
+                    grid.innerHTML = `<p style="color: var(--accent-red); padding: 1rem; text-align: center;">Error loading services: ${error.message}</p>`;
+                }
             }
         }
         
@@ -2253,7 +2425,26 @@
         
         async function updateResourceCharts() {
             try {
-                const response = await fetch('/api/cloud/resources');
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                const response = await fetch('/api/cloud/resources', {
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    if (response.status === 404 || response.status === 503) {
+                        // Show unavailable message in charts
+                        updateChart('cpuChart', 'CPU Usage', 0, '% (Unavailable)');
+                        updateChart('memoryChart', 'Memory Usage', 0, '% (Unavailable)');
+                        updateChart('diskChart', 'Disk Usage', 0, '% (Unavailable)');
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 
                 if (data.success && data.resources) {
@@ -2263,9 +2454,22 @@
                     updateChart('memoryChart', 'Memory Usage', data.resources.memory?.memory_percent || 0, '%');
                     // Update Disk chart
                     updateChart('diskChart', 'Disk Usage', data.resources.disk?.disk_percent || 0, '%');
+                } else {
+                    // Show no data message
+                    updateChart('cpuChart', 'CPU Usage', 0, '% (No Data)');
+                    updateChart('memoryChart', 'Memory Usage', 0, '% (No Data)');
+                    updateChart('diskChart', 'Disk Usage', 0, '% (No Data)');
                 }
             } catch (error) {
-                console.error('Error updating resource charts:', error);
+                if (error.name === 'AbortError') {
+                    updateChart('cpuChart', 'CPU Usage', 0, '% (Timeout)');
+                    updateChart('memoryChart', 'Memory Usage', 0, '% (Timeout)');
+                    updateChart('diskChart', 'Disk Usage', 0, '% (Timeout)');
+                } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    updateChart('cpuChart', 'CPU Usage', 0, '% (Offline)');
+                    updateChart('memoryChart', 'Memory Usage', 0, '% (Offline)');
+                    updateChart('diskChart', 'Disk Usage', 0, '% (Offline)');
+                }
             }
         }
         
@@ -2294,11 +2498,25 @@
                 if (container) payload.container = container;
                 if (port) payload.port = port;
                 
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
                 const response = await fetch('/api/cloud/faults/inject', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(payload),
+                    signal: controller.signal
                 });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    if (response.status === 404 || response.status === 503) {
+                        showNotification('❌ Cloud simulation service unavailable', 'error');
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 
                 const data = await response.json();
                 if (data.success) {
@@ -2308,86 +2526,288 @@
                         updateFaultDetection([], {});
                     }, 2000);
                 } else {
-                    showNotification(`❌ Failed to inject fault: ${data.error}`, 'error');
+                    showNotification(`❌ Failed to inject fault: ${data.error || 'Unknown error'}`, 'error');
                 }
             } catch (error) {
-                console.error('Error injecting fault:', error);
-                showNotification('❌ Error injecting fault', 'error');
+                if (error.name === 'AbortError') {
+                    showNotification('❌ Request timeout - service may be unavailable', 'error');
+                } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    showNotification('❌ Unable to connect to cloud simulation service', 'error');
+                } else {
+                    showNotification(`❌ Error injecting fault: ${error.message}`, 'error');
+                }
             }
         }
         
         async function cleanupFaults() {
             try {
-                const response = await fetch('/api/cloud/faults/cleanup', {method: 'POST'});
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                const response = await fetch('/api/cloud/faults/cleanup', {
+                    method: 'POST',
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    if (response.status === 404 || response.status === 503) {
+                        showNotification('❌ Cloud simulation service unavailable', 'error');
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 
                 if (data.success) {
                     showNotification(`✅ ${data.message}`, 'success');
                 } else {
-                    showNotification(`❌ ${data.error}`, 'error');
+                    showNotification(`❌ ${data.error || 'Unknown error'}`, 'error');
                 }
             } catch (error) {
-                console.error('Error cleaning up faults:', error);
-                showNotification('❌ Error cleaning up faults', 'error');
+                if (error.name === 'AbortError') {
+                    showNotification('❌ Request timeout - service may be unavailable', 'error');
+                } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    showNotification('❌ Unable to connect to cloud simulation service', 'error');
+                } else {
+                    showNotification(`❌ Error cleaning up faults: ${error.message}`, 'error');
+                }
             }
         }
+        
+        // WebSocket connection state
+        let wsRetryCount = 0;
+        let wsRetryTimeout = null;
+        let wsConnecting = false;
+        const MAX_WS_RETRIES = 10;
+        const INITIAL_WS_RETRY_DELAY = 3000;
         
         function initializeWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            ws = new WebSocket(`${protocol}//${window.location.host}/ws/healing`);
+            // Check if WebSocket is supported
+            if (!window.WebSocket) {
+                console.warn('WebSocket not supported in this browser');
+                return;
+            }
             
-            ws.onmessage = function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    updateDashboard(data);
-                } catch (error) {
-                    console.error('Error parsing WebSocket message:', error);
-                    console.error('Raw message:', event.data);
-                }
-            };
+            // Prevent multiple simultaneous connection attempts
+            if (wsConnecting || (ws && ws.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
             
-            ws.onerror = function(error) {
-                console.error('WebSocket error:', error);
-            };
+            // Check if we've exceeded max retries
+            if (wsRetryCount >= MAX_WS_RETRIES) {
+                console.warn('Healing WebSocket: Max retry attempts reached. Stopping reconnection attempts.');
+                updateWebSocketStatus('disconnected', 'Max retries reached');
+                return;
+            }
             
-            ws.onclose = function() {
-                console.log('WebSocket closed, reconnecting...');
-                setTimeout(initializeWebSocket, 3000);
-            };
+            // Only connect if auto-healing tab is active
+            const autoHealingTab = document.getElementById('auto-healing');
+            if (autoHealingTab && !autoHealingTab.classList.contains('active')) {
+                return;
+            }
+            
+            wsConnecting = true;
+            wsRetryCount++;
+            
+            try {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                ws = new WebSocket(`${protocol}//${window.location.host}/ws/healing`);
+                
+                ws.onopen = function() {
+                    wsConnecting = false;
+                    wsRetryCount = 0; // Reset retry count on successful connection
+                    updateWebSocketStatus('connected', 'Connected');
+                };
+                
+                ws.onmessage = function(event) {
+                    try {
+                        const data = JSON.parse(event.data);
+                        updateDashboard(data);
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+                
+                ws.onerror = function(error) {
+                    wsConnecting = false;
+                    updateWebSocketStatus('error', 'Connection error');
+                };
+                
+                ws.onclose = function() {
+                    wsConnecting = false;
+                    ws = null;
+                    
+                    if (wsRetryCount < MAX_WS_RETRIES) {
+                        // Exponential backoff: 3s, 6s, 12s, 24s, 48s, max 60s
+                        const delay = Math.min(
+                            INITIAL_WS_RETRY_DELAY * Math.pow(2, wsRetryCount - 1),
+                            60000
+                        );
+                        
+                        updateWebSocketStatus('reconnecting', `Reconnecting in ${delay/1000}s...`);
+                        
+                        if (wsRetryTimeout) {
+                            clearTimeout(wsRetryTimeout);
+                        }
+                        wsRetryTimeout = setTimeout(initializeWebSocket, delay);
+                    } else {
+                        updateWebSocketStatus('disconnected', 'Connection failed');
+                    }
+                };
+            } catch (error) {
+                wsConnecting = false;
+                console.error('Error initializing WebSocket:', error);
+                updateWebSocketStatus('error', 'Initialization error');
+            }
         }
         
-        function switchTab(tabName) {
-            // Refresh auto-healing dashboard when tab is switched to
-            if (tabName === 'auto-healing') {
-                updateAutoHealingDashboard();
+        function updateWebSocketStatus(status, message) {
+            // Update UI status indicator if element exists
+            const statusEl = document.getElementById('wsStatus');
+            if (statusEl) {
+                const statusColors = {
+                    'connected': 'var(--accent-green)',
+                    'reconnecting': 'var(--accent-yellow)',
+                    'disconnected': 'var(--accent-red)',
+                    'error': 'var(--accent-red)'
+                };
+                statusEl.style.color = statusColors[status] || 'var(--text-secondary)';
+                statusEl.textContent = message;
             }
+        }
+        
+        // ============================================================================
+        // Lazy Loading Helper - Load tab data only when needed
+        // ============================================================================
+        async function loadTabData(tabName) {
+            // Skip if already loaded
+            if (loadedTabs.has(tabName)) {
+                return;
+            }
+            
+            console.log(`📦 Lazy loading data for tab: ${tabName}`);
+            loadedTabs.add(tabName);
+            
+            try {
+                switch(tabName) {
+                    case 'ddos':
+                        // Load DDoS and blocked IPs data in parallel
+                        await Promise.all([
+                            refreshDDoSData().catch(err => console.warn('DDoS data load failed:', err)),
+                            refreshBlockedIPsList().catch(err => console.warn('Blocked IPs load failed:', err)),
+                            updateStatistics().catch(err => console.warn('Statistics load failed:', err))
+                        ]);
+                        break;
+                        
+                    case 'alerts':
+                        // Load active alerts
+                        await loadAlertsTab().catch(err => console.warn('Alerts load failed:', err));
+                        break;
+                        
+                    case 'services':
+                        await loadServicesList().catch(err => console.warn('Services load failed:', err));
+                        break;
+                        
+                    case 'processes':
+                        await refreshProcesses().catch(err => console.warn('Processes load failed:', err));
+                        break;
+                        
+                    case 'disk':
+                        await Promise.all([
+                            updateStatistics().catch(err => console.warn('Statistics load failed:', err)),
+                            updateLastCleanup().catch(err => console.warn('Last cleanup load failed:', err))
+                        ]);
+                        break;
+                        
+                    case 'logs':
+                        // Load logs data in parallel
+                        await Promise.all([
+                            refreshSystemLogs().catch(err => console.warn('System logs load failed:', err)),
+                            loadAnomalies().catch(err => console.warn('Anomalies load failed:', err))
+                        ]);
+                        break;
+                        
+                    case 'predictive':
+                        // Load predictive maintenance data
+                        setTimeout(() => {
+                            if (document.getElementById('predictive_riskScore')) {
+                                refreshPredictiveMaintenance().catch(err => console.warn('Predictive maintenance load failed:', err));
+                            }
+                        }, 100);
+                        break;
+                        
+                    case 'auto-healing':
+                        // Load auto-healing data in parallel
+                        await Promise.all([
+                            updateAutoHealingDashboard().catch(err => console.warn('Auto-healing dashboard load failed:', err)),
+                            loadAutoHealingConfig().catch(err => console.warn('Auto-healing config load failed:', err)),
+                            updateServiceStatus().catch(err => console.warn('Service status load failed:', err)),
+                            updateResourceCharts().catch(err => console.warn('Resource charts load failed:', err))
+                        ]);
+                        
+                        // Initialize cloud WebSocket if needed
+                        if (cloudWsRetryCount < MAX_CLOUD_WS_RETRIES) {
+                            initializeCloudWebSocket();
+                        }
+                        
+                        // Load cloud simulation data in parallel
+                        await Promise.all([
+                            cachedFetch('/api/cloud/faults?limit=10', {}, 5000).then(data => {
+                                if (data && data.success) {
+                                    updateFaultDetection(data.faults || [], data.statistics || {});
+                                }
+                            }).catch(err => {
+                                const feed = document.getElementById('faultDetectionFeed');
+                                if (feed && err.message !== 'Request timeout') {
+                                    feed.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem; text-align: center;">Unable to load fault data</p>';
+                                }
+                            }),
+                            cachedFetch('/api/cloud/healing/history?limit=10', {}, 5000).then(data => {
+                                if (data && data.success) {
+                                    updateHealingActions(data.history || [], data.statistics || {});
+                                }
+                            }).catch(err => {
+                                const log = document.getElementById('healingActionLog');
+                                if (log && err.message !== 'Request timeout') {
+                                    log.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem; text-align: center;">Unable to load healing history</p>';
+                                }
+                            })
+                        ]);
+                        break;
+                        
+                    case 'overview':
+                        // Overview is already loaded, but refresh statistics if needed
+                        updateStatistics().catch(err => console.warn('Statistics load failed:', err));
+                        break;
+                }
+                
+                console.log(`✅ Tab data loaded: ${tabName}`);
+            } catch (error) {
+                console.error(`❌ Error loading tab data for ${tabName}:`, error);
+            }
+        }
+        
+        function switchTab(tabName, event) {
+            // Fix event handling - event may not be passed
+            const targetTab = event?.target || document.querySelector(`.tab[onclick*="${tabName}"]`);
+            
+            // Update tab UI first (immediate visual feedback)
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             
-            event.target.classList.add('active');
+            if (targetTab) {
+                targetTab.classList.add('active');
+            }
             const tabContent = document.getElementById(tabName);
             if (tabContent) {
                 tabContent.classList.add('active');
             }
             
-            // Refresh services when services tab is opened
-            if (tabName === 'services') {
-                loadServicesList();
-            }
-            
-            // Refresh predictive maintenance data when tab is opened
-            if (tabName === 'predictive') {
-                console.log('🔮 Predictive Maintenance tab opened - refreshing data...');
-                // Force immediate refresh when tab becomes visible
-                setTimeout(() => {
-                    if (document.getElementById('predictive_riskScore')) {
-                        console.log('✅ Predictive tab elements found, refreshing...');
-                        refreshPredictiveMaintenance();
-                    } else {
-                        console.error('❌ Predictive tab elements not found!');
-                    }
-                }, 200);
-            }
+            // Lazy load data for this tab (non-blocking)
+            loadTabData(tabName);
         }
         
         function updateDashboard(data) {
@@ -2584,6 +3004,13 @@
         
         // Initialize charts
         function initializeCharts() {
+            // Wait for Chart.js to be available (in case it's still loading)
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js not loaded yet, retrying in 100ms...');
+                setTimeout(initializeCharts, 100);
+                return;
+            }
+            
             // Destroy existing chart if it exists to prevent memory leaks
             if (metricsChart) {
                 metricsChart.destroy();
@@ -2852,17 +3279,30 @@
         // Fetch and update DDoS detection data
         async function refreshDDoSData() {
             try {
-                // Fetch ML metrics
-                const mlResponse = await fetch('/api/metrics/ml', {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                    },
-                });
-                if (!mlResponse.ok) {
-                    throw new Error(`ML metrics API returned ${mlResponse.status}: ${mlResponse.statusText}`);
-                }
-                const mlData = await mlResponse.json();
+                // Parallelize all API calls for faster loading
+                const [mlData, attackData, historyData] = await Promise.all([
+                    cachedFetch('/api/metrics/ml', {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' },
+                    }, 5000).catch(err => {
+                        console.warn('ML metrics fetch failed:', err);
+                        return null;
+                    }),
+                    cachedFetch('/api/metrics/attacks', {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' },
+                    }, 5000).catch(err => {
+                        console.warn('Attack metrics fetch failed:', err);
+                        return null;
+                    }),
+                    cachedFetch('/api/history/ml', {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' },
+                    }, 10000).catch(err => {
+                        console.warn('ML history fetch failed:', err);
+                        return null;
+                    })
+                ]);
                 
                 // Update ML metric cards
                 if (mlData) {
@@ -2881,24 +3321,17 @@
                     if (throughputEl && mlData.throughput !== undefined) throughputEl.textContent = mlData.throughput.toFixed(1) + '/s';
                 }
                 
-                // Fetch attack statistics
-                const attackResponse = await fetch('/api/metrics/attacks', {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                    },
-                });
-                if (!attackResponse.ok) {
-                    throw new Error(`Attack metrics API returned ${attackResponse.status}: ${attackResponse.statusText}`);
-                }
-                const attackData = await attackResponse.json();
-                
                 // Update attack metric cards
                 if (attackData) {
-                    document.getElementById('ddos_totalDetections').textContent = attackData.total_detections || 0;
-                    document.getElementById('ddos_attacks').textContent = attackData.ddos_attacks || 0;
-                    document.getElementById('ddos_falsePositives').textContent = attackData.false_positives || 0;
-                    document.getElementById('ddos_detectionRate').textContent = (attackData.detection_rate || 0).toFixed(1) + '%';
+                    const totalDetectionsEl = document.getElementById('ddos_totalDetections');
+                    const attacksEl = document.getElementById('ddos_attacks');
+                    const falsePositivesEl = document.getElementById('ddos_falsePositives');
+                    const detectionRateEl = document.getElementById('ddos_detectionRate');
+                    
+                    if (totalDetectionsEl) totalDetectionsEl.textContent = attackData.total_detections || 0;
+                    if (attacksEl) attacksEl.textContent = attackData.ddos_attacks || 0;
+                    if (falsePositivesEl) falsePositivesEl.textContent = attackData.false_positives || 0;
+                    if (detectionRateEl) detectionRateEl.textContent = (attackData.detection_rate || 0).toFixed(1) + '%';
                     
                     // Update attack types chart
                     if (attackTypesChart && attackData.attack_types) {
@@ -2912,18 +3345,6 @@
                         updateSourceIpsTable(attackData.top_source_ips);
                     }
                 }
-                
-                // Fetch ML history
-                const historyResponse = await fetch('/api/history/ml', {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                    },
-                });
-                if (!historyResponse.ok) {
-                    throw new Error(`ML history API returned ${historyResponse.status}: ${historyResponse.statusText}`);
-                }
-                const historyData = await historyResponse.json();
                 
                 // Update ML performance chart
                 if (mlPerformanceChart && historyData) {
@@ -2941,7 +3362,7 @@
                 if (error.name === 'TypeError' && error.message.includes('fetch')) {
                     console.error('Error refreshing DDoS data: Network error - Server may be unreachable or CORS issue', error);
                 } else {
-                console.error('Error refreshing DDoS data:', error);
+                    console.error('Error refreshing DDoS data:', error);
                 }
                 // Don't break the UI - errors are logged but don't stop updates
             }
@@ -2999,40 +3420,70 @@
                 demoMetricsCheckInterval = null;
             }
             
-            // Start polling immediately and then every 1 second when demo mode is on
+            let pollAttempts = 0;
+            const MAX_POLL_ATTEMPTS = 20; // Stop after 20 attempts if no data
+            
+            // Start polling immediately and then every 5 seconds when demo mode is on
             const pollDemoMetrics = async () => {
-                if (!demoMode) return;
+                // Check if demo mode is still enabled
+                if (!demoMode) {
+                    stopDemoMetricsPolling();
+                    return;
+                }
+                
+                // Check if predictive tab is active
+                const predictiveTab = document.getElementById('predictive');
+                if (!predictiveTab || !predictiveTab.classList.contains('active')) {
+                    return; // Don't poll if tab is not active
+                }
+                
+                // Stop polling after max attempts if no data received
+                if (pollAttempts >= MAX_POLL_ATTEMPTS) {
+                    stopDemoMetricsPolling();
+                    return;
+                }
+                
+                pollAttempts++;
+                
                 try {
-                    console.log('🔍 Polling for demo metrics...');
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3000);
+                    
                     const response = await fetch('/api/get-last-demo-metrics', { 
                         cache: 'no-cache',
-                        headers: { 'Cache-Control': 'no-cache' }
+                        headers: { 'Cache-Control': 'no-cache' },
+                        signal: controller.signal
                     });
+                    
+                    clearTimeout(timeoutId);
+                    
                     if (response.ok) {
                         const data = await response.json();
                         if (data.metrics && Object.keys(data.metrics).length > 0) {
-                            console.log('✅ Demo metrics received:', data.metrics);
                             lastDemoMetrics = data.metrics;
+                            pollAttempts = 0; // Reset counter on success
                             // Only refresh if demo mode is already enabled by user
                             if (demoMode) {
                                 refreshPredictiveMaintenance();
-                            } else {
-                                console.log('ℹ️ Demo metrics available, but demo mode is disabled. Enable demo mode to use them.');
                             }
-                        } else {
-                            console.log('⚠️ No demo metrics available yet');
                         }
                     }
                 } catch (e) {
-                    console.error('❌ Error polling demo metrics:', e);
+                    // Silently handle errors - don't spam console
+                    if (e.name !== 'AbortError') {
+                        // Only log non-timeout errors occasionally
+                        if (pollAttempts % 10 === 0) {
+                            console.warn('Demo metrics polling error (attempt ' + pollAttempts + '):', e.message);
+                        }
+                    }
                 }
             };
             
             // Poll immediately
             pollDemoMetrics();
             
-            // Then poll every 1 second
-            demoMetricsCheckInterval = setInterval(pollDemoMetrics, 1000);
+            // Then poll every 5 seconds (reduced from 1 second)
+            demoMetricsCheckInterval = setInterval(pollDemoMetrics, 5000);
         }
         
         function stopDemoMetricsPolling() {
@@ -4046,11 +4497,7 @@
         // Load and display services in the services tab (only non-running services)
         async function loadServicesList() {
             try {
-                const response = await fetch('/api/services');
-                if (!response.ok) {
-                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
-                }
-                const data = await response.json();
+                const data = await cachedFetch('/api/services', {}, 10000);
                 
                 const serviceList = document.getElementById('serviceList');
                 if (!serviceList) return;
@@ -4304,11 +4751,7 @@
         
         async function refreshProcesses() {
             try {
-                const response = await fetch('/api/processes/top');
-                if (!response.ok) {
-                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
-                }
-                const processes = await response.json();
+                const processes = await cachedFetch('/api/processes/top', {}, 5000);
                 displayProcesses(processes);
             } catch (error) {
                 console.error('Error refreshing processes:', error);
@@ -5327,6 +5770,144 @@
             `;
         }
 
+        // ============================================================================
+        // Load Alerts Tab
+        // ============================================================================
+        async function loadAlertsTab() {
+            const tbody = document.getElementById('alertsTable');
+            if (!tbody) return;
+            
+            // Show loading state
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="4" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+                        Loading alerts...
+                    </td>
+                </tr>
+            `;
+            
+            try {
+                // Fetch alerts
+                let data = await cachedFetch('/api/critical-services/issues?include_test=true', {}, 5000).catch(() => null);
+                
+                // If no data or no issues, try without test
+                if (!data || (data.status === 'success' && data.issues && data.issues.length === 0)) {
+                    data = await cachedFetch('/api/critical-services/issues', {}, 5000).catch(() => null);
+                }
+                
+                if (!data) {
+                    throw new Error('Failed to fetch alerts');
+                }
+                
+                if (data.status === 'success' && data.issues !== undefined) {
+                    // Filter to show only CRITICAL severity issues
+                    const criticalIssues = data.issues.filter(issue => {
+                        const severity = (issue.severity || issue.level || '').toUpperCase();
+                        const level = (issue.level || '').toUpperCase();
+                        const priority = issue.priority !== undefined ? issue.priority : 6;
+                        const category = (issue.category || '').toUpperCase();
+                        
+                        return severity === 'CRITICAL' || 
+                               severity === 'CRIT' ||
+                               level === 'CRITICAL' ||
+                               level === 'CRIT' ||
+                               priority <= 2 ||
+                               category === 'CRITICAL';
+                    });
+                    
+                    // Update alert count in overview card
+                    const alertCountElement = document.getElementById('alertCount');
+                    if (alertCountElement) {
+                        alertCountElement.textContent = criticalIssues.length;
+                    }
+                    
+                    // Display alerts
+                    if (criticalIssues.length === 0) {
+                        tbody.innerHTML = `
+                            <tr>
+                                <td colspan="4" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                                    <i class="fas fa-check-circle" style="font-size: 2rem; color: var(--accent-green); margin-bottom: 0.5rem; display: block;"></i>
+                                    No Active Alerts ✅
+                                    <div style="font-size: 0.85rem; margin-top: 0.5rem;">All systems operating normally</div>
+                                </td>
+                            </tr>
+                        `;
+                    } else {
+                        // Sort by timestamp (newest first)
+                        const sortedIssues = [...criticalIssues].sort((a, b) => {
+                            const timeA = new Date(a.timestamp || 0);
+                            const timeB = new Date(b.timestamp || 0);
+                            return timeB - timeA;
+                        });
+                        
+                        let html = '';
+                        sortedIssues.forEach(issue => {
+                            const severity = issue.severity || issue.level || 'UNKNOWN';
+                            const severityColor = severity === 'CRITICAL' ? 'var(--accent-red)' : severity === 'ERROR' ? 'var(--accent-red)' : 'var(--accent-yellow)';
+                            const timeStr = new Date(issue.timestamp).toLocaleString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit'
+                            });
+                            
+                            html += `
+                                <tr style="transition: background 0.2s; border-bottom: 1px solid var(--border-color);" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
+                                    <td style="padding: 1rem; white-space: nowrap; vertical-align: middle;">
+                                        ${timeStr}
+                                    </td>
+                                    <td style="padding: 1rem; white-space: nowrap; vertical-align: middle;">
+                                        <span style="font-weight: 500;">${escapeHtml(issue.service || 'Unknown')}</span>
+                                    </td>
+                                    <td style="padding: 1rem; white-space: nowrap; vertical-align: middle;">
+                                        <span style="padding: 0.35rem 0.75rem; background: ${severityColor}; color: white; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600; display: inline-block;">
+                                            ${severity}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 1rem; max-width: 500px; word-wrap: break-word; line-height: 1.5; vertical-align: middle;">
+                                        ${escapeHtml(issue.message || '')}
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                        
+                        tbody.innerHTML = html;
+                    }
+                } else if (data.status === 'success' && (!data.issues || data.issues.length === 0)) {
+                    // No issues found
+                    const alertCountElement = document.getElementById('alertCount');
+                    if (alertCountElement) {
+                        alertCountElement.textContent = '0';
+                    }
+                    
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="4" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                                <i class="fas fa-check-circle" style="font-size: 2rem; color: var(--accent-green); margin-bottom: 0.5rem; display: block;"></i>
+                                No Active Alerts ✅
+                                <div style="font-size: 0.85rem; margin-top: 0.5rem;">All systems operating normally</div>
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    throw new Error(data.message || 'Unknown error');
+                }
+            } catch (error) {
+                console.error('Error loading alerts:', error);
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 2rem; color: var(--accent-red);">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 0.5rem; display: block;"></i>
+                            <div>Error loading alerts</div>
+                            <div style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-secondary);">${error.message || 'Unknown error'}</div>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+        
         async function loadAnomalies() {
             try {
                 // First try with include_test=true to get a test issue if none exist
@@ -5610,23 +6191,13 @@
         }
         
         // Update statistics with animation
-        async function updateStatistics() {
-            try {
-                const statsResponse = await fetch('/api/blocked-ips/statistics', {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                    },
-                });
-                if (!statsResponse.ok) {
-                    throw new Error(`Statistics API returned ${statsResponse.status}: ${statsResponse.statusText}`);
-                }
-                const statsData = await statsResponse.json();
+        // Helper function to update statistics from cached data
+        function updateStatisticsFromCache(statsData) {
+            if (statsData && statsData.success) {
+                const stats = statsData.statistics;
+                const statsDiv = document.getElementById('blockedIpsStats');
                 
-                if (statsData.success) {
-                    const stats = statsData.statistics;
-                    const statsDiv = document.getElementById('blockedIpsStats');
-                    
+                if (statsDiv) {
                     // Show stats panel if there are blocked IPs
                     if (stats.total_blocked > 0) {
                         statsDiv.style.display = 'block';
@@ -5640,6 +6211,19 @@
                     updateStatValue('statsCritical', stats.by_threat_level?.Critical || 0);
                     updateStatValue('statsHigh', stats.by_threat_level?.High || 0);
                 }
+            }
+        }
+        
+        async function updateStatistics() {
+            try {
+                const statsData = await cachedFetch('/api/blocked-ips/statistics', {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                }, 10000);
+                
+                updateStatisticsFromCache(statsData);
             } catch (error) {
                 // More detailed error logging
                 if (error.name === 'TypeError' && error.message.includes('fetch')) {
@@ -5657,11 +6241,10 @@
         // Update last cleanup display
         async function updateLastCleanup() {
             try {
-                const response = await fetch('/api/disk/status');
-                if (!response.ok) {
+                const data = await cachedFetch('/api/disk/status', {}, 30000).catch(() => null);
+                if (!data) {
                     return;
                 }
-                const data = await response.json();
                 
                 const lastCleanupElement = document.getElementById('lastCleanup');
                 if (!lastCleanupElement) return;
@@ -5731,8 +6314,7 @@
         // Refresh blocked IPs list table
         async function refreshBlockedIPsList() {
             try {
-                const response = await fetch('/api/blocked-ips');
-                const data = await response.json();
+                const data = await cachedFetch('/api/blocked-ips', {}, 10000);
                 
                 const tbody = document.getElementById('blockedIpsTable');
                 const statsDiv = document.getElementById('blockedIpsStats');
@@ -6172,8 +6754,33 @@
         
         async function updateAutoHealingDashboard() {
             try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
                 // Fetch healing history and statistics
-                const response = await fetch('/api/cloud/healing/history?limit=50');
+                const response = await fetch('/api/cloud/healing/history?limit=50', {
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    if (response.status === 404 || response.status === 503) {
+                        // Show unavailable message in UI elements
+                        const statusEl = document.getElementById('autoHealingStatus');
+                        if (statusEl) {
+                            statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Service Unavailable';
+                            statusEl.style.color = 'var(--accent-yellow)';
+                        }
+                        const recentActions = document.getElementById('recentHealingActions');
+                        if (recentActions) {
+                            recentActions.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Cloud simulation service unavailable</div>';
+                        }
+                        return;
+                    }
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const data = await response.json();
                 
                 if (data.success) {
@@ -6183,9 +6790,33 @@
                     updateHealingHistoryTimeline(data.history);
                     updateActiveFaults();
                     updateHealingPerformanceChart(data.history);
+                } else {
+                    // Show no data message
+                    const recentActions = document.getElementById('recentHealingActions');
+                    if (recentActions) {
+                        recentActions.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No healing data available</div>';
+                    }
                 }
             } catch (error) {
-                console.error('Error updating auto-healing dashboard:', error);
+                if (error.name === 'AbortError') {
+                    const statusEl = document.getElementById('autoHealingStatus');
+                    if (statusEl) {
+                        statusEl.innerHTML = '<i class="fas fa-clock"></i> Timeout';
+                        statusEl.style.color = 'var(--accent-yellow)';
+                    }
+                } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    const statusEl = document.getElementById('autoHealingStatus');
+                    if (statusEl) {
+                        statusEl.innerHTML = '<i class="fas fa-unlink"></i> Offline';
+                        statusEl.style.color = 'var(--accent-red)';
+                    }
+                } else {
+                    const statusEl = document.getElementById('autoHealingStatus');
+                    if (statusEl) {
+                        statusEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> Error';
+                        statusEl.style.color = 'var(--accent-red)';
+                    }
+                }
             }
         }
         
@@ -6480,11 +7111,26 @@
         }
         
         function updateActiveFaults() {
-            fetch('/api/cloud/faults?limit=10')
-                .then(res => res.json())
+            const container = document.getElementById('activeFaultsList');
+            if (!container) return;
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+            
+            fetch('/api/cloud/faults?limit=10', { signal: controller.signal })
+                .then(res => {
+                    clearTimeout(timeoutId);
+                    if (!res.ok) {
+                        if (res.status === 404 || res.status === 503) {
+                            container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Cloud simulation service unavailable</div>';
+                            return null;
+                        }
+                        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                    }
+                    return res.json();
+                })
                 .then(data => {
-                    const container = document.getElementById('activeFaultsList');
-                    if (!container) return;
+                    if (!data) return;
                     
                     if (!data.success || !data.faults || data.faults.length === 0) {
                         container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No active faults detected</div>';
@@ -6502,7 +7148,7 @@
                                             ${fault.service || fault.resource || 'Unknown'}
                                         </div>
                                         <div style="margin-top: 0.25rem; color: var(--text-secondary); font-size: 0.85rem;">
-                                            ${fault.reason}
+                                            ${fault.reason || 'No reason provided'}
                                         </div>
                                     </div>
                                     <span style="color: var(--text-secondary); font-size: 0.75rem;">
@@ -6513,7 +7159,16 @@
                         `;
                     }).join('');
                 })
-                .catch(err => console.error('Error fetching active faults:', err));
+                .catch(err => {
+                    clearTimeout(timeoutId);
+                    if (err.name === 'AbortError') {
+                        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--accent-yellow);">Request timeout - service may be unavailable</div>';
+                    } else if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Unable to connect to cloud simulation service</div>';
+                    } else {
+                        container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--accent-red);">Error loading faults: ${err.message}</div>`;
+                    }
+                });
         }
         
         function updateHealingPerformanceChart(history) {
@@ -6591,53 +7246,170 @@
             updateAutoHealingDashboard();
         }
         
-        // Initialize on load
-        window.addEventListener('load', function() {
-            console.log('Dashboard loading...');
+        // ============================================================================
+        // Setup Periodic Updates (only for active tabs)
+        // ============================================================================
+        function setupPeriodicUpdates() {
+            // Refresh DDoS data every 5 seconds (only when ddos tab is active)
+            setInterval(() => {
+                const ddosTab = document.getElementById('ddos');
+                if (ddosTab && ddosTab.classList.contains('active')) {
+                    refreshDDoSData();
+                }
+            }, 5000);
             
-            // Initialize Recent Activity display first
-            updateRecentActivity();
+            // Refresh blocked IPs list every 10 seconds (only when relevant tab is active)
+            setInterval(() => {
+                const blockedIpsTab = document.getElementById('ddos');
+                if (blockedIpsTab && blockedIpsTab.classList.contains('active')) {
+                    refreshBlockedIPsList();
+                }
+            }, 10000);
             
-            initializeWebSocket();
-            initializeCloudWebSocket(); // Initialize cloud simulation WebSocket
-            initializeCharts();
-            refreshProcesses();
-            refreshDDoSData();
-            refreshBlockedIPsList();
-            updateStatistics(); // Initial statistics load
-            updateLastCleanup(); // Initial last cleanup load
-            refreshSystemLogs(); // Initial system logs load
-            loadServicesList(); // Initial services load
+            // Update statistics every 3 seconds (only when overview/ddos tab is active)
+            setInterval(() => {
+                const overviewTab = document.getElementById('overview');
+                const ddosTab = document.getElementById('ddos');
+                if ((overviewTab && overviewTab.classList.contains('active')) || 
+                    (ddosTab && ddosTab.classList.contains('active'))) {
+                    updateStatistics();
+                }
+            }, 3000);
             
-            // Initialize cloud simulation visualizations
-            updateServiceStatus();
-            updateResourceCharts();
-            
-            // Initialize autonomous self-healing dashboard
-            updateAutoHealingDashboard();
-            loadAutoHealingConfig(); // Load configuration on page load
-            setupAutoHealingConfigListeners(); // Setup event listeners
-            setupAutoRestartToggle(); // Setup auto-restart toggle
-            setInterval(updateAutoHealingDashboard, 10000); // Update every 10 seconds
-            setInterval(loadAutoHealingConfig, 30000); // Refresh configuration every 30 seconds
-            
-            // Refresh cloud simulation data periodically
-            setInterval(updateServiceStatus, 5000);
-            setInterval(updateResourceCharts, 5000);
+            // Update services and alerts counts every 10 seconds (only when overview tab is active)
             setInterval(async () => {
+                const overviewTab = document.getElementById('overview');
+                if (overviewTab && overviewTab.classList.contains('active')) {
+                    try {
+                        // Update services count
+                        const servicesData = await cachedFetch('/api/services', {}, 10000).catch(() => null);
+                        if (servicesData && servicesData.services) {
+                            const allServices = servicesData.services || [];
+                            const runningServices = allServices.filter(s => s.status === 'running' || s.active === true);
+                            const serviceCountElement = document.getElementById('serviceCount');
+                            if (serviceCountElement) {
+                                serviceCountElement.textContent = `${runningServices.length} / ${allServices.length}`;
+                            }
+                        }
+                        
+                        // Update alerts count
+                        const alertsData = await cachedFetch('/api/critical-services/issues', {}, 10000).catch(() => null);
+                        if (alertsData && alertsData.status === 'success' && alertsData.issues !== undefined) {
+                            const criticalIssues = alertsData.issues.filter(issue => {
+                                const severity = (issue.severity || issue.level || '').toUpperCase();
+                                const level = (issue.level || '').toUpperCase();
+                                const priority = issue.priority !== undefined ? issue.priority : 6;
+                                const category = (issue.category || '').toUpperCase();
+                                
+                                return severity === 'CRITICAL' || 
+                                       severity === 'CRIT' ||
+                                       level === 'CRITICAL' ||
+                                       level === 'CRIT' ||
+                                       priority <= 2 ||
+                                       category === 'CRITICAL';
+                            });
+                            
+                            const alertCountElement = document.getElementById('alertCount');
+                            if (alertCountElement) {
+                                alertCountElement.textContent = criticalIssues.length;
+                            }
+                        } else if (alertsData && alertsData.status === 'success' && (!alertsData.issues || alertsData.issues.length === 0)) {
+                            const alertCountElement = document.getElementById('alertCount');
+                            if (alertCountElement) {
+                                alertCountElement.textContent = '0';
+                            }
+                        }
+                    } catch (err) {
+                        console.debug('Error updating overview counts:', err);
+                    }
+                }
+            }, 10000);
+            
+            // Refresh services list periodically (only when services tab is active)
+            setInterval(() => {
+                const servicesTab = document.getElementById('services');
+                if (servicesTab && servicesTab.classList.contains('active')) {
+                    loadServicesList();
+                }
+            }, 5000);
+            
+            // Refresh anomalies every 30 seconds (only when logs tab is active)
+            setInterval(() => {
+                const logsTab = document.getElementById('logs');
+                if (logsTab && logsTab.classList.contains('active')) {
+                    loadAnomalies();
+                }
+            }, 30000);
+            
+            // Refresh alerts every 10 seconds (only when alerts tab is active)
+            setInterval(() => {
+                const alertsTab = document.getElementById('alerts');
+                if (alertsTab && alertsTab.classList.contains('active')) {
+                    loadAlertsTab();
+                }
+            }, 10000);
+            
+            // Refresh predictive maintenance data every 30 seconds (only when tab is active)
+            setInterval(() => {
+                const predictiveTab = document.getElementById('predictive');
+                if (predictiveTab && predictiveTab.classList.contains('active')) {
+                    refreshPredictiveMaintenance();
+                }
+            }, 30000);
+            
+            // Refresh cloud simulation data periodically (only when tab is active)
+            setInterval(() => {
+                const autoHealingTab = document.getElementById('auto-healing');
+                if (autoHealingTab && autoHealingTab.classList.contains('active')) {
+                    updateServiceStatus();
+                    updateResourceCharts();
+                }
+            }, 5000);
+            
+            // Update auto-healing dashboard every 10 seconds (only when tab is active)
+            setInterval(() => {
+                const autoHealingTab = document.getElementById('auto-healing');
+                if (autoHealingTab && autoHealingTab.classList.contains('active')) {
+                    updateAutoHealingDashboard();
+                }
+            }, 10000);
+            
+            // Load auto-healing config every 30 seconds (only when tab is active)
+            setInterval(() => {
+                const autoHealingTab = document.getElementById('auto-healing');
+                if (autoHealingTab && autoHealingTab.classList.contains('active')) {
+                    loadAutoHealingConfig();
+                }
+            }, 30000);
+            
+            // Cloud simulation fault detection (only when tab is active)
+            setInterval(async () => {
+                const autoHealingTab = document.getElementById('auto-healing');
+                if (!autoHealingTab || !autoHealingTab.classList.contains('active')) {
+                    return;
+                }
                 try {
-                    const response = await fetch('/api/cloud/faults?limit=10');
-                    const data = await response.json();
-                    if (data.success) {
+                    const data = await cachedFetch('/api/cloud/faults?limit=10', {}, 5000);
+                    if (data && data.success) {
                         updateFaultDetection(data.faults, data.statistics);
                     }
-                } catch (e) { console.error('Error fetching faults:', e); }
+                } catch (e) {
+                    // Silently handle errors
+                    if (e.name !== 'AbortError' && !e.message.includes('Failed to fetch')) {
+                        console.debug('Cloud faults fetch error:', e);
+                    }
+                }
             }, 5000);
+            
+            // Cloud simulation healing history (only when tab is active)
             setInterval(async () => {
+                const autoHealingTab = document.getElementById('auto-healing');
+                if (!autoHealingTab || !autoHealingTab.classList.contains('active')) {
+                    return;
+                }
                 try {
-                    const response = await fetch('/api/cloud/healing/history?limit=10');
-                    const data = await response.json();
-                    if (data.success) {
+                    const data = await cachedFetch('/api/cloud/healing/history?limit=10', {}, 5000);
+                    if (data && data.success) {
                         updateHealingActions(data.history, data.statistics);
                         
                         // Update manual instructions if latest healing failed
@@ -6648,8 +7420,149 @@
                             }
                         }
                     }
-                } catch (e) { console.error('Error fetching healing history:', e); }
+                } catch (e) {
+                    // Silently handle errors
+                    if (e.name !== 'AbortError' && !e.message.includes('Failed to fetch')) {
+                        console.debug('Cloud healing history fetch error:', e);
+                    }
+                }
             }, 5000);
+        }
+        
+        // ============================================================================
+        // Optimized Initialization - Prioritize Critical Data
+        // ============================================================================
+        window.addEventListener('load', function() {
+            console.log('Dashboard loading...');
+            
+            // PHASE 1: Critical Path - Load only essential data for initial render
+            // These are needed for the overview tab to be functional immediately
+            
+            // 1. Initialize Recent Activity display (no API call, just UI)
+            updateRecentActivity();
+            
+            // 2. Load critical data in parallel (summary cards, basic info)
+            Promise.all([
+                loadConfig().catch(err => console.warn('Config load failed:', err)),
+                // Load system metrics for overview cards (CPU, Memory, Disk)
+                cachedFetch('/api/metrics', {}, 5000).catch(err => {
+                    console.warn('System metrics load failed:', err);
+                    return null;
+                }),
+                // Load services count for overview card
+                cachedFetch('/api/services', {}, 10000).catch(err => {
+                    console.warn('Services load failed:', err);
+                    return null;
+                }),
+                // Load active alerts count for overview card
+                cachedFetch('/api/critical-services/issues', {}, 10000).catch(err => {
+                    console.warn('Alerts load failed:', err);
+                    return null;
+                }),
+                // Load only essential overview data
+                cachedFetch('/api/blocked-ips/statistics', {}, 10000).catch(err => {
+                    console.warn('Statistics load failed:', err);
+                    return null;
+                })
+            ]).then(([configResult, metricsResult, servicesResult, alertsResult, statsResult]) => {
+                // Update overview cards with system metrics
+                if (metricsResult && (metricsResult.cpu !== undefined || metricsResult.memory !== undefined || metricsResult.disk !== undefined)) {
+                    updateDashboard({
+                        cpu: metricsResult.cpu,
+                        memory: metricsResult.memory,
+                        disk: metricsResult.disk
+                    });
+                }
+                
+                // Update services count
+                if (servicesResult && servicesResult.services) {
+                    const allServices = servicesResult.services || [];
+                    const runningServices = allServices.filter(s => s.status === 'running' || s.active === true);
+                    const serviceCountElement = document.getElementById('serviceCount');
+                    if (serviceCountElement) {
+                        serviceCountElement.textContent = `${runningServices.length} / ${allServices.length}`;
+                    }
+                }
+                
+                // Update alerts count
+                if (alertsResult && alertsResult.status === 'success' && alertsResult.issues !== undefined) {
+                    const criticalIssues = alertsResult.issues.filter(issue => {
+                        const severity = (issue.severity || issue.level || '').toUpperCase();
+                        const level = (issue.level || '').toUpperCase();
+                        const priority = issue.priority !== undefined ? issue.priority : 6;
+                        const category = (issue.category || '').toUpperCase();
+                        
+                        return severity === 'CRITICAL' || 
+                               severity === 'CRIT' ||
+                               level === 'CRITICAL' ||
+                               level === 'CRIT' ||
+                               priority <= 2 ||
+                               category === 'CRITICAL';
+                    });
+                    
+                    const alertCountElement = document.getElementById('alertCount');
+                    if (alertCountElement) {
+                        alertCountElement.textContent = criticalIssues.length;
+                    }
+                } else if (alertsResult && alertsResult.status === 'success' && (!alertsResult.issues || alertsResult.issues.length === 0)) {
+                    const alertCountElement = document.getElementById('alertCount');
+                    if (alertCountElement) {
+                        alertCountElement.textContent = '0';
+                    }
+                }
+                
+                // Update statistics if available
+                if (statsResult) {
+                    updateStatisticsFromCache(statsResult);
+                }
+                console.log('✅ Critical data loaded');
+            });
+            
+            // 3. Initialize WebSocket for real-time updates (deferred slightly to not block render)
+            // Note: WebSocket is only for auto-healing tab, overview uses API polling
+            setTimeout(() => {
+                // Only initialize if auto-healing tab might be needed
+                // For overview tab, we'll use periodic API calls instead
+                const autoHealingTab = document.getElementById('auto-healing');
+                if (autoHealingTab && autoHealingTab.classList.contains('active')) {
+                    initializeWebSocket();
+                }
+            }, 100);
+            
+            // 3b. Set up periodic updates for overview tab metrics (every 3 seconds)
+            setInterval(async () => {
+                const overviewTab = document.getElementById('overview');
+                if (overviewTab && overviewTab.classList.contains('active')) {
+                    try {
+                        const metrics = await cachedFetch('/api/metrics', {}, 5000);
+                        if (metrics && (metrics.cpu !== undefined || metrics.memory !== undefined || metrics.disk !== undefined)) {
+                            updateDashboard({
+                                cpu: metrics.cpu,
+                                memory: metrics.memory,
+                                disk: metrics.disk
+                            });
+                        }
+                    } catch (err) {
+                        // Silently fail - metrics will update on next cycle
+                        console.debug('Metrics update failed:', err);
+                    }
+                }
+            }, 3000);
+            
+            // 4. Initialize charts (deferred until after initial render)
+            setTimeout(() => {
+                initializeCharts();
+            }, 200);
+            
+            // PHASE 2: Deferred Loads - Only load when tabs are activated
+            // All other data loading is now handled by lazy loading in switchTab()
+            
+            // Setup event listeners (lightweight, no API calls)
+            setupAutoHealingConfigListeners();
+            setupAutoRestartToggle();
+            
+            // Setup periodic updates (only for active tabs)
+            setupPeriodicUpdates();
         
         function updateManualInstructions(instructions) {
             const panel = document.getElementById('manualInstructionsPanel');
@@ -6681,75 +7594,14 @@
             });
         }
             
-            // Refresh DDoS data every 5 seconds
-            setInterval(refreshDDoSData, 5000);
-            
-            // Refresh blocked IPs list every 10 seconds
-            setInterval(refreshBlockedIPsList, 10000);
-            
-            // Update statistics every 3 seconds for real-time feel
-            setInterval(updateStatistics, 3000);
-            
-            // Refresh services list periodically (only when services tab is active)
-            setInterval(() => {
-                const servicesTab = document.getElementById('services');
-                if (servicesTab && servicesTab.classList.contains('active')) {
-                    loadServicesList();
-                }
-            }, 5000); // Refresh every 5 seconds when tab is active
-            
-            // Note: Auto-refresh is now controlled by the toggle button in the UI
-            
-            // Refresh anomalies every 30 seconds
-            setInterval(loadAnomalies, 30000);
-            
-            // Refresh predictive maintenance data every 30 seconds
-            setInterval(() => {
-                // Only refresh if predictive tab is active
-                const predictiveTab = document.getElementById('predictive');
-                if (predictiveTab && predictiveTab.classList.contains('active')) {
-                    console.log('⏰ Auto-refreshing predictive maintenance data...');
-                    refreshPredictiveMaintenance();
-                }
-            }, 30000);
-            
-            // Initial load - wait for DOM to be ready
-            setTimeout(() => {
-                console.log('🚀 Initial load of predictive maintenance data...');
-                // Check if predictive tab is already active
-                const predictiveTab = document.getElementById('predictive');
-                if (predictiveTab && predictiveTab.classList.contains('active')) {
-                    refreshPredictiveMaintenance();
-                }
-                // Start demo metrics polling if demo mode is on
-                startDemoMetricsPolling();
-            }, 2000);
-            
-            // Also refresh when predictive tab becomes visible (using IntersectionObserver)
-            const predictiveTabContent = document.getElementById('predictive');
-            if (predictiveTabContent) {
-                const observer = new IntersectionObserver((entries) => {
-                    entries.forEach(entry => {
-                        if (entry.isIntersecting) {
-                            console.log('👁️ Predictive tab is now visible, refreshing...');
-                            setTimeout(() => refreshPredictiveMaintenance(), 100);
-                        }
-                    });
-                }, { threshold: 0.1 });
-                observer.observe(predictiveTabContent);
-            }
-            
-            // Load anomalies on initial load
-            loadAnomalies();
-            
-            // Add initial activity logs
+            // Add initial activity logs (deferred to not block render)
             setTimeout(() => {
                 addActivity('system', 'Healing Bot Dashboard started', 'success');
                 addActivity('info', 'WebSocket connection established', 'info');
                 addActivity('info', 'All systems initialized', 'success');
             }, 500);
             
-            console.log('Dashboard loaded successfully');
+            console.log('✅ Dashboard critical path loaded successfully');
         });
     </script>
 </body>

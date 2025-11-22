@@ -2665,11 +2665,32 @@ async def quick_analyze_recent_errors():
 
 @app.post("/api/cli/execute")
 async def execute_cli_endpoint(data: dict):
-    """Execute CLI command"""
-    command = data.get("command", "")
+    """Execute CLI command with enhanced command set"""
+    command = data.get("command", "").strip()
     
     if not command:
         return {"error": "No command provided"}
+    
+    # Handle command aliases
+    aliases = {
+        "h": "help",
+        "ll": "ls -la",
+        "l": "ls",
+        "c": "clear",
+        "q": "exit",
+        "s": "status",
+        "svc": "services",
+        "ps": "processes",
+        "d": "disk",
+        "u": "uptime",
+        "w": "whoami"
+    }
+    
+    # Expand aliases
+    cmd_parts = command.split()
+    if cmd_parts and cmd_parts[0] in aliases:
+        command = aliases[cmd_parts[0]] + " " + " ".join(cmd_parts[1:])
+        cmd_parts = command.split()
     
     # Add to history
     command_history.append({
@@ -2678,54 +2699,586 @@ async def execute_cli_endpoint(data: dict):
     })
     
     # Security: whitelist allowed commands
-    allowed_commands = ["help", "status", "services", "processes", "disk", "logs", "restart"]
-    cmd_parts = command.split()
+    allowed_commands = [
+        "help", "status", "services", "processes", "disk", "logs", "restart",
+        "start", "stop", "uptime", "whoami", "hostname", "uname", "df", "free",
+        "ls", "cat", "tail", "head", "grep", "find", "ps", "kill", "pkill",
+        "netstat", "ifconfig", "ss", "ping", "stats", "health", "log", "logtail",
+        "logsearch", "blocked", "block", "unblock", "clear", "history", "exit",
+        "top", "watch"
+    ]
     
     if not cmd_parts or cmd_parts[0] not in allowed_commands:
-        return {"error": "Command not allowed"}
+        # Suggest similar commands
+        suggestions = [cmd for cmd in allowed_commands if cmd_parts and cmd_parts[0] in cmd or (cmd_parts and cmd.startswith(cmd_parts[0][:2]))]
+        error_msg = f"Command '{cmd_parts[0] if cmd_parts else ''}' not allowed."
+        if suggestions:
+            error_msg += f"\nDid you mean: {', '.join(suggestions[:5])}?"
+        return {"error": error_msg}
     
     # Execute command
     try:
-        if cmd_parts[0] == "help":
-            output = """Available commands:
-- help: Show this help
-- status: Show system status
-- services: List all services
-- processes: Show top processes
-- disk: Show disk usage
-- logs: Show recent logs
-- restart <service>: Restart a service"""
+        cmd = cmd_parts[0]
         
-        elif cmd_parts[0] == "status":
+        if cmd == "help":
+            output = """╔══════════════════════════════════════════════════════════════╗
+║              Healing Bot CLI - Available Commands              ║
+╚══════════════════════════════════════════════════════════════╝
+
+📊 SYSTEM INFO:
+  status, s          - Show system status (CPU, Memory, Disk)
+  uptime, u          - Show system uptime
+  whoami, w          - Show current user
+  hostname           - Show system hostname
+  uname              - Show system information
+  df                 - Show disk filesystem usage
+  free               - Show memory usage
+  top                - Show top processes (interactive)
+
+⚙️  SERVICES:
+  services, svc      - List all services
+  start <service>    - Start a service
+  stop <service>     - Stop a service
+  restart <service> - Restart a service
+  status <service>   - Check service status
+
+🔍 PROCESSES:
+  processes, ps      - Show top processes
+  kill <pid>        - Kill a process by PID
+  pkill <name>      - Kill processes by name
+
+📁 FILES:
+  ls [path]         - List directory contents
+  cat <file>        - Display file contents
+  tail <file>       - Show last lines of file
+  head <file>       - Show first lines of file
+  grep <pattern>    - Search for pattern
+  find <name>       - Find files
+
+🌐 NETWORK:
+  netstat            - Show network connections
+  ifconfig           - Show network interfaces
+  ss                 - Show socket statistics
+  ping <host>        - Ping a host
+
+📝 LOGS:
+  logs               - Show recent logs
+  log <service>      - Show logs for service
+  logtail            - Tail recent logs
+  logsearch <term>   - Search logs
+
+🛡️  BLOCKED IPS:
+  blocked            - List blocked IPs
+  block <ip>         - Block an IP address
+  unblock <ip>       - Unblock an IP address
+
+📈 MONITORING:
+  stats              - Show system statistics
+  health             - Show system health status
+
+🔧 UTILITIES:
+  clear, c           - Clear terminal
+  history            - Show command history
+  exit, q            - Exit CLI
+  watch <cmd>        - Watch command output
+
+Type 'help <command>' for detailed help on a specific command."""
+        
+        elif cmd == "status" or cmd == "s":
             metrics = get_system_metrics()
-            output = f"CPU: {metrics['cpu']}%\nMemory: {metrics['memory']}%\nDisk: {metrics['disk']}%"
+            output = f"""╔══════════════════════════════════════════╗
+║         System Status                ║
+╠══════════════════════════════════════════╣
+║ CPU Usage:     {metrics.get('cpu', 0):>6.1f}%              ║
+║ Memory Usage:  {metrics.get('memory', 0):>6.1f}%              ║
+║ Disk Usage:    {metrics.get('disk', 0):>6.1f}%              ║
+╚══════════════════════════════════════════╝"""
         
-        elif cmd_parts[0] == "services":
+        elif cmd == "services" or cmd == "svc":
             services = get_all_services_status()
-            output = "\n".join([f"{s['name']}: {s['status']}" for s in services])
+            if not services:
+                output = "No services found."
+            else:
+                output = "SERVICE NAME                    STATUS\n" + "="*50 + "\n"
+                for s in services:
+                    status_icon = "🟢" if s.get('status') == 'running' else "🔴"
+                    output += f"{status_icon} {s.get('name', 'unknown'):<30} {s.get('status', 'unknown')}\n"
         
-        elif cmd_parts[0] == "processes":
-            processes = get_top_processes(5)
-            output = "\n".join([f"{p['name']} - CPU: {p['cpu']}%, MEM: {p['memory']}%" for p in processes])
+        elif cmd == "processes" or cmd == "ps":
+            limit = int(cmd_parts[1]) if len(cmd_parts) > 1 and cmd_parts[1].isdigit() else 10
+            processes = get_top_processes(limit)
+            if not processes:
+                output = "No processes found."
+            else:
+                output = f"{'PID':<8} {'NAME':<25} {'CPU%':<8} {'MEM%':<8}\n" + "="*50 + "\n"
+                for p in processes:
+                    output += f"{p.get('pid', 0):<8} {p.get('name', 'unknown')[:24]:<25} {p.get('cpu', 0):<8.1f} {p.get('memory', 0):<8.1f}\n"
         
-        elif cmd_parts[0] == "disk":
+        elif cmd == "disk" or cmd == "d":
             disk = psutil.disk_usage('/')
-            output = f"Total: {disk.total // (1024**3)} GB\nUsed: {disk.used // (1024**3)} GB\nFree: {disk.free // (1024**3)} GB\nPercent: {disk.percent}%"
+            total_gb = disk.total // (1024**3)
+            used_gb = disk.used // (1024**3)
+            free_gb = disk.free // (1024**3)
+            output = f"""╔══════════════════════════════════════════╗
+║         Disk Usage                    ║
+╠══════════════════════════════════════════╣
+║ Total:  {total_gb:>6} GB                        ║
+║ Used:   {used_gb:>6} GB ({disk.percent:>5.1f}%)              ║
+║ Free:   {free_gb:>6} GB                        ║
+╚══════════════════════════════════════════╝"""
         
-        elif cmd_parts[0] == "logs":
-            output = "\n".join([f"[{log['level']}] {log['message']}" for log in log_buffer[-10:]])
+        elif cmd == "df":
+            partitions = []
+            for partition in psutil.disk_partitions():
+                try:
+                    usage = psutil.disk_usage(partition.mountpoint)
+                    partitions.append({
+                        'device': partition.device,
+                        'mount': partition.mountpoint,
+                        'total': usage.total,
+                        'used': usage.used,
+                        'free': usage.free,
+                        'percent': usage.percent
+                    })
+                except PermissionError:
+                    continue
+            
+            if not partitions:
+                output = "No disk partitions accessible."
+            else:
+                output = f"{'DEVICE':<20} {'MOUNT':<20} {'TOTAL':<12} {'USED':<12} {'FREE':<12} {'USE%':<6}\n" + "="*90 + "\n"
+                for p in partitions:
+                    total_gb = p['total'] // (1024**3)
+                    used_gb = p['used'] // (1024**3)
+                    free_gb = p['free'] // (1024**3)
+                    output += f"{p['device']:<20} {p['mount']:<20} {total_gb:>6} GB   {used_gb:>6} GB   {free_gb:>6} GB   {p['percent']:>5.1f}%\n"
         
-        elif cmd_parts[0] == "restart" and len(cmd_parts) > 1:
+        elif cmd == "free":
+            mem = psutil.virtual_memory()
+            swap = psutil.swap_memory()
+            output = f"""╔══════════════════════════════════════════╗
+║         Memory Usage                   ║
+╠══════════════════════════════════════════╣
+║ RAM:                                    ║
+║   Total:  {mem.total // (1024**3):>6} GB                        ║
+║   Used:   {mem.used // (1024**3):>6} GB ({mem.percent:>5.1f}%)              ║
+║   Free:   {mem.available // (1024**3):>6} GB                        ║
+║                                          ║
+║ Swap:                                   ║
+║   Total:  {swap.total // (1024**3):>6} GB                        ║
+║   Used:   {swap.used // (1024**3):>6} GB ({swap.percent:>5.1f}%)              ║
+║   Free:   {swap.free // (1024**3):>6} GB                        ║
+╚══════════════════════════════════════════╝"""
+        
+        elif cmd == "uptime" or cmd == "u":
+            boot_time = datetime.fromtimestamp(psutil.boot_time())
+            uptime = datetime.now() - boot_time
+            days = uptime.days
+            hours, remainder = divmod(uptime.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            output = f"System uptime: {days} days, {hours} hours, {minutes} minutes\nBoot time: {boot_time.strftime('%Y-%m-%d %H:%M:%S')}"
+        
+        elif cmd == "whoami" or cmd == "w":
+            output = os.getenv('USER', os.getenv('USERNAME', 'unknown'))
+        
+        elif cmd == "hostname":
+            output = os.uname().nodename
+        
+        elif cmd == "uname":
+            uname = os.uname()
+            output = f"""System: {uname.sysname}
+Hostname: {uname.nodename}
+Release: {uname.release}
+Version: {uname.version}
+Machine: {uname.machine}"""
+        
+        elif cmd == "logs":
+            output = "\n".join([f"[{log.get('level', 'INFO')}] {log.get('message', '')}" for log in log_buffer[-10:]])
+            if not output:
+                output = "No recent logs available."
+        
+        elif cmd == "restart" and len(cmd_parts) > 1:
             service = cmd_parts[1]
             success = restart_service(service)
-            output = f"Service {service} {'restarted successfully' if success else 'failed to restart'}"
+            output = f"✅ Service '{service}' restarted successfully" if success else f"❌ Failed to restart service '{service}'"
+        
+        elif cmd == "start" and len(cmd_parts) > 1:
+            service = cmd_parts[1]
+            success = start_service(service)
+            output = f"✅ Service '{service}' started successfully" if success else f"❌ Failed to start service '{service}'"
+        
+        elif cmd == "stop" and len(cmd_parts) > 1:
+            service = cmd_parts[1]
+            success = stop_service(service)
+            output = f"✅ Service '{service}' stopped successfully" if success else f"❌ Failed to stop service '{service}'"
+        
+        elif cmd == "status" and len(cmd_parts) > 1:
+            service = cmd_parts[1]
+            status_info = check_service_status(service)
+            status_icon = "🟢" if status_info.get('status') == 'running' else "🔴"
+            output = f"{status_icon} {service}: {status_info.get('status', 'unknown')}"
+        
+        elif cmd == "kill" and len(cmd_parts) > 1:
+            try:
+                pid = int(cmd_parts[1])
+                os.kill(pid, signal.SIGTERM)
+                output = f"✅ Sent SIGTERM to process {pid}"
+            except ValueError:
+                output = "❌ Invalid PID. Usage: kill <pid>"
+            except ProcessLookupError:
+                output = f"❌ Process {pid} not found"
+            except PermissionError:
+                output = f"❌ Permission denied to kill process {pid}"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "pkill" and len(cmd_parts) > 1:
+            process_name = cmd_parts[1]
+            killed = 0
+            try:
+                for proc in psutil.process_iter(['pid', 'name']):
+                    try:
+                        if process_name.lower() in proc.info['name'].lower():
+                            proc.terminate()
+                            killed += 1
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                output = f"✅ Terminated {killed} process(es) matching '{process_name}'"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "ls":
+            path = cmd_parts[1] if len(cmd_parts) > 1 else "."
+            try:
+                path_obj = Path(path).expanduser().resolve()
+                if not path_obj.exists():
+                    output = f"❌ Path not found: {path}"
+                elif path_obj.is_file():
+                    output = str(path_obj)
+        else:
+                    items = sorted(path_obj.iterdir())
+                    dirs = [item for item in items if item.is_dir()]
+                    files = [item for item in items if item.is_file()]
+                    output = ""
+                    if dirs:
+                        output += "📁 DIRECTORIES:\n"
+                        for d in dirs:
+                            output += f"  {d.name}/\n"
+                    if files:
+                        output += "\n📄 FILES:\n" if dirs else "📄 FILES:\n"
+                        for f in files:
+                            size = f.stat().st_size
+                            size_str = f"{size} B" if size < 1024 else f"{size/1024:.1f} KB" if size < 1024**2 else f"{size/(1024**2):.1f} MB"
+                            output += f"  {f.name:<40} {size_str:>10}\n"
+                    if not dirs and not files:
+                        output = "Directory is empty"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "cat" and len(cmd_parts) > 1:
+            file_path = cmd_parts[1]
+            try:
+                path_obj = Path(file_path).expanduser().resolve()
+                if not path_obj.exists():
+                    output = f"❌ File not found: {file_path}"
+                elif path_obj.is_dir():
+                    output = f"❌ Is a directory: {file_path}"
+                else:
+                    with open(path_obj, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                        # Limit output to prevent overwhelming
+                        if len(content) > 10000:
+                            output = content[:10000] + f"\n\n... (truncated, showing first 10000 characters of {len(content)} total)"
+                        else:
+                            output = content
+            except PermissionError:
+                output = f"❌ Permission denied: {file_path}"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "tail" and len(cmd_parts) > 1:
+            file_path = cmd_parts[1]
+            lines = int(cmd_parts[2]) if len(cmd_parts) > 2 and cmd_parts[2].isdigit() else 10
+            try:
+                path_obj = Path(file_path).expanduser().resolve()
+                if not path_obj.exists():
+                    output = f"❌ File not found: {file_path}"
+                else:
+                    with open(path_obj, 'r', encoding='utf-8', errors='ignore') as f:
+                        all_lines = f.readlines()
+                        output = "".join(all_lines[-lines:])
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "head" and len(cmd_parts) > 1:
+            file_path = cmd_parts[1]
+            lines = int(cmd_parts[2]) if len(cmd_parts) > 2 and cmd_parts[2].isdigit() else 10
+            try:
+                path_obj = Path(file_path).expanduser().resolve()
+                if not path_obj.exists():
+                    output = f"❌ File not found: {file_path}"
+                else:
+                    with open(path_obj, 'r', encoding='utf-8', errors='ignore') as f:
+                        output = "".join([f.readline() for _ in range(lines)])
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "grep" and len(cmd_parts) > 1:
+            pattern = cmd_parts[1]
+            file_path = cmd_parts[2] if len(cmd_parts) > 2 else None
+            try:
+                if file_path:
+                    path_obj = Path(file_path).expanduser().resolve()
+                    if not path_obj.exists():
+                        output = f"❌ File not found: {file_path}"
+                    else:
+                        with open(path_obj, 'r', encoding='utf-8', errors='ignore') as f:
+                            matches = [line for line in f if pattern in line]
+                            output = "".join(matches[:50])  # Limit to 50 matches
+                            if len(matches) > 50:
+                                output += f"\n... ({len(matches) - 50} more matches)"
+                else:
+                    output = "❌ Usage: grep <pattern> <file>"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "find" and len(cmd_parts) > 1:
+            search_term = cmd_parts[1]
+            search_path = cmd_parts[2] if len(cmd_parts) > 2 else "."
+            try:
+                path_obj = Path(search_path).expanduser().resolve()
+                if not path_obj.exists():
+                    output = f"❌ Path not found: {search_path}"
+                else:
+                    matches = []
+                    for item in path_obj.rglob("*"):
+                        if search_term.lower() in item.name.lower():
+                            matches.append(str(item.relative_to(path_obj)))
+                            if len(matches) >= 20:  # Limit results
+                                break
+                    if matches:
+                        output = "\n".join(matches)
+                        if len(matches) == 20:
+                            output += "\n... (showing first 20 matches)"
+                    else:
+                        output = f"No files found matching '{search_term}'"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "netstat":
+            try:
+                connections = psutil.net_connections(kind='inet')
+                output = f"{'PROTO':<6} {'LOCAL ADDRESS':<25} {'STATUS':<12}\n" + "="*50 + "\n"
+                for conn in connections[:20]:  # Limit to 20 connections
+                    laddr = f"{conn.laddr.ip}:{conn.laddr.port}" if conn.laddr else ""
+                    status = conn.status if conn.status else ""
+                    output += f"{'TCP':<6} {laddr:<25} {status:<12}\n"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "ifconfig":
+            try:
+                interfaces = psutil.net_if_addrs()
+                output = ""
+                for interface, addrs in interfaces.items():
+                    output += f"\n{interface}:\n"
+                    for addr in addrs:
+                        if addr.family == 2:  # IPv4
+                            output += f"  IPv4: {addr.address}  Netmask: {addr.netmask}\n"
+                        elif addr.family == 10:  # IPv6
+                            output += f"  IPv6: {addr.address}\n"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "ss":
+            try:
+                connections = psutil.net_connections(kind='inet')
+                output = f"{'STATE':<12} {'LOCAL ADDRESS':<25} {'PEER ADDRESS':<25}\n" + "="*70 + "\n"
+                for conn in connections[:20]:
+                    laddr = f"{conn.laddr.ip}:{conn.laddr.port}" if conn.laddr else ""
+                    raddr = f"{conn.raddr.ip}:{conn.raddr.port}" if conn.raddr else ""
+                    state = conn.status if conn.status else ""
+                    output += f"{state:<12} {laddr:<25} {raddr:<25}\n"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "ping" and len(cmd_parts) > 1:
+            host = cmd_parts[1]
+            count = int(cmd_parts[2]) if len(cmd_parts) > 2 and cmd_parts[2].isdigit() else 4
+            try:
+                result = subprocess.run(
+                    ["ping", "-c", str(count), host],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                output = result.stdout if result.returncode == 0 else result.stderr
+            except subprocess.TimeoutExpired:
+                output = f"❌ Ping timeout for {host}"
+            except FileNotFoundError:
+                output = "❌ ping command not available"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "stats":
+            metrics = get_system_metrics()
+            processes = get_top_processes(5)
+            output = f"""╔══════════════════════════════════════════╗
+║         System Statistics              ║
+╠══════════════════════════════════════════╣
+║ CPU:     {metrics.get('cpu', 0):>6.1f}%                        ║
+║ Memory:  {metrics.get('memory', 0):>6.1f}%                        ║
+║ Disk:    {metrics.get('disk', 0):>6.1f}%                        ║
+╠══════════════════════════════════════════╣
+║ Top Processes:                          ║
+"""
+            for p in processes[:5]:
+                output += f"║   {p.get('name', 'unknown')[:30]:<30} CPU: {p.get('cpu', 0):>5.1f}% ║\n"
+            output += "╚══════════════════════════════════════════╝"
+        
+        elif cmd == "health":
+            metrics = get_system_metrics()
+            health_status = "✅ Healthy"
+            issues = []
+            if metrics.get('cpu', 0) > 90:
+                issues.append("High CPU usage")
+            if metrics.get('memory', 0) > 90:
+                issues.append("High memory usage")
+            if metrics.get('disk', 0) > 90:
+                issues.append("High disk usage")
+            
+            if issues:
+                health_status = f"⚠️  Warning: {', '.join(issues)}"
+            
+            output = f"""System Health: {health_status}
+CPU: {metrics.get('cpu', 0):.1f}%
+Memory: {metrics.get('memory', 0):.1f}%
+Disk: {metrics.get('disk', 0):.1f}%"""
+        
+        elif cmd == "log" and len(cmd_parts) > 1:
+            service = cmd_parts[1]
+            try:
+                from centralized_logger import centralized_logger
+                if centralized_logger:
+                    logs = centralized_logger.get_recent_logs(limit=20)
+                    service_logs = [log for log in logs if service.lower() in str(log.get('service', '')).lower()]
+                    if service_logs:
+                        output = "\n".join([f"[{log.get('timestamp', '')}] {log.get('message', '')}" for log in service_logs[:20]])
+                    else:
+                        output = f"No logs found for service: {service}"
+                else:
+                    output = "Centralized logging not available"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "logtail":
+            try:
+                from centralized_logger import centralized_logger
+                if centralized_logger:
+                    logs = centralized_logger.get_recent_logs(limit=20)
+                    output = "\n".join([f"[{log.get('timestamp', '')}] [{log.get('service', 'unknown')}] {log.get('message', '')}" for log in logs])
+                else:
+                    output = "Centralized logging not available"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "logsearch" and len(cmd_parts) > 1:
+            search_term = cmd_parts[1]
+            try:
+                from centralized_logger import centralized_logger
+                if centralized_logger:
+                    logs = centralized_logger.get_recent_logs(limit=100)
+                    matches = [log for log in logs if search_term.lower() in str(log.get('message', '')).lower()]
+                    if matches:
+                        output = "\n".join([f"[{log.get('timestamp', '')}] {log.get('message', '')}" for log in matches[:20]])
+                    else:
+                        output = f"No logs found matching: {search_term}"
+                else:
+                    output = "Centralized logging not available"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "blocked":
+            try:
+                blocked_ips = blocked_ips_db.get_blocked_ips(include_unblocked=False)
+                if not blocked_ips:
+                    output = "No blocked IPs"
+                else:
+                    output = f"{'IP ADDRESS':<20} {'THREAT LEVEL':<15} {'BLOCKED AT':<20} {'REASON':<30}\n" + "="*90 + "\n"
+                    for ip_data in blocked_ips[:20]:
+                        ip = ip_data.get('ip_address', 'unknown')
+                        threat = ip_data.get('threat_level', 'Unknown')
+                        blocked_at = ip_data.get('blocked_at', '')
+                        reason = ip_data.get('reason', '')[:28]
+                        if blocked_at:
+                            try:
+                                dt = datetime.fromisoformat(blocked_at.replace('Z', '+00:00'))
+                                blocked_at = dt.strftime('%Y-%m-%d %H:%M')
+                            except:
+                                pass
+                        output += f"{ip:<20} {threat:<15} {blocked_at:<20} {reason:<30}\n"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "block" and len(cmd_parts) > 1:
+            ip = cmd_parts[1]
+            threat_level = cmd_parts[2] if len(cmd_parts) > 2 else "High"
+            try:
+                success = blocked_ips_db.block_ip(ip, threat_level=threat_level, blocked_by="cli_user")
+                output = f"✅ IP {ip} blocked successfully" if success else f"❌ Failed to block IP {ip}"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "unblock" and len(cmd_parts) > 1:
+            ip = cmd_parts[1]
+            try:
+                success = blocked_ips_db.unblock_ip(ip, unblocked_by="cli_user")
+                output = f"✅ IP {ip} unblocked successfully" if success else f"❌ Failed to unblock IP {ip}"
+            except Exception as e:
+                output = f"❌ Error: {str(e)}"
+        
+        elif cmd == "clear" or cmd == "c":
+            output = "CLEAR"  # Special marker for frontend to clear output
+        
+        elif cmd == "history":
+            if not command_history:
+                output = "No command history"
+            else:
+                output = "COMMAND HISTORY:\n" + "="*60 + "\n"
+                for i, hist in enumerate(command_history[-20:], 1):
+                    timestamp = hist.get('timestamp', '')
+                    if timestamp:
+                        try:
+                            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                            timestamp = dt.strftime('%H:%M:%S')
+                        except:
+                            pass
+                    output += f"{i:>3}. [{timestamp}] {hist.get('command', '')}\n"
+        
+        elif cmd == "exit" or cmd == "q":
+            output = "Exiting CLI... (This is a web interface, use 'clear' to clear the terminal)"
+        
+        elif cmd == "top":
+            processes = get_top_processes(10)
+            output = f"{'PID':<8} {'NAME':<25} {'CPU%':<8} {'MEM%':<8} {'STATUS':<10}\n" + "="*65 + "\n"
+            for p in processes:
+                output += f"{p.get('pid', 0):<8} {p.get('name', 'unknown')[:24]:<25} {p.get('cpu', 0):<8.1f} {p.get('memory', 0):<8.1f} {'running':<10}\n"
+        
+        elif cmd == "watch" and len(cmd_parts) > 1:
+            # For watch, we'll execute the sub-command once (real watch would need polling)
+            watch_cmd = " ".join(cmd_parts[1:])
+            # Recursively call with the sub-command
+            watch_data = {"command": watch_cmd}
+            result = await execute_cli_endpoint(watch_data)
+            output = f"[Watch mode - single execution]\n{result.get('output', result.get('error', ''))}"
         
         else:
-            output = "Invalid command"
+            output = f"Invalid command: {cmd}. Type 'help' for available commands."
         
         return {"output": output, "command": command}
     
     except Exception as e:
+        logger.error(f"Error executing CLI command: {e}", exc_info=True)
         return {"error": str(e)}
 
 @app.get("/api/config")

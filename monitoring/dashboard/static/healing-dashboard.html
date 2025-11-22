@@ -235,18 +235,26 @@
         .log-entry.success { border-left-color: var(--accent-green); }
 
         .service-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
         }
 
         .service-item {
-            background: var(--bg-tertiary);
-            padding: 1rem;
+            background: var(--bg-secondary);
+            padding: 1.25rem 1.5rem;
             border-radius: 8px;
+            border: 1px solid var(--border-color);
             display: flex;
             justify-content: space-between;
             align-items: center;
+            transition: all 0.2s;
+        }
+        
+        .service-item:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent-blue);
+            transform: translateX(4px);
         }
 
         .service-status {
@@ -934,6 +942,82 @@
             <div class="log-container scrollbar">
                 <h3 style="margin-bottom: 1rem;">Recent Activity</h3>
                 <div id="recentActivity"></div>
+            </div>
+        </div>
+
+        <div id="alerts" class="tab-content">
+            <div style="margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <h2 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                            🚨 Active Alerts
+                        </h2>
+                        <p style="color: var(--text-secondary); margin: 0;">Critical issues requiring immediate attention</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="loadAlertsTab()" style="padding: 0.75rem 1.5rem;">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Alerts Table -->
+                <div class="card" style="grid-column: 1 / -1;">
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: var(--bg-tertiary); border-bottom: 2px solid var(--border-color);">
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); white-space: nowrap;">
+                                        <i class="fas fa-clock"></i> Time
+                                    </th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); white-space: nowrap;">
+                                        <i class="fas fa-server"></i> Service
+                                    </th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary); white-space: nowrap;">
+                                        <i class="fas fa-shield-alt"></i> Severity
+                                    </th>
+                                    <th style="padding: 1rem; text-align: left; font-weight: 600; color: var(--text-primary);">
+                                        <i class="fas fa-comment-alt"></i> Message
+                                    </th>
+                                    <th style="padding: 1rem; text-align: center; font-weight: 600; color: var(--text-primary); white-space: nowrap;">
+                                        <i class="fas fa-cogs"></i> Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody id="alertsTable">
+                                <tr>
+                                    <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                                        <i class="fas fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+                                        Loading alerts...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- AI Analysis Panel for Alerts -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fas fa-brain"></i> AI Analysis
+                        </h3>
+                        <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--text-secondary);">AI-powered alert analysis and insights</p>
+                    </div>
+                </div>
+                <div id="alertsAIAnalysisPanel" style="padding: 1.5rem; display: flex; flex-direction: column; justify-content: flex-start; min-height: 300px; max-height: 600px; overflow-y: auto; background: var(--bg-tertiary); border-radius: 8px;">
+                    <div style="text-align: center; color: var(--text-secondary);">
+                        <div style="margin-bottom: 1.5rem;">
+                            <i class="fas fa-robot" style="font-size: 4rem; opacity: 0.2; color: var(--accent-purple);"></i>
+                        </div>
+                        <h4 style="margin: 0 0 0.5rem 0; color: var(--text-primary); font-weight: 600;">AI Analysis Ready</h4>
+                        <p style="margin: 0 0 1.5rem 0; font-size: 0.9rem;">
+                            🤖 AI Analysis: Click "Analyze" button on any alert row to get intelligent insights.
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1840,118 +1924,6 @@
                 </div>
             </div>
 
-            <!-- Cloud Simulation Features Section -->
-            <div style="border-top: 2px solid var(--border-color); padding-top: 2rem; margin-top: 2rem;">
-                <h2 style="margin-bottom: 1.5rem; color: var(--accent-blue);">☁️ Cloud Simulation Features</h2>
-                
-                <!-- Service Status Dashboard -->
-                <div class="card" style="margin-bottom: 2rem;">
-                    <h3 style="margin-top: 0;">📊 Service Status Dashboard</h3>
-                    <div id="serviceStatusGrid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-                        <!-- Service cards will be populated here -->
-                    </div>
-                </div>
-
-                <!-- Fault Detection & AI Diagnosis Row -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
-                    <!-- Fault Detection Panel -->
-                    <div class="card">
-                        <h3 style="margin-top: 0;">🔍 Fault Detection Timeline</h3>
-                        <div id="faultDetectionFeed" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
-                            <!-- Fault feed will be populated here -->
-                        </div>
-                    </div>
-
-                    <!-- AI Diagnosis Display -->
-                    <div class="card">
-                        <h3 style="margin-top: 0;">🧠 AI Diagnosis</h3>
-                        <div id="aiDiagnosisDisplay">
-                            <!-- AI analysis results will be shown here -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Self-Healing Action Log & Discord Notifications Row -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
-                    <!-- Self-Healing Action Log -->
-                    <div class="card">
-                        <h3 style="margin-top: 0;">🔧 Self-Healing Action Log</h3>
-                        <div id="healingActionLog" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
-                            <!-- Healing actions will be shown here -->
-                        </div>
-                    </div>
-
-                    <!-- Discord Notification Status -->
-                    <div class="card">
-                        <h3 style="margin-top: 0;">🔔 Discord Notifications</h3>
-                        <div id="discordNotificationFeed" class="log-container scrollbar" style="max-height: 400px; overflow-y: auto;">
-                            <!-- Discord notifications will be shown here -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Resource Monitoring Charts -->
-                <div class="card" style="margin-bottom: 2rem;">
-                    <h3 style="margin-top: 0;">📈 Resource Monitoring</h3>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
-                        <div>
-                            <h4>CPU Usage</h4>
-                            <div style="position: relative; height: 200px;">
-                                <canvas id="cpuChart"></canvas>
-                            </div>
-                        </div>
-                        <div>
-                            <h4>Memory Usage</h4>
-                            <div style="position: relative; height: 200px;">
-                                <canvas id="memoryChart"></canvas>
-                            </div>
-                        </div>
-                        <div>
-                            <h4>Disk Usage</h4>
-                            <div style="position: relative; height: 200px;">
-                                <canvas id="diskChart"></canvas>
-                            </div>
-                        </div>
-                        <div>
-                            <h4>Network Traffic</h4>
-                            <div style="position: relative; height: 200px;">
-                                <canvas id="networkChart"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Fault Injection Controls -->
-                <div class="card">
-                    <h3 style="margin-top: 0;">💥 Fault Injection (Testing)</h3>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-                        <button class="btn btn-danger" onclick="injectFault('crash', 'cloud-sim-api-server')">
-                            💥 Inject Service Crash
-                        </button>
-                        <button class="btn btn-warning" onclick="injectFault('cpu')">
-                            🔥 Inject CPU Exhaustion
-                        </button>
-                        <button class="btn btn-warning" onclick="injectFault('memory')">
-                            💾 Inject Memory Exhaustion
-                        </button>
-                        <button class="btn btn-warning" onclick="injectFault('disk')">
-                            💿 Inject Disk Full
-                        </button>
-                        <button class="btn btn-warning" onclick="injectFault('network', 'cloud-sim-api-server', 8082)">
-                            🌐 Inject Network Issue
-                        </button>
-                        <button class="btn btn-secondary" onclick="cleanupFaults()">
-                            🧹 Cleanup All Faults
-                        </button>
-                    </div>
-                    <div style="padding: 1rem; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
-                        <small style="color: var(--text-secondary);">
-                            ⚠️ These buttons inject real faults into the simulated cloud environment. 
-                            The AI Bot will automatically detect, diagnose, and attempt to heal them.
-                        </small>
-                    </div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -2743,38 +2715,7 @@
                         // Load auto-healing data in parallel
                         await Promise.all([
                             updateAutoHealingDashboard().catch(err => console.warn('Auto-healing dashboard load failed:', err)),
-                            loadAutoHealingConfig().catch(err => console.warn('Auto-healing config load failed:', err)),
-                            updateServiceStatus().catch(err => console.warn('Service status load failed:', err)),
-                            updateResourceCharts().catch(err => console.warn('Resource charts load failed:', err))
-                        ]);
-                        
-                        // Initialize cloud WebSocket if needed
-                        if (cloudWsRetryCount < MAX_CLOUD_WS_RETRIES) {
-                            initializeCloudWebSocket();
-                        }
-                        
-                        // Load cloud simulation data in parallel
-                        await Promise.all([
-                            cachedFetch('/api/cloud/faults?limit=10', {}, 5000).then(data => {
-                                if (data && data.success) {
-                                    updateFaultDetection(data.faults || [], data.statistics || {});
-                                }
-                            }).catch(err => {
-                                const feed = document.getElementById('faultDetectionFeed');
-                                if (feed && err.message !== 'Request timeout') {
-                                    feed.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem; text-align: center;">Unable to load fault data</p>';
-                                }
-                            }),
-                            cachedFetch('/api/cloud/healing/history?limit=10', {}, 5000).then(data => {
-                                if (data && data.success) {
-                                    updateHealingActions(data.history || [], data.statistics || {});
-                                }
-                            }).catch(err => {
-                                const log = document.getElementById('healingActionLog');
-                                if (log && err.message !== 'Request timeout') {
-                                    log.innerHTML = '<p style="color: var(--text-secondary); padding: 1rem; text-align: center;">Unable to load healing history</p>';
-                                }
-                            })
+                            loadAutoHealingConfig().catch(err => console.warn('Auto-healing config load failed:', err))
                         ]);
                         break;
                         
@@ -4542,27 +4483,38 @@
                 
                 // Always show running services first with a header
                 if (runningServices.length > 0) {
+                    html += `
+                        <div style="margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--border-color);">
+                            <h3 style="margin: 0; color: var(--accent-green); font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+                                <span class="service-status running"></span>
+                                Running Services (${runningServices.length})
+                            </h3>
+                        </div>
+                    `;
+                    
                     html += runningServices.map(service => {
                         const statusClass = 'running';
                         const statusText = 'Running';
-                        const isRunning = true;
                         
                         return `
                             <div class="service-item" style="border-left: 4px solid var(--accent-green);">
-                                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <div style="display: flex; align-items: center; gap: 1rem; flex: 1;">
                                     <span class="service-status ${statusClass}"></span>
-                                    <div>
-                                        <div style="font-weight: bold; font-size: 1.1rem;">${service.name}</div>
-                                        <div style="font-size: 0.85rem; color: var(--accent-green);">${statusText}</div>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 1rem; color: var(--text-primary); margin-bottom: 0.25rem;">${escapeHtml(service.name)}</div>
+                                        <div style="font-size: 0.85rem; color: var(--accent-green); display: flex; align-items: center; gap: 0.5rem;">
+                                            <span>●</span>
+                                            <span>${statusText}</span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div style="display: flex; gap: 0.5rem;">
                                     <button class="btn btn-danger btn-sm" onclick="stopService('${service.name}')" 
-                                            style="white-space: nowrap;" title="Stop Service">
+                                            style="white-space: nowrap; padding: 0.5rem 1rem;" title="Stop Service">
                                         ⏹️ Stop
                                     </button>
                                     <button class="btn btn-primary btn-sm" onclick="restartService('${service.name}')" 
-                                            style="white-space: nowrap;" title="Restart Service">
+                                            style="white-space: nowrap; padding: 0.5rem 1rem;" title="Restart Service">
                                         🔄 Restart
                                     </button>
                                 </div>
@@ -4571,30 +4523,42 @@
                     }).join('');
                 }
                 
-                // Show other services (stopped/unknown)
+                // Show other services (stopped/unknown) with a header
                 if (otherServices.length > 0) {
+                    html += `
+                        <div style="margin-top: 2rem; margin-bottom: 1rem; padding-top: 1rem; padding-bottom: 0.5rem; border-top: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color);">
+                            <h3 style="margin: 0; color: var(--text-secondary); font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+                                <span class="service-status stopped"></span>
+                                Stopped Services (${otherServices.length})
+                            </h3>
+                        </div>
+                    `;
+                    
                     html += otherServices.map(service => {
                         const statusClass = service.status === 'stopped' ? 'stopped' : 'restarting';
                         const statusText = service.status === 'stopped' ? 'Stopped' : 
                                           service.status === 'restarting' ? 'Restarting' : 'Unknown';
-                        const isRunning = false;
+                        const statusColor = service.status === 'stopped' ? 'var(--accent-red)' : 'var(--accent-yellow)';
                         
                         return `
-                            <div class="service-item">
-                                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <div class="service-item" style="border-left: 4px solid ${statusColor};">
+                                <div style="display: flex; align-items: center; gap: 1rem; flex: 1;">
                                     <span class="service-status ${statusClass}"></span>
-                                    <div>
-                                        <div style="font-weight: bold; font-size: 1.1rem;">${service.name}</div>
-                                        <div style="font-size: 0.85rem; color: var(--text-secondary);">${statusText}</div>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 1rem; color: var(--text-primary); margin-bottom: 0.25rem;">${escapeHtml(service.name)}</div>
+                                        <div style="font-size: 0.85rem; color: ${statusColor}; display: flex; align-items: center; gap: 0.5rem;">
+                                            <span>●</span>
+                                            <span>${statusText}</span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div style="display: flex; gap: 0.5rem;">
                                     <button class="btn btn-success btn-sm" onclick="startService('${service.name}')" 
-                                            style="white-space: nowrap;" title="Start Service">
+                                            style="white-space: nowrap; padding: 0.5rem 1rem;" title="Start Service">
                                         ▶️ Start
                                     </button>
                                     <button class="btn btn-primary btn-sm" onclick="restartService('${service.name}')" 
-                                            style="white-space: nowrap;" title="Restart Service">
+                                            style="white-space: nowrap; padding: 0.5rem 1rem;" title="Restart Service">
                                         🔄 Restart
                                     </button>
                                 </div>
@@ -5536,8 +5500,28 @@
         }
 
         async function analyzeLogWithAI(logEntry) {
-            const panel = document.getElementById('aiAnalysisPanel');
-            const logSource = logEntry.source === 'fluent-bit' ? 'Fluent Bit' : 'Centralized Logger';
+            // Detect which tab is active and use the appropriate panel
+            const alertsTab = document.getElementById('alerts');
+            const logsTab = document.getElementById('logs');
+            let panel;
+            
+            if (alertsTab && alertsTab.classList.contains('active')) {
+                panel = document.getElementById('alertsAIAnalysisPanel');
+            } else {
+                panel = document.getElementById('aiAnalysisPanel');
+            }
+            
+            if (!panel) {
+                // Fallback to logs panel if alerts panel doesn't exist
+                panel = document.getElementById('aiAnalysisPanel');
+            }
+            
+            if (!panel) {
+                showNotification('❌ AI Analysis panel not found', 'error');
+                return;
+            }
+            
+            const logSource = logEntry.source === 'fluent-bit' ? 'Fluent Bit' : logEntry.source === 'critical-services' ? 'Critical Services' : 'Centralized Logger';
             panel.innerHTML = `
                 <div style="text-align: center; padding: 3rem;">
                     <div style="border: 3px solid var(--accent-blue); border-top-color: transparent; border-radius: 50%; width: 3rem; height: 3rem; margin: 0 auto 1rem; animation: spin 1s linear infinite;"></div>
@@ -5826,7 +5810,7 @@
                     if (criticalIssues.length === 0) {
                         tbody.innerHTML = `
                             <tr>
-                                <td colspan="4" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                                <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
                                     <i class="fas fa-check-circle" style="font-size: 2rem; color: var(--accent-green); margin-bottom: 0.5rem; display: block;"></i>
                                     No Active Alerts ✅
                                     <div style="font-size: 0.85rem; margin-top: 0.5rem;">All systems operating normally</div>
@@ -5853,6 +5837,19 @@
                                 second: '2-digit'
                             });
                             
+                            // Prepare issue data for AI analysis (convert issue format to logEntry format)
+                            const logEntryData = {
+                                timestamp: issue.timestamp,
+                                service: issue.service || 'unknown',
+                                message: issue.message || '',
+                                level: issue.level || issue.severity || 'CRITICAL',
+                                source_file: issue.source_file || issue.source || 'critical-services',
+                                source: issue.source || 'critical-services',
+                                tag: issue.tag || null,
+                                severity: issue.severity || issue.level || 'CRITICAL',
+                                category: issue.category || null
+                            };
+                            
                             html += `
                                 <tr style="transition: background 0.2s; border-bottom: 1px solid var(--border-color);" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
                                     <td style="padding: 1rem; white-space: nowrap; vertical-align: middle;">
@@ -5868,6 +5865,11 @@
                                     </td>
                                     <td style="padding: 1rem; max-width: 500px; word-wrap: break-word; line-height: 1.5; vertical-align: middle;">
                                         ${escapeHtml(issue.message || '')}
+                                    </td>
+                                    <td style="padding: 1rem; text-align: center; vertical-align: middle;">
+                                        <button class="btn btn-primary" onclick='analyzeLogWithAI(${JSON.stringify(logEntryData).replace(/'/g, "&#39;")})' style="font-size: 0.8rem; padding: 0.4rem 0.8rem; white-space: nowrap;">
+                                            <i class="fas fa-brain"></i> Analyze
+                                        </button>
                                     </td>
                                 </tr>
                             `;
@@ -5898,7 +5900,7 @@
                 console.error('Error loading alerts:', error);
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="4" style="text-align: center; padding: 2rem; color: var(--accent-red);">
+                        <td colspan="5" style="text-align: center; padding: 2rem; color: var(--accent-red);">
                             <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 0.5rem; display: block;"></i>
                             <div>Error loading alerts</div>
                             <div style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-secondary);">${error.message || 'Unknown error'}</div>
@@ -7357,14 +7359,6 @@
                 }
             }, 30000);
             
-            // Refresh cloud simulation data periodically (only when tab is active)
-            setInterval(() => {
-                const autoHealingTab = document.getElementById('auto-healing');
-                if (autoHealingTab && autoHealingTab.classList.contains('active')) {
-                    updateServiceStatus();
-                    updateResourceCharts();
-                }
-            }, 5000);
             
             // Update auto-healing dashboard every 10 seconds (only when tab is active)
             setInterval(() => {

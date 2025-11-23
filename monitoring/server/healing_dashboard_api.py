@@ -4562,27 +4562,320 @@ async def update_auto_healer_config(request: Request):
             "message": str(e)
         }
 
-@app.post("/api/cloud/faults/{fault_id}/heal")
-async def heal_fault(fault_id: int):
-    """Manually trigger healing for a specific fault"""
+@app.post("/api/cloud/faults/{fault_id}/analyze")
+async def analyze_fault_with_ai(fault_id: int):
+    """Analyze a fault using AI to get healing instructions"""
     try:
-        if not auto_healer or not fault_detector:
-            return {"success": False, "error": "Auto-healer or fault detector not initialized"}
+        if not fault_detector:
+            return JSONResponse(
+                status_code=503,
+                content={"success": False, "error": "Fault detector not initialized"}
+            )
         
         faults = fault_detector.get_detected_faults(limit=100)
-        if fault_id < len(faults):
-            fault = faults[fault_id]
-            result = auto_healer.heal_cloud_fault(fault)
+        if fault_id >= len(faults):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": "Fault not found"}
+            )
+        
+        fault = faults[fault_id]
+        
+        # Check if Gemini analyzer is available
+        if not gemini_analyzer:
             return {
-                "success": True,
-                "healing_result": result,
-                "timestamp": datetime.now().isoformat()
+                "success": False,
+                "error": "AI analyzer not available. Please configure GEMINI_API_KEY",
+                "fault": fault
             }
-        else:
-            return {"success": False, "error": "Fault not found"}
+        
+        # Get system metrics for better analysis
+        try:
+            metrics = get_system_metrics()
+        except:
+            metrics = None
+        
+        # Analyze fault with AI
+        analysis_result = gemini_analyzer.analyze_cloud_fault(
+            fault,
+            container_logs=None,
+            system_metrics=metrics
+        )
+        
+        if analysis_result.get("status") != "success":
+            return {
+                "success": False,
+                "error": analysis_result.get("message", "AI analysis failed"),
+                "fault": fault
+            }
+        
+        # Determine if auto-healing is possible
+        analysis = analysis_result.get("analysis", {})
+        solution = analysis.get("solution", "")
+        confidence = analysis.get("confidence", 0)
+        
+        # Check if solution contains executable commands that can be auto-healed
+        auto_healable = False
+        healing_steps = []
+        
+        if solution and confidence >= 50:  # Minimum confidence threshold
+            # Check for common auto-healable actions
+            solution_lower = solution.lower()
+            auto_healable_keywords = [
+                "restart", "restart service", "systemctl restart", "service restart",
+                "clear cache", "free disk", "clean", "kill process", "kill -9",
+                "reload", "reload config", "systemctl reload", "systemctl start",
+                "systemctl stop", "systemctl enable", "systemctl disable"
+            ]
+            
+            if any(keyword in solution_lower for keyword in auto_healable_keywords):
+                auto_healable = True
+                # Extract healing steps from solution - handle various formats
+                lines = solution.split('\n')
+                current_step = ""
+                
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        if current_step:
+                            healing_steps.append(current_step)
+                            current_step = ""
+                        continue
+                    
+                    # Check for step indicators
+                    is_step = False
+                    step_text = line
+                    
+                    # Remove common step prefixes
+                    if line.startswith('-') or line.startswith('*') or line.startswith('•'):
+                        step_text = line[1:].strip()
+                        is_step = True
+                    elif line.startswith('1.') or line.startswith('2.') or line.startswith('3.') or \
+                         line.startswith('4.') or line.startswith('5.') or line.startswith('6.') or \
+                         line.startswith('7.') or line.startswith('8.') or line.startswith('9.'):
+                        step_text = line.split('.', 1)[1].strip() if '.' in line else line
+                        is_step = True
+                    elif line[0].isdigit() and len(line) > 1 and line[1] in ['.', ')', '-']:
+                        step_text = line.split(line[1], 1)[1].strip() if len(line) > 2 else line[2:].strip()
+                        is_step = True
+                    elif any(keyword in line.lower() for keyword in auto_healable_keywords):
+                        is_step = True
+                    
+                    if is_step and step_text:
+                        # Clean up the step text
+                        step_text = step_text.strip()
+                        if step_text and step_text not in healing_steps:
+                            healing_steps.append(step_text)
+                
+                # If no structured steps found, try to extract from full solution
+                if not healing_steps and solution:
+                    # Look for command patterns
+                    import re
+                    commands = re.findall(r'(?:sudo\s+)?(?:systemctl|service|kill|restart|clear|clean|reload)\s+[^\n]+', solution, re.IGNORECASE)
+                    if commands:
+                        healing_steps = [cmd.strip() for cmd in commands[:10]]  # Limit to 10 steps
+                    elif len(solution) < 500:  # If solution is short, use it as a single step
+                        healing_steps = [solution]
+        
+        return {
+            "success": True,
+            "fault": fault,
+            "analysis": {
+                "root_cause": analysis.get("root_cause", ""),
+                "why": analysis.get("why", ""),
+                "solution": solution,
+                "prevention": analysis.get("prevention", ""),
+                "confidence": confidence,
+                "full_analysis": analysis.get("full_analysis", "")
+            },
+            "auto_healable": auto_healable,
+            "healing_steps": healing_steps if auto_healable else [],
+            "manual_instructions": solution if not auto_healable else "",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error analyzing fault with AI: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+@app.post("/api/cloud/faults/{fault_id}/analyze-and-heal")
+async def analyze_and_heal_fault(fault_id: int):
+    """Analyze fault with AI and attempt automatic healing"""
+    try:
+        if not fault_detector:
+            return JSONResponse(
+                status_code=503,
+                content={"success": False, "error": "Fault detector not initialized"}
+            )
+        
+        if not auto_healer:
+            return JSONResponse(
+                status_code=503,
+                content={"success": False, "error": "Auto-healer not initialized"}
+            )
+        
+        faults = fault_detector.get_detected_faults(limit=100)
+        if fault_id >= len(faults):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": "Fault not found"}
+            )
+        
+        fault = faults[fault_id]
+        
+        # First, get AI analysis
+        analysis_result = None
+        if gemini_analyzer:
+            try:
+                metrics = get_system_metrics()
+            except:
+                metrics = None
+            
+            analysis_result = gemini_analyzer.analyze_cloud_fault(
+                fault,
+                container_logs=None,
+                system_metrics=metrics
+            )
+        
+        # Attempt healing
+        healing_result = None
+        healing_success = False
+        healing_error = None
+        
+        try:
+            # Use AI-provided solution if available
+            if analysis_result and analysis_result.get("status") == "success":
+                # Pass AI analysis to auto-healer
+                fault_with_analysis = fault.copy()
+                fault_with_analysis["ai_analysis"] = analysis_result.get("analysis", {})
+                healing_result = auto_healer.heal_cloud_fault(fault_with_analysis)
+            else:
+                # Fallback to standard healing
+                healing_result = auto_healer.heal_cloud_fault(fault)
+            
+            if healing_result:
+                healing_success = healing_result.get("success", False) if isinstance(healing_result, dict) else False
+                if not healing_success:
+                    healing_error = healing_result.get("error", "Healing failed") if isinstance(healing_result, dict) else "Unknown error"
+        except Exception as e:
+            logger.error(f"Error during healing: {e}")
+            healing_error = str(e)
+        
+        # Prepare response
+        response = {
+            "success": True,
+            "fault": fault,
+            "healing_attempted": True,
+            "healing_success": healing_success,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Add AI analysis if available
+        if analysis_result and analysis_result.get("status") == "success":
+            analysis = analysis_result.get("analysis", {})
+            response["analysis"] = {
+                "root_cause": analysis.get("root_cause", ""),
+                "solution": analysis.get("solution", ""),
+                "confidence": analysis.get("confidence", 0),
+                "full_analysis": analysis.get("full_analysis", "")
+            }
+        
+        # Add healing result
+        if healing_result:
+            response["healing_result"] = healing_result
+            if isinstance(healing_result, dict):
+                response["healing_steps"] = healing_result.get("actions", [])
+                response["healing_status"] = healing_result.get("status", "unknown")
+        
+        # Add error if healing failed
+        if not healing_success:
+            response["healing_error"] = healing_error
+            # Provide manual instructions from AI analysis
+            if analysis_result and analysis_result.get("status") == "success":
+                analysis = analysis_result.get("analysis", {})
+                response["manual_instructions"] = analysis.get("solution", "")
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error in analyze-and-heal: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+@app.post("/api/cloud/faults/{fault_id}/heal")
+async def heal_fault(fault_id: int, request: Request = None):
+    """Manually trigger healing for a specific fault (with optional AI analysis)"""
+    try:
+        use_ai_analysis = False
+        if request:
+            try:
+                body = await request.json()
+                use_ai_analysis = body.get("use_ai_analysis", False)
+            except:
+                pass
+        
+        if not auto_healer or not fault_detector:
+            return JSONResponse(
+                status_code=503,
+                content={"success": False, "error": "Auto-healer or fault detector not initialized"}
+            )
+        
+        faults = fault_detector.get_detected_faults(limit=100)
+        if fault_id >= len(faults):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": "Fault not found"}
+            )
+        
+        fault = faults[fault_id]
+        
+        # Get AI analysis if requested
+        ai_analysis = None
+        if use_ai_analysis and gemini_analyzer:
+            try:
+                metrics = get_system_metrics()
+            except:
+                metrics = None
+            
+            analysis_result = gemini_analyzer.analyze_cloud_fault(
+                fault,
+                container_logs=None,
+                system_metrics=metrics
+            )
+            
+            if analysis_result.get("status") == "success":
+                ai_analysis = analysis_result.get("analysis", {})
+                fault["ai_analysis"] = ai_analysis
+        
+        # Attempt healing
+        result = auto_healer.heal_cloud_fault(fault)
+        
+        response = {
+            "success": True,
+            "healing_result": result,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if ai_analysis:
+            response["ai_analysis"] = {
+                "root_cause": ai_analysis.get("root_cause", ""),
+                "solution": ai_analysis.get("solution", ""),
+                "confidence": ai_analysis.get("confidence", 0)
+            }
+        
+        return response
+        
     except Exception as e:
         logger.error(f"Error healing fault: {e}")
-        return {"success": False, "error": str(e)}
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
 
 @app.post("/api/cloud/faults/cleanup")
 async def cleanup_injected_faults():

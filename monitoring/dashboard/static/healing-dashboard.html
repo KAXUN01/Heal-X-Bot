@@ -7745,6 +7745,7 @@
                 }
                 
                 container.innerHTML = data.faults.map((fault, index) => {
+                    const faultId = index;
                     const severity = (fault.severity || 'medium').toLowerCase();
                     const severityColor = severity === 'critical' ? 'var(--accent-red)' : 
                                          severity === 'high' ? '#f97316' : 
@@ -7764,7 +7765,7 @@
                     }
                     
                     return `
-                        <div class="log-entry" style="padding: 1rem; margin-bottom: 0.75rem; border-left: 4px solid ${severityColor}; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                        <div class="fault-card" data-fault-id="${faultId}" data-fault-data='${JSON.stringify(fault)}' style="padding: 1rem; margin-bottom: 0.75rem; border-left: 4px solid ${severityColor}; background: rgba(0,0,0,0.2); border-radius: 4px;">
                             <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
                                 <div style="flex: 1;">
                                     <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
@@ -7773,6 +7774,7 @@
                                         <span class="status-badge" style="background: ${severityColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">
                                             ${severity.toUpperCase()}
                                         </span>
+                                        <span id="fault-${faultId}-status" class="healing-status-badge" style="display: none; margin-left: 0.5rem; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;"></span>
                                     </div>
                                     <div style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.9rem;">
                                         <strong>Service/Resource:</strong> ${fault.service || fault.resource || 'Unknown'}
@@ -7787,9 +7789,47 @@
                                     ${timestamp}
                                 </span>
                             </div>
+                            
+                            <!-- Action Buttons -->
+                            <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
+                                <button class="btn btn-primary" onclick="autoHealFault(${faultId})" id="fault-${faultId}-heal-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    <i class="fas fa-magic"></i> Auto-Heal
+                                </button>
+                                <button class="btn btn-secondary" onclick="viewHealingSteps(${faultId})" id="fault-${faultId}-steps-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    <i class="fas fa-list-ol"></i> View Healing Steps
+                                </button>
+                                <button class="btn btn-secondary" onclick="toggleManualInstructions(${faultId})" id="fault-${faultId}-manual-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    <i class="fas fa-book"></i> Manual Instructions
+                                </button>
+                            </div>
+                            
+                            <!-- AI Analysis Panel (initially hidden, auto-expanded for critical) -->
+                            <div id="fault-${faultId}-analysis" class="ai-analysis-panel" style="display: ${severity === 'critical' ? 'block' : 'none'}; margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 4px;">
+                                <div id="fault-${faultId}-analysis-content">
+                                    <div style="text-align: center; color: var(--text-secondary);">
+                                        <i class="fas fa-spinner fa-spin"></i> Analyzing fault with AI...
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Manual Instructions Panel (collapsible) -->
+                            <div id="fault-${faultId}-manual" class="manual-instructions-panel" style="display: none; margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 4px; border-left: 3px solid var(--accent-yellow);">
+                                <div id="fault-${faultId}-manual-content">
+                                    <div style="text-align: center; color: var(--text-secondary);">
+                                        Click "Manual Instructions" button to view steps
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     `;
                 }).join('');
+                
+                // Automatically trigger AI analysis for each fault
+                data.faults.forEach((fault, index) => {
+                    setTimeout(() => {
+                        analyzeFaultWithAI(index, fault);
+                    }, index * 200); // Stagger requests to avoid overwhelming the API
+                });
             } catch (error) {
                 console.error('Error loading active faults:', error);
                 
@@ -7801,6 +7841,558 @@
                     container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--accent-red);"><i class="fas fa-exclamation-circle"></i> Error loading faults: ${error.message}</div>`;
                 }
             }
+        }
+        
+        // Store AI analysis results for each fault
+        const faultAnalysisCache = new Map();
+        
+        async function analyzeFaultWithAI(faultId, faultData) {
+            const analysisPanel = document.getElementById(`fault-${faultId}-analysis`);
+            const analysisContent = document.getElementById(`fault-${faultId}-analysis-content`);
+            
+            if (!analysisPanel || !analysisContent) {
+                console.warn(`Analysis panel not found for fault ${faultId}`);
+                return;
+            }
+            
+            // Show loading state
+            analysisContent.innerHTML = '<div style="text-align: center; color: var(--text-secondary);"><i class="fas fa-spinner fa-spin"></i> Analyzing fault with AI...</div>';
+            analysisPanel.style.display = 'block';
+            
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+                
+                const response = await fetch(`/api/cloud/faults/${faultId}/analyze`, {
+                    method: 'POST',
+                    signal: controller.signal
+                });
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.success) {
+                    if (data.error && data.error.includes('not available')) {
+                        analysisContent.innerHTML = `
+                            <div style="padding: 1rem; background: rgba(255, 193, 7, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-yellow);">
+                                <strong style="color: var(--accent-yellow);"><i class="fas fa-exclamation-triangle"></i> AI Analysis Unavailable</strong>
+                                <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
+                                    ${data.error}. Please configure GEMINI_API_KEY to enable AI-powered fault analysis.
+                                </p>
+                            </div>
+                        `;
+                    } else {
+                        throw new Error(data.error || 'Analysis failed');
+                    }
+                    return;
+                }
+                
+                // Store analysis in cache
+                faultAnalysisCache.set(faultId, data);
+                
+                // Display analysis results
+                displayAIAnalysis(faultId, data);
+                
+                // Update Auto-Heal button state
+                const healBtn = document.getElementById(`fault-${faultId}-heal-btn`);
+                if (healBtn) {
+                    if (data.auto_healable) {
+                        healBtn.disabled = false;
+                        healBtn.style.opacity = '1';
+                    } else {
+                        healBtn.disabled = false; // Still allow manual attempt
+                        healBtn.style.opacity = '0.7';
+                        healBtn.title = 'Auto-healing may not be possible, but you can still attempt it';
+                    }
+                }
+                
+            } catch (error) {
+                console.error(`Error analyzing fault ${faultId}:`, error);
+                
+                if (error.name === 'AbortError') {
+                    analysisContent.innerHTML = `
+                        <div style="padding: 1rem; background: rgba(255, 87, 34, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-red);">
+                            <strong style="color: var(--accent-red);"><i class="fas fa-clock"></i> Analysis Timeout</strong>
+                            <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
+                                AI analysis took too long. Please try again or use manual instructions.
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    analysisContent.innerHTML = `
+                        <div style="padding: 1rem; background: rgba(255, 87, 34, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-red);">
+                            <strong style="color: var(--accent-red);"><i class="fas fa-exclamation-circle"></i> Analysis Failed</strong>
+                            <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
+                                ${error.message}
+                            </p>
+                        </div>
+                    `;
+                }
+            }
+        }
+        
+        function displayAIAnalysis(faultId, analysisData) {
+            const analysisContent = document.getElementById(`fault-${faultId}-analysis-content`);
+            if (!analysisContent) return;
+            
+            const analysis = analysisData.analysis || {};
+            const confidence = analysis.confidence || 0;
+            const confidenceColor = confidence >= 80 ? 'var(--accent-green)' : 
+                                   confidence >= 50 ? 'var(--accent-yellow)' : 
+                                   'var(--accent-red)';
+            const confidenceLabel = confidence >= 80 ? 'High' : 
+                                   confidence >= 50 ? 'Medium' : 
+                                   'Low';
+            
+            let html = `
+                <div style="margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <h4 style="margin: 0; color: var(--text-primary);">
+                            <i class="fas fa-brain"></i> AI Analysis Results
+                        </h4>
+                        <span style="padding: 0.25rem 0.75rem; background: ${confidenceColor}; color: white; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">
+                            ${confidenceLabel} Confidence (${confidence}%)
+                        </span>
+                    </div>
+                </div>
+            `;
+            
+            if (analysis.root_cause) {
+                html += `
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: var(--text-primary); display: block; margin-bottom: 0.5rem;">
+                            <i class="fas fa-search"></i> Root Cause:
+                        </strong>
+                        <div style="padding: 0.75rem; background: rgba(0,0,0,0.2); border-radius: 4px; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
+                            ${analysis.root_cause}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (analysis.why) {
+                html += `
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: var(--text-primary); display: block; margin-bottom: 0.5rem;">
+                            <i class="fas fa-question-circle"></i> Why This Happened:
+                        </strong>
+                        <div style="padding: 0.75rem; background: rgba(0,0,0,0.2); border-radius: 4px; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
+                            ${analysis.why}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (analysisData.auto_healable && analysisData.healing_steps && analysisData.healing_steps.length > 0) {
+                html += `
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: var(--accent-green); display: block; margin-bottom: 0.5rem;">
+                            <i class="fas fa-check-circle"></i> Automatic Healing Available
+                        </strong>
+                        <div style="padding: 0.75rem; background: rgba(76, 175, 80, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-green);">
+                            <p style="margin: 0 0 0.5rem 0; color: var(--text-secondary); font-size: 0.9rem;">
+                                This fault can be automatically healed. Click "Auto-Heal" to proceed.
+                            </p>
+                        </div>
+                    </div>
+                `;
+            } else if (analysis.solution) {
+                html += `
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: var(--accent-yellow); display: block; margin-bottom: 0.5rem;">
+                            <i class="fas fa-info-circle"></i> Solution:
+                        </strong>
+                        <div style="padding: 0.75rem; background: rgba(255, 193, 7, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-yellow); color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
+                            ${analysis.solution}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            if (analysis.prevention) {
+                html += `
+                    <div style="margin-bottom: 1rem;">
+                        <strong style="color: var(--text-primary); display: block; margin-bottom: 0.5rem;">
+                            <i class="fas fa-shield-alt"></i> Prevention:
+                        </strong>
+                        <div style="padding: 0.75rem; background: rgba(0,0,0,0.2); border-radius: 4px; color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5;">
+                            ${analysis.prevention}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            analysisContent.innerHTML = html;
+        }
+        
+        function getFaultData(faultId) {
+            const faultCard = document.querySelector(`.fault-card[data-fault-id="${faultId}"]`);
+            if (faultCard) {
+                const faultDataStr = faultCard.getAttribute('data-fault-data');
+                if (faultDataStr) {
+                    try {
+                        return JSON.parse(faultDataStr);
+                    } catch (e) {
+                        console.error('Error parsing fault data:', e);
+                    }
+                }
+            }
+            return null;
+        }
+        
+        async function viewHealingSteps(faultId) {
+            const faultData = getFaultData(faultId);
+            if (!faultData) {
+                showNotification('Fault data not found', 'error');
+                return;
+            }
+            
+            // Get analysis from cache or fetch it
+            let analysisData = faultAnalysisCache.get(faultId);
+            
+            if (!analysisData) {
+                // Fetch analysis if not cached
+                try {
+                    const response = await fetch(`/api/cloud/faults/${faultId}/analyze`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.success) {
+                            analysisData = data;
+                            faultAnalysisCache.set(faultId, data);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error fetching analysis:', error);
+                }
+            }
+            
+            if (!analysisData || !analysisData.auto_healable) {
+                showNotification('No automatic healing steps available for this fault. Check manual instructions.', 'warning');
+                toggleManualInstructions(faultId);
+                return;
+            }
+            
+            const healingSteps = analysisData.healing_steps || [];
+            const analysis = analysisData.analysis || {};
+            
+            // Create modal or expandable section to show healing steps
+            const stepsHtml = `
+                <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 2rem;">
+                    <div style="background: var(--bg-primary); border-radius: 8px; padding: 2rem; max-width: 600px; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                            <h3 style="margin: 0; color: var(--text-primary);">
+                                <i class="fas fa-list-ol"></i> Automatic Healing Steps
+                            </h3>
+                            <button onclick="this.closest('div[style*=\"position: fixed\"]').remove()" style="background: none; border: none; color: var(--text-secondary); font-size: 1.5rem; cursor: pointer; padding: 0.5rem;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(76, 175, 80, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-green);">
+                            <strong style="color: var(--accent-green);">Fault:</strong> ${(faultData.type || 'unknown').replace(/_/g, ' ')}
+                            <br>
+                            <strong style="color: var(--text-secondary);">Service:</strong> ${faultData.service || faultData.resource || 'Unknown'}
+                        </div>
+                        
+                        ${analysis.root_cause ? `
+                            <div style="margin-bottom: 1rem;">
+                                <strong style="color: var(--text-primary); display: block; margin-bottom: 0.5rem;">Root Cause:</strong>
+                                <div style="padding: 0.75rem; background: rgba(0,0,0,0.2); border-radius: 4px; color: var(--text-secondary); font-size: 0.9rem;">
+                                    ${analysis.root_cause}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        <div style="margin-bottom: 1rem;">
+                            <strong style="color: var(--text-primary); display: block; margin-bottom: 0.5rem;">
+                                <i class="fas fa-cog fa-spin"></i> Steps That Will Be Executed:
+                            </strong>
+                            <ol style="margin: 0; padding-left: 1.5rem; color: var(--text-secondary);">
+                                ${healingSteps.map((step, idx) => `
+                                    <li style="margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                                        ${step}
+                                    </li>
+                                `).join('')}
+                            </ol>
+                        </div>
+                        
+                        <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+                            <button class="btn btn-primary" onclick="autoHealFault(${faultId}); this.closest('div[style*=\"position: fixed\"]').remove();" style="flex: 1; padding: 0.75rem;">
+                                <i class="fas fa-magic"></i> Proceed with Auto-Healing
+                            </button>
+                            <button class="btn btn-secondary" onclick="this.closest('div[style*=\"position: fixed\"]').remove()" style="flex: 1; padding: 0.75rem;">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', stepsHtml);
+        }
+        
+        async function autoHealFault(faultId) {
+            const faultData = getFaultData(faultId);
+            if (!faultData) {
+                showNotification('Fault data not found', 'error');
+                return;
+            }
+            
+            // Get analysis to show in confirmation
+            let analysisData = faultAnalysisCache.get(faultId);
+            const healingSteps = analysisData?.healing_steps || [];
+            const analysis = analysisData?.analysis || {};
+            
+            // Show confirmation dialog
+            const confirmHtml = `
+                <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10001; display: flex; align-items: center; justify-content: center; padding: 2rem;">
+                    <div style="background: var(--bg-primary); border-radius: 8px; padding: 2rem; max-width: 600px; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
+                        <div style="margin-bottom: 1.5rem;">
+                            <h3 style="margin: 0 0 0.5rem 0; color: var(--text-primary);">
+                                <i class="fas fa-exclamation-triangle" style="color: var(--accent-yellow);"></i> Confirm Auto-Healing
+                            </h3>
+                            <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
+                                You are about to trigger automatic healing for this fault. Please review the details below.
+                            </p>
+                        </div>
+                        
+                        <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                            <strong style="color: var(--text-primary); display: block; margin-bottom: 0.5rem;">Fault Details:</strong>
+                            <div style="color: var(--text-secondary); font-size: 0.9rem;">
+                                <strong>Type:</strong> ${(faultData.type || 'unknown').replace(/_/g, ' ')}<br>
+                                <strong>Service:</strong> ${faultData.service || faultData.resource || 'Unknown'}<br>
+                                <strong>Severity:</strong> ${(faultData.severity || 'medium').toUpperCase()}
+                            </div>
+                        </div>
+                        
+                        ${analysis.root_cause ? `
+                            <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                                <strong style="color: var(--text-primary); display: block; margin-bottom: 0.5rem;">Root Cause:</strong>
+                                <div style="color: var(--text-secondary); font-size: 0.9rem;">
+                                    ${analysis.root_cause}
+                                </div>
+                            </div>
+                        ` : ''}
+                        
+                        ${healingSteps.length > 0 ? `
+                            <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(76, 175, 80, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-green);">
+                                <strong style="color: var(--accent-green); display: block; margin-bottom: 0.5rem;">
+                                    <i class="fas fa-list-ol"></i> Healing Steps That Will Be Executed:
+                                </strong>
+                                <ol style="margin: 0.5rem 0 0 0; padding-left: 1.5rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                    ${healingSteps.map(step => `<li style="margin-bottom: 0.25rem;">${step}</li>`).join('')}
+                                </ol>
+                                <button onclick="viewHealingSteps(${faultId})" style="margin-top: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-secondary); border: 1px solid var(--accent-green); color: var(--accent-green); border-radius: 4px; cursor: pointer; font-size: 0.85rem;">
+                                    <i class="fas fa-eye"></i> View Detailed Steps
+                                </button>
+                            </div>
+                        ` : `
+                            <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(255, 193, 7, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-yellow);">
+                                <strong style="color: var(--accent-yellow); display: block; margin-bottom: 0.5rem;">
+                                    <i class="fas fa-info-circle"></i> Note:
+                                </strong>
+                                <div style="color: var(--text-secondary); font-size: 0.9rem;">
+                                    The system will attempt to heal this fault using standard healing procedures. AI analysis may not have provided specific steps.
+                                </div>
+                            </div>
+                        `}
+                        
+                        <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+                            <button id="confirm-heal-btn" class="btn btn-primary" style="flex: 1; padding: 0.75rem;">
+                                <i class="fas fa-check"></i> Confirm & Proceed
+                            </button>
+                            <button class="btn btn-secondary" onclick="this.closest('div[style*=\"position: fixed\"]').remove()" style="flex: 1; padding: 0.75rem;">
+                                <i class="fas fa-times"></i> Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            const confirmDiv = document.createElement('div');
+            confirmDiv.innerHTML = confirmHtml;
+            document.body.appendChild(confirmDiv);
+            
+            // Set up confirm button handler
+            const confirmBtn = confirmDiv.querySelector('#confirm-heal-btn');
+            confirmBtn.onclick = async () => {
+                confirmDiv.remove();
+                
+                // Update status badge
+                const statusBadge = document.getElementById(`fault-${faultId}-status`);
+                if (statusBadge) {
+                    statusBadge.style.display = 'inline-block';
+                    statusBadge.textContent = 'Healing...';
+                    statusBadge.style.background = 'var(--accent-yellow)';
+                }
+                
+                // Disable buttons during healing
+                const healBtn = document.getElementById(`fault-${faultId}-heal-btn`);
+                if (healBtn) healBtn.disabled = true;
+                
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout for healing
+                    
+                    const response = await fetch(`/api/cloud/faults/${faultId}/analyze-and-heal`, {
+                        method: 'POST',
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (statusBadge) {
+                        if (data.healing_success) {
+                            statusBadge.textContent = 'Healed';
+                            statusBadge.style.background = 'var(--accent-green)';
+                            showNotification('Fault healed successfully!', 'success');
+                        } else {
+                            statusBadge.textContent = 'Failed';
+                            statusBadge.style.background = 'var(--accent-red)';
+                            showNotification(`Healing failed: ${data.healing_error || 'Unknown error'}`, 'error');
+                            
+                            // Show manual instructions if healing failed
+                            if (data.manual_instructions) {
+                                displayManualInstructions(faultId, data.manual_instructions);
+                                toggleManualInstructions(faultId);
+                            }
+                        }
+                    }
+                    
+                    // Refresh fault list after a delay
+                    setTimeout(() => {
+                        updateActiveFaults();
+                    }, 2000);
+                    
+                } catch (error) {
+                    console.error(`Error healing fault ${faultId}:`, error);
+                    
+                    if (statusBadge) {
+                        statusBadge.textContent = 'Error';
+                        statusBadge.style.background = 'var(--accent-red)';
+                    }
+                    
+                    showNotification(`Healing error: ${error.message}`, 'error');
+                } finally {
+                    if (healBtn) healBtn.disabled = false;
+                }
+            };
+        }
+        
+        function toggleManualInstructions(faultId) {
+            const manualPanel = document.getElementById(`fault-${faultId}-manual`);
+            if (!manualPanel) return;
+            
+            if (manualPanel.style.display === 'none') {
+                manualPanel.style.display = 'block';
+                
+                // Load manual instructions if not already loaded
+                const manualContent = document.getElementById(`fault-${faultId}-manual-content`);
+                if (manualContent && manualContent.textContent.includes('Click "Manual Instructions"')) {
+                    loadManualInstructions(faultId);
+                }
+            } else {
+                manualPanel.style.display = 'none';
+            }
+        }
+        
+        async function loadManualInstructions(faultId) {
+            const manualContent = document.getElementById(`fault-${faultId}-manual-content`);
+            if (!manualContent) return;
+            
+            manualContent.innerHTML = '<div style="text-align: center; color: var(--text-secondary);"><i class="fas fa-spinner fa-spin"></i> Loading manual instructions...</div>';
+            
+            try {
+                const analysisData = faultAnalysisCache.get(faultId);
+                
+                if (analysisData && analysisData.manual_instructions) {
+                    displayManualInstructions(faultId, analysisData.manual_instructions);
+                } else {
+                    // Fetch analysis if not cached
+                    const response = await fetch(`/api/cloud/faults/${faultId}/analyze`);
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.success) {
+                            faultAnalysisCache.set(faultId, data);
+                            displayManualInstructions(faultId, data.manual_instructions || data.analysis?.solution || 'No manual instructions available.');
+                        } else {
+                            throw new Error(data.error || 'Failed to load instructions');
+                        }
+                    } else {
+                        throw new Error('Failed to fetch instructions');
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading manual instructions:', error);
+                manualContent.innerHTML = `
+                    <div style="padding: 1rem; background: rgba(255, 87, 34, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-red);">
+                        <strong style="color: var(--accent-red);"><i class="fas fa-exclamation-circle"></i> Error</strong>
+                        <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
+                            ${error.message}
+                        </p>
+                    </div>
+                `;
+            }
+        }
+        
+        function displayManualInstructions(faultId, instructions) {
+            const manualContent = document.getElementById(`fault-${faultId}-manual-content`);
+            if (!manualContent) return;
+            
+            // Parse instructions into steps if they contain numbered lists or bullet points
+            let steps = [];
+            if (typeof instructions === 'string') {
+                // Try to extract steps from the instructions
+                const lines = instructions.split('\n');
+                lines.forEach(line => {
+                    line = line.trim();
+                    if (line && (line.match(/^\d+[\.\)]/) || line.startsWith('-') || line.startsWith('*') || line.startsWith('•'))) {
+                        steps.push(line.replace(/^[\d\.\)\-\*\•]\s*/, ''));
+                    }
+                });
+                
+                if (steps.length === 0) {
+                    steps = [instructions];
+                }
+            } else if (Array.isArray(instructions)) {
+                steps = instructions;
+            } else {
+                steps = [String(instructions)];
+            }
+            
+            let html = `
+                <div style="margin-bottom: 0.5rem;">
+                    <strong style="color: var(--accent-yellow); display: block; margin-bottom: 0.5rem;">
+                        <i class="fas fa-book"></i> Manual Healing Instructions
+                    </strong>
+                    <p style="margin: 0 0 0.75rem 0; color: var(--text-secondary); font-size: 0.9rem;">
+                        Follow these steps to manually resolve this fault:
+                    </p>
+                </div>
+                <ol style="margin: 0; padding-left: 1.5rem; color: var(--text-secondary);">
+                    ${steps.map((step, idx) => {
+                        // Check if step contains code/commands
+                        const hasCode = step.includes('`') || step.match(/sudo|systemctl|kill|restart|service/i);
+                        return `
+                            <li style="margin-bottom: 0.75rem; padding: 0.75rem; background: rgba(0,0,0,0.2); border-radius: 4px; line-height: 1.5;">
+                                ${hasCode ? `<code style="background: rgba(0,0,0,0.3); padding: 0.25rem 0.5rem; border-radius: 3px; font-family: 'Courier New', monospace; font-size: 0.85rem;">${step}</code>` : step}
+                                ${hasCode ? `<button onclick="navigator.clipboard.writeText('${step.replace(/'/g, "\\'")}'); showNotification('Command copied to clipboard', 'success');" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--accent-yellow); color: var(--accent-yellow); border-radius: 3px; cursor: pointer; font-size: 0.75rem;"><i class="fas fa-copy"></i></button>` : ''}
+                            </li>
+                        `;
+                    }).join('')}
+                </ol>
+            `;
+            
+            manualContent.innerHTML = html;
         }
         
         function updateHealingPerformanceChart(history) {

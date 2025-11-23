@@ -115,7 +115,7 @@ def configure_env():
     configure_ports = get_user_input("Configure custom ports? (y/n)", default="n")
     if configure_ports.lower() == 'y':
         config['MODEL_PORT'] = get_user_input("Model API Port", default="8080")
-        config['DASHBOARD_PORT'] = get_user_input("Dashboard Port", default="3001")
+        config['HEALING_DASHBOARD_PORT'] = get_user_input("Healing Dashboard Port", default="5001")
         config['NETWORK_ANALYZER_PORT'] = get_user_input("Network Analyzer Port", default="8000")
         config['INCIDENT_BOT_PORT'] = get_user_input("Incident Bot Port", default="8000")
         config['MONITORING_SERVER_PORT'] = get_user_input("Monitoring Server Port", default="5000")
@@ -188,7 +188,7 @@ def verify_setup():
         print("2. Start the monitoring server:")
         print("   cd monitoring/server")
         print("   python app.py")
-        print("3. Access dashboard at http://localhost:3001")
+        print("3. Access dashboard at http://localhost:5001")
         print("4. Click 'Logs & AI Analysis' tab to use Gemini AI")
         print("\n" + "="*70)
         

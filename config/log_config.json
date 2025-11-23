@@ -1,19 +1,19 @@
 {
   "log_rotation": {
     "enabled": true,
-    "max_file_size_mb": 5,
-    "backup_count": 3,
-    "auto_cleanup_days": 7
+    "max_file_size_mb": 3,
+    "backup_count": 2,
+    "auto_cleanup_days": 5
   },
   "memory_limits": {
-    "system_logs_in_memory": 1000,
-    "centralized_logs_in_memory": 2000,
-    "max_log_entry_size_bytes": 10240
+    "system_logs_in_memory": 500,
+    "centralized_logs_in_memory": 1000,
+    "max_log_entry_size_bytes": 5120
   },
   "collection_settings": {
     "docker_tail_lines": 10,
     "systemd_tail_lines": 20,
-    "collection_interval_seconds": 30
+    "collection_interval_seconds": 60
   },
   "cleanup_schedule": {
     "auto_cleanup_enabled": true,

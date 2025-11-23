@@ -47,7 +47,73 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
 
 ## 🚀 Quick Start
 
-### 🛡️ **NEW: Unified Dashboard (Recommended)**
+### ⚡ **Unified Startup Script (Recommended)**
+
+**The simplest way to start Heal-X-Bot - one command does everything:**
+
+```bash
+# Start all services (first time setup included)
+./start.sh
+
+# Check service status
+./start.sh status
+
+# Stop all services
+./start.sh stop
+
+# Restart all services
+./start.sh restart
+
+# Get help
+./start.sh --help
+```
+
+**What the script does automatically:**
+- ✅ Checks Python version (requires 3.8+)
+- ✅ Creates virtual environment
+- ✅ Installs all dependencies
+- ✅ Sets up environment file
+- ✅ Starts all services in correct order
+- ✅ Verifies health of each service
+- ✅ Handles port conflicts
+- ✅ Provides clear error messages
+
+**Access Points:**
+- 🛡️ **Healing Dashboard**: http://localhost:5001
+- 📈 **Monitoring Server**: http://localhost:5000
+- 🤖 **DDoS Model API**: http://localhost:8080
+- 🔍 **Network Analyzer**: http://localhost:8000
+- 🚨 **Incident Bot**: http://localhost:8001
+
+📖 **See [QUICK_START.md](QUICK_START.md) for detailed setup instructions**
+
+---
+
+### 🎯 **Alternative: Modular CLI Interface**
+
+**Python-based command-line interface:**
+
+```bash
+# Start all services
+python3 -m healx start
+
+# Stop all services
+python3 -m healx stop
+
+# Check service status
+python3 -m healx status
+
+# View service logs
+python3 -m healx logs <service_name>
+```
+
+The modular structure provides:
+- **Unified configuration**: Centralized config management via `monitoring/server/core/config.py`
+- **Service manager**: Unified service initialization and health checking
+- **Modular healing**: Healing actions organized in `monitoring/server/healing/actions/`
+- **Easy extensibility**: Add new healing actions by extending the actions package
+
+### 🛡️ **Unified Dashboard (Alternative)**
 
 **Complete ML Monitoring + System Healing Control Center:**
 
@@ -68,11 +134,10 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
 - 🤖 AI Log Analysis (TF-IDF)
 - ⚡ CLI Terminal Integration
 
-**Two Dashboards in One:**
-- **ML Monitoring**: `http://localhost:3001` (Original features)
-- **Healing Dashboard**: `http://localhost:3001/static/healing-dashboard.html` (New features)
+**Healing Dashboard:**
+- **Main Dashboard**: `http://localhost:5001` (All features including ML monitoring, healing, and system management)
 
-📖 **[Unified Guide](docs/guides/UNIFIED_DASHBOARD_GUIDE.md)** | 🧪 **Test**: `python3 test-unified-dashboard.py`
+📖 **[Healing Dashboard Guide](docs/guides/HEALING_DASHBOARD_GUIDE.md)**
 
 ---
 
@@ -113,8 +178,9 @@ sudo ./scripts/deployment/start-healing-bot-ubuntu.sh --install-deps
 ```
 
 ### Prerequisites
-- Python 3.8 or higher
-- pip (Python package manager)
+- **Python 3.8 or higher** (check with `python3 --version`)
+- **pip** (Python package manager)
+- **curl** (for health checks, usually pre-installed)
 - Docker (optional, for containerized deployment)
 
 ### Installation
@@ -122,34 +188,35 @@ sudo ./scripts/deployment/start-healing-bot-ubuntu.sh --install-deps
 1. **Clone the repository:**
    ```bash
    git clone <repository-url>
-   cd Healing-bot
+   cd Heal-X-Bot
    ```
 
-2. **Quick Start (NEW):**
+2. **Start the system:**
    ```bash
-   # Auto-detect and start everything
-   python run-healing-bot.py
+   ./start.sh
    ```
-
-3. **Traditional Setup:**
-   ```bash
-   # Run setup script
-   python setup.py
    
-   # Start with individual scripts
-   # Windows: start-dev.bat
-   # Linux/Mac: ./start-dev.sh
+   That's it! The script handles everything automatically.
+
+3. **Alternative methods:**
+   ```bash
+   # Python launcher
+   python3 run-healing-bot.py
+   
+   # Or use the CLI module
+   python3 -m healx start
    ```
 
 ### 🌐 Access Points
 
 Once running, access the system at:
 
-- **📊 Dashboard**: http://localhost:3001 (Main UI)
-- **🤖 Model API**: http://localhost:8080
-- **🚨 Incident Bot**: http://localhost:8000
-- **📈 Monitoring Server**: http://localhost:5000 (API-only)
-- **📊 Prometheus**: http://localhost:9090 (Docker mode)
+- **🛡️ Healing Dashboard**: http://localhost:5001 (Main UI)
+- **📈 Monitoring Server**: http://localhost:5000
+- **🤖 DDoS Model API**: http://localhost:8080
+- **🔍 Network Analyzer**: http://localhost:8000
+- **🚨 Incident Bot**: http://localhost:8001
+- **📊 Prometheus**: http://localhost:9090 (Docker mode only)
 
 ### 🎛️ **Unified Launcher Features**
 
@@ -189,7 +256,7 @@ python run-healing-bot.py --setup-only
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
 │   Dashboard     │    │  Network        │    │   ML Model      │
-│   (Port 3001)   │◄──►│  Analyzer       │◄──►│   (Port 8080)   │
+│   (Port 5001)   │◄──►│  Analyzer       │◄──►│   (Port 8080)   │
 │                 │    │  (Port 8000)    │    │                 │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                       │                       │
@@ -226,9 +293,10 @@ S3_BUCKET_NAME=your_bucket_name
 ### Port Configuration
 
 The system uses the following ports by default:
-- **Dashboard**: 3001 (Main UI)
+- **Healing Dashboard**: 5001 (Main UI)
 - **Model API**: 8080
-- **Incident Bot**: 8000
+- **Incident Bot**: 8001
+- **Network Analyzer**: 8000
 - **Monitoring Server**: 5000 (API-only)
 - **Prometheus**: 9090
 
@@ -287,37 +355,81 @@ The system uses the following ports by default:
 ### **Project Structure**
 ```
 Healing-bot/
-├── incident-bot/          # AI incident response bot
-├── model/                 # ML DDoS detection model
+├── incident-bot/              # AI incident response bot
+├── model/                     # ML DDoS detection model
 ├── monitoring/
-│   ├── dashboard/         # Web dashboard
-│   ├── server/           # Network analyzer & IP blocker
-│   └── prometheus/       # Metrics collection
-├── setup.py              # Setup script
-├── requirements.txt      # Dependencies
-└── README.md            # This file
+│   ├── dashboard/             # Web dashboard
+│   ├── server/                # Monitoring server
+│   │   ├── core/              # Core modules (NEW)
+│   │   │   ├── config.py      # Configuration management
+│   │   │   └── service_manager.py  # Service initialization
+│   │   ├── healing/           # Auto-healing system (NEW)
+│   │   │   ├── orchestrator.py  # Main healing orchestration
+│   │   │   ├── actions/         # Healing actions
+│   │   │   │   ├── system.py    # System actions
+│   │   │   │   ├── container.py # Container actions
+│   │   │   │   └── resource.py  # Resource actions
+│   │   │   ├── verification.py  # Verification logic
+│   │   │   ├── notifications.py # Notification logic
+│   │   │   ├── instructions.py  # Manual instructions
+│   │   │   └── history.py       # Healing history
+│   │   ├── app.py             # Flask API
+│   │   └── network_analyzer.py # Network analyzer
+│   └── prometheus/            # Metrics collection
+├── healx/                     # CLI package (NEW)
+│   ├── cli.py                 # Command-line interface
+│   └── __main__.py            # Module entry point
+├── setup.py                   # Setup script
+├── requirements.txt           # Dependencies
+└── README.md                  # This file
 ```
 
 ### **Key Components**
 
-1. **IP Blocker** (`monitoring/server/ip_blocker.py`)
+1. **CLI Interface** (`healx/cli.py`) (NEW)
+   - Unified command-line interface
+   - Start, stop, status, and logs commands
+   - Easy service management
+
+2. **Configuration Management** (`monitoring/server/core/config.py`) (NEW)
+   - Centralized configuration loading
+   - Environment variable management
+   - Configuration validation
+
+3. **Service Manager** (`monitoring/server/core/service_manager.py`) (NEW)
+   - Unified service initialization
+   - Dependency management
+   - Health checking
+
+4. **Auto-Healing System** (`monitoring/server/healing/`) (NEW - Modularized)
+   - **Orchestrator**: Main healing coordination (`orchestrator.py`)
+   - **Actions**: Modular healing actions
+     - System actions: service restart, permissions, cache clearing
+     - Container actions: container restart, start, recreate
+     - Resource actions: resource cleanup, network restore
+   - **Verification**: Healing verification logic
+   - **Notifications**: Discord/notification integration
+   - **Instructions**: Manual instruction generation
+   - **History**: Healing attempt tracking
+
+5. **IP Blocker** (`monitoring/server/ip_blocker.py`)
    - Automatic IP blocking logic
    - SQLite database management
    - Statistics tracking
 
-2. **Monitoring Server** (`monitoring/server/app.py`)
+6. **Monitoring Server** (`monitoring/server/app.py`)
    - System log collection and analysis
    - Critical services monitoring
    - API endpoints for IP management
    - AI-powered log analysis
    - WebSocket integration
 
-3. **Dashboard** (`monitoring/dashboard/`)
+7. **Dashboard** (`monitoring/dashboard/`)
    - React-based web interface
    - Real-time updates
    - IP management controls
 
-4. **ML Model** (`model/`)
+8. **ML Model** (`model/`)
    - TensorFlow-based DDoS detection
    - XGBoost-based Predictive Maintenance (NEW)
    - Feature extraction and analysis
@@ -328,7 +440,7 @@ Healing-bot/
 
 ### **Common Issues**
 
-1. **Port Conflicts**: Ensure ports 3001, 8080, 8000 are available
+1. **Port Conflicts**: Ensure ports 5001, 8080, 8000, 8001 are available
 2. **Python Dependencies**: Run `pip install -r requirements.txt`
 3. **Database Issues**: Check SQLite file permissions
 4. **API Connectivity**: Verify service communication
@@ -379,14 +491,15 @@ docker-compose -f config/docker-compose.yml up -d
 
 # 3. Test service health
 curl http://localhost:8080/health    # Model API
-curl http://localhost:8000/health    # Incident Bot
-curl http://localhost:3001/api/health # Dashboard
+curl http://localhost:8000/health    # Network Analyzer
+curl http://localhost:5001/api/health # Healing Dashboard
 curl http://localhost:5000/health    # Monitoring Server
+curl http://localhost:8001/health    # Incident Bot
 
 # 4. Test metrics endpoints
 curl http://localhost:8080/metrics   # Model API metrics
-curl http://localhost:8000/metrics   # Incident Bot metrics
-curl http://localhost:3001/metrics   # Dashboard metrics
+curl http://localhost:8000/metrics   # Network Analyzer metrics
+curl http://localhost:5001/metrics   # Healing Dashboard metrics
 curl http://localhost:5000/metrics   # Monitoring Server metrics
 
 # 5. Access Prometheus (Docker mode)

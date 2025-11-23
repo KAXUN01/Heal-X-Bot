@@ -22,10 +22,28 @@ cd "$SCRIPT_DIR"
 MONITOR_INTERVAL=10  # Check service health every 10 seconds
 RESTART_DELAY=5      # Wait 5 seconds before restarting a crashed service
 MAX_RESTARTS=5       # Maximum restart attempts per service in 5 minutes
-HEALTH_CHECK_TIMEOUT=3  # Timeout for health checks in seconds
+HEALTH_CHECK_TIMEOUT=5  # Timeout for health checks in seconds
+STARTUP_WAIT_TIME=15    # Wait time for services to fully start before health check
 PID_DIR="$SCRIPT_DIR/.pids"
 LOG_DIR="$SCRIPT_DIR/logs"
 STATUS_FILE="$SCRIPT_DIR/.service_status.json"
+
+# Ensure directories and files exist with correct permissions
+mkdir -p "$PID_DIR" "$LOG_DIR"
+
+# Fix permissions if file exists but is owned by root
+if [ -f "$STATUS_FILE" ] && [ ! -w "$STATUS_FILE" ]; then
+    log_warn "Status file not writable, removing and recreating..."
+    rm -f "$STATUS_FILE" 2>/dev/null || true
+fi
+
+# Create status file with proper permissions
+touch "$STATUS_FILE" 2>/dev/null || {
+    log_error "Cannot create status file: $STATUS_FILE"
+    log_error "Please check directory permissions or run: sudo chown -R $USER:$USER $SCRIPT_DIR"
+    exit 1
+}
+chmod 644 "$STATUS_FILE" 2>/dev/null || true
 
 # Service definitions
 declare -A SERVICES
@@ -34,7 +52,7 @@ SERVICES[network-analyzer]="Network Analyzer|monitoring/server|network_analyzer.
 # Removed dashboard service (port 3001) - using healing-dashboard (port 5001) instead
 SERVICES[incident-bot]="Incident Bot|incident-bot|main.py|8001|PORT=8001|http://localhost:8001/health"
 SERVICES[monitoring-server]="Monitoring Server|monitoring/server|app.py|5000||http://localhost:5000/health"
-SERVICES[healing-dashboard]="Healing Dashboard API|monitoring/server|healing_dashboard_api.py|5001|HEALING_DASHBOARD_PORT=5001|http://localhost:5001/"
+SERVICES[healing-dashboard]="Healing Dashboard API|monitoring/server|healing_dashboard_api.py|5001|HEALING_DASHBOARD_PORT=5001|http://localhost:5001/api/health"
 
 # Service status tracking
 declare -A SERVICE_PIDS
@@ -76,6 +94,16 @@ mkdir -p "$PID_DIR" "$LOG_DIR"
 # ============================================================================
 
 save_service_status() {
+    # Ensure file is writable, recreate if needed
+    if [ ! -w "$STATUS_FILE" ] 2>/dev/null; then
+        rm -f "$STATUS_FILE" 2>/dev/null || true
+        touch "$STATUS_FILE" 2>/dev/null || {
+            log_error "Cannot write to status file: $STATUS_FILE"
+            return 1
+        }
+        chmod 644 "$STATUS_FILE" 2>/dev/null || true
+    fi
+    
     local status_json="{"
     local first=true
     for service in "${!SERVICES[@]}"; do
@@ -105,15 +133,31 @@ check_service_health() {
         return 0  # No health check URL, assume healthy if process is running
     fi
     
-    # Try to check health endpoint
-    local response_code
-    response_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$HEALTH_CHECK_TIMEOUT" "$health_url" 2>/dev/null || echo "000")
+    # Try to check health endpoint with retries
+    local response_code="000"
+    local retry=0
+    local max_retries=2
     
-    if [ "$response_code" = "200" ] || [ "$response_code" = "000" ]; then
-        return 0  # Healthy or couldn't check (process might still be starting)
-    else
-        return 1  # Unhealthy
-    fi
+    while [ $retry -lt $max_retries ]; do
+        response_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time "$HEALTH_CHECK_TIMEOUT" --connect-timeout 2 "$health_url" 2>/dev/null || echo "000")
+        
+        # If we get 200, service is healthy
+        if [ "$response_code" = "200" ]; then
+            return 0  # Healthy
+        fi
+        
+        # If connection failed, retry once
+        if [ "$response_code" = "000" ] && [ $retry -lt $((max_retries - 1)) ]; then
+            sleep 1
+            retry=$((retry + 1))
+            continue
+        fi
+        
+        break
+    done
+    
+    # Return failure for non-200 or persistent connection failures
+    return 1
 }
 
 is_service_running() {
@@ -202,6 +246,36 @@ start_service() {
         log_info "$name started successfully (PID: $pid, Port: $port)"
         SERVICE_STATUS[$service]="running"
         save_service_status
+        
+        # For services with health URLs, wait longer for service to initialize
+        if [ -n "$health_url" ] && [ "$health_url" != "null" ]; then
+            log_info "Waiting for $name to initialize (this may take up to ${STARTUP_WAIT_TIME}s)..."
+            local health_ok=0
+            local attempt=0
+            local max_attempts=$STARTUP_WAIT_TIME  # Wait up to STARTUP_WAIT_TIME seconds
+            
+            while [ $attempt -lt $max_attempts ]; do
+                sleep 1
+                if check_service_health "$service"; then
+                    health_ok=1
+                    log_info "$name is healthy and ready"
+                    break
+                fi
+                attempt=$((attempt + 1))
+                # Show progress every 5 seconds
+                if [ $((attempt % 5)) -eq 0 ] && [ $attempt -gt 0 ]; then
+                    log_info "  Still waiting for $name... (${attempt}s elapsed)"
+                fi
+            done
+            
+            if [ $health_ok -eq 1 ]; then
+                log_info "$name is healthy and ready"
+            else
+                log_warn "$name started but health check not responding after ${STARTUP_WAIT_TIME}s (service may still be initializing)"
+                log_warn "   Service will continue running - health check will retry in monitoring loop"
+            fi
+        fi
+        
         return 0
     else
         log_error "$name failed to start - check $service_log"
@@ -282,20 +356,40 @@ monitor_services() {
                     save_service_status
                 fi
             else
-                # Service is running, check health
-                if ! check_service_health "$service"; then
-                    log_warn "$name health check failed"
-                    if [ "${SERVICE_STATUS[$service]}" = "running" ]; then
-                        SERVICE_STATUS[$service]="unhealthy"
-                        if can_restart_service "$service"; then
-                            log_warn "Restarting $name due to health check failure"
-                            restart_service "$service"
+                # Service is running, check health (but be more lenient during startup)
+                local pid="${SERVICE_PIDS[$service]:-0}"
+                local should_check_health=true
+                
+                # Check how long the service has been running
+                if [ "$pid" -ne 0 ] && kill -0 "$pid" 2>/dev/null; then
+                    local pid_start_time=$(stat -c %Y /proc/$pid 2>/dev/null || echo "0")
+                    local current_time=$(date +%s)
+                    local uptime=$((current_time - pid_start_time))
+                    
+                    # Don't restart services that just started (within last 30 seconds)
+                    if [ $uptime -lt 30 ]; then
+                        should_check_health=false
+                        if [ "${SERVICE_STATUS[$service]}" != "starting" ]; then
+                            SERVICE_STATUS[$service]="starting"
                         fi
                     fi
-                else
-                    if [ "${SERVICE_STATUS[$service]}" != "running" ]; then
-                        SERVICE_STATUS[$service]="running"
-                        save_service_status
+                fi
+                
+                if [ "$should_check_health" = true ]; then
+                    if ! check_service_health "$service"; then
+                        log_warn "$name health check failed"
+                        if [ "${SERVICE_STATUS[$service]}" = "running" ] || [ "${SERVICE_STATUS[$service]}" = "starting" ]; then
+                            SERVICE_STATUS[$service]="unhealthy"
+                            if can_restart_service "$service"; then
+                                log_warn "Restarting $name due to health check failure"
+                                restart_service "$service"
+                            fi
+                        fi
+                    else
+                        if [ "${SERVICE_STATUS[$service]}" != "running" ]; then
+                            SERVICE_STATUS[$service]="running"
+                            save_service_status
+                        fi
                     fi
                 fi
             fi

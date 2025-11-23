@@ -1283,6 +1283,10 @@ class ArtifactManager:
         if latest_dir.exists():
             if latest_dir.is_symlink():
                 latest_dir.unlink()
+            elif latest_dir.is_file():
+                # Handle case where 'latest' is a text file (git may track it as a file)
+                logger.warning(f"'{latest_dir}' exists as a file, removing it to create symlink")
+                latest_dir.unlink()
             else:
                 import shutil
                 shutil.rmtree(latest_dir)
@@ -1295,7 +1299,10 @@ class ArtifactManager:
             logger.warning(f"Could not create symlink, copying instead: {e}")
             import shutil
             if latest_dir.exists():
-                shutil.rmtree(latest_dir)
+                if latest_dir.is_file():
+                    latest_dir.unlink()
+                else:
+                    shutil.rmtree(latest_dir)
             shutil.copytree(self.version_dir, latest_dir)
     
     def get_version_dir(self) -> Path:

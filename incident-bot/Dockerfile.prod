@@ -1,0 +1,91 @@
+# Multi-stage production Dockerfile for Incident Bot
+# Stage 1: Build stage
+FROM python:3.9-slim as builder
+
+# Set build arguments
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION
+
+# Set environment variables for build
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python dependencies
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Stage 2: Runtime stage
+FROM python:3.9-slim
+
+# Set build arguments for labels
+ARG BUILD_DATE
+ARG VCS_REF
+ARG VERSION
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PORT=8001 \
+    HOST=0.0.0.0 \
+    LOG_LEVEL=INFO \
+    MODEL_HOST=model \
+    MODEL_PORT=8080
+
+# Add metadata labels
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.authors="Heal-X-Bot Team" \
+      org.opencontainers.image.url="https://github.com/your-repo/heal-x-bot" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
+      org.opencontainers.image.title="Heal-X-Bot Incident Bot" \
+      org.opencontainers.image.description="AI-Powered Incident Response Bot"
+
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /root/.local
+
+# Make sure scripts in .local are usable
+ENV PATH=/root/.local/bin:$PATH
+
+# Copy application files
+COPY main.py .
+
+# Create necessary directories
+RUN mkdir -p /app/logs \
+    && chmod -R 755 /app
+
+# Create non-root user for security
+RUN useradd -m -u 1000 -s /bin/bash botuser \
+    && chown -R botuser:botuser /app
+
+# Switch to non-root user
+USER botuser
+
+# Expose port
+EXPOSE 8001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Use uvicorn with production settings
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--workers", "2", "--timeout-keep-alive", "30"]
+

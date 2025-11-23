@@ -5,7 +5,7 @@ Comprehensive backend for real-time system monitoring and management
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import psutil
 import subprocess
@@ -2955,7 +2955,7 @@ Machine: {uname.machine}"""
                     output = f"❌ Path not found: {path}"
                 elif path_obj.is_file():
                     output = str(path_obj)
-        else:
+                else:
                     items = sorted(path_obj.iterdir())
                     dirs = [item for item in items if item.is_dir()]
                     files = [item for item in items if item.is_file()]
@@ -4379,20 +4379,26 @@ async def get_detected_faults(limit: int = 50):
     """Get detected faults"""
     try:
         if not fault_detector:
-            return {"success": False, "error": "Fault detector not initialized"}
+            return JSONResponse(
+                status_code=503,
+                content={"success": False, "error": "Fault detector not initialized", "faults": [], "statistics": {}}
+            )
         
         faults = fault_detector.get_detected_faults(limit=limit)
         stats = fault_detector.get_fault_statistics()
         
         return {
             "success": True,
-            "faults": faults,
-            "statistics": stats,
+            "faults": faults or [],
+            "statistics": stats or {},
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
         logger.error(f"Error getting detected faults: {e}")
-        return {"success": False, "error": str(e)}
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e), "faults": [], "statistics": {}}
+        )
 
 @app.get("/api/cloud/resources")
 async def get_resource_metrics():
@@ -4456,47 +4462,61 @@ async def get_healing_history(limit: int = 50):
     """Get healing history"""
     try:
         if not auto_healer:
-            return {"success": False, "error": "Auto-healer not initialized"}
+            return JSONResponse(
+                status_code=503,
+                content={"success": False, "error": "Auto-healer not initialized", "message": "Auto-healing service is not available"}
+            )
         
         history = auto_healer.get_healing_history(limit=limit)
         stats = auto_healer.get_healing_statistics()
         
         return {
             "success": True,
-            "history": history,
-            "statistics": stats,
+            "history": history or [],
+            "statistics": stats or {},
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
         logger.error(f"Error getting healing history: {e}")
-        return {"success": False, "error": str(e)}
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e), "message": "Internal server error while fetching healing history"}
+        )
 
 @app.get("/api/auto-healer/status")
 async def get_auto_healer_status():
     """Get auto-healer status and configuration"""
     try:
         if not auto_healer:
-            return {
-                "status": "error",
-                "message": "Auto-healer not initialized"
-            }
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "error",
+                    "message": "Auto-healer not initialized",
+                    "auto_healer": None
+                }
+            )
         
         return {
             "status": "success",
             "auto_healer": {
-                "enabled": auto_healer.enabled,
-                "auto_execute": auto_healer.auto_execute,
-                "monitoring": auto_healer.running,
-                "max_attempts": auto_healer.max_healing_attempts,
+                "enabled": getattr(auto_healer, 'enabled', True),
+                "auto_execute": getattr(auto_healer, 'auto_execute', True),
+                "monitoring": getattr(auto_healer, 'running', False),
+                "max_attempts": getattr(auto_healer, 'max_healing_attempts', 3),
                 "monitoring_interval": getattr(auto_healer, 'monitoring_interval', 60)
             }
         }
     except Exception as e:
         logger.error(f"Error getting auto-healer status: {e}")
-        return {
-            "status": "error",
-            "message": str(e)
-        }
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": str(e),
+                "auto_healer": None
+            }
+        )
 
 @app.post("/api/auto-healer/config")
 @app.put("/api/auto-healer/config")

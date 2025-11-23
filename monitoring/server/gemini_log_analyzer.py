@@ -29,10 +29,10 @@ class GeminiLogAnalyzer:
             try:
                 # Configure the API key
                 genai.configure(api_key=self.api_key)
-                # Initialize the model - using gemini-2.0-flash-exp (Gemini 2.0 Flash)
-                self.model = genai.GenerativeModel("gemini-2.0-flash-exp")
-                self.model_name = "gemini-2.0-flash-exp"
-                logger.info("Gemini client initialized successfully with gemini-2.0-flash-exp")
+                # Initialize the model - using gemini-2.0-flash-lite (Gemini 2.0 Flash-Lite)
+                self.model = genai.GenerativeModel("gemini-2.0-flash-lite")
+                self.model_name = "gemini-2.0-flash-lite"
+                logger.info("Gemini client initialized successfully with gemini-2.0-flash-lite")
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
                 self.model = None

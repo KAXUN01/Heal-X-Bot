@@ -1,0 +1,92 @@
+{
+  "profiles": {
+    "low": {
+      "description": "Minimal resource usage - for resource-constrained systems",
+      "monitoring": {
+        "health_check_interval_seconds": 60,
+        "log_collection_interval_seconds": 120,
+        "critical_services_monitor_interval_seconds": 60
+      },
+      "memory": {
+        "system_logs_in_memory": 250,
+        "centralized_logs_in_memory": 500,
+        "max_log_entry_size_bytes": 2560
+      },
+      "logging": {
+        "max_file_size_mb": 2,
+        "backup_count": 1,
+        "auto_cleanup_days": 3
+      },
+      "background_tasks": {
+        "s3_upload_interval_seconds": 1800,
+        "cleanup_interval_hours": 48
+      },
+      "services": {
+        "essential_only": true,
+        "optional_services": ["network-analyzer", "incident-bot"]
+      }
+    },
+    "medium": {
+      "description": "Balanced resource usage - recommended for most systems",
+      "monitoring": {
+        "health_check_interval_seconds": 30,
+        "log_collection_interval_seconds": 60,
+        "critical_services_monitor_interval_seconds": 30
+      },
+      "memory": {
+        "system_logs_in_memory": 500,
+        "centralized_logs_in_memory": 1000,
+        "max_log_entry_size_bytes": 5120
+      },
+      "logging": {
+        "max_file_size_mb": 3,
+        "backup_count": 2,
+        "auto_cleanup_days": 5
+      },
+      "background_tasks": {
+        "s3_upload_interval_seconds": 600,
+        "cleanup_interval_hours": 24
+      },
+      "services": {
+        "essential_only": false,
+        "optional_services": []
+      }
+    },
+    "high": {
+      "description": "Maximum performance - for systems with abundant resources",
+      "monitoring": {
+        "health_check_interval_seconds": 10,
+        "log_collection_interval_seconds": 30,
+        "critical_services_monitor_interval_seconds": 10
+      },
+      "memory": {
+        "system_logs_in_memory": 1000,
+        "centralized_logs_in_memory": 2000,
+        "max_log_entry_size_bytes": 10240
+      },
+      "logging": {
+        "max_file_size_mb": 5,
+        "backup_count": 3,
+        "auto_cleanup_days": 7
+      },
+      "background_tasks": {
+        "s3_upload_interval_seconds": 300,
+        "cleanup_interval_hours": 12
+      },
+      "services": {
+        "essential_only": false,
+        "optional_services": []
+      }
+    }
+  },
+  "default_profile": "medium",
+  "notes": [
+    "Select a profile based on your system's available resources",
+    "low: < 2GB RAM, minimal CPU - runs only essential services",
+    "medium: 2-4GB RAM, moderate CPU - balanced performance (recommended)",
+    "high: > 4GB RAM, high CPU - maximum monitoring frequency",
+    "Profile can be set via RESOURCE_PROFILE environment variable",
+    "Individual settings can be overridden in log_config.json"
+  ]
+}
+

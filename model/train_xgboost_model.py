@@ -538,6 +538,15 @@ class ModelTrainer:
         # Train classification model
         if self.use_xgboost:
             logger.info("Using XGBoost for classification")
+            # Check if both classes are present
+            unique_classes = np.unique(y_train)
+            if len(unique_classes) < 2:
+                logger.warning(f"Only one class ({unique_classes}) present in training data. "
+                             f"This may indicate a data issue. Proceeding with training...")
+                # If validation set has both classes, we can still train
+                if X_val_scaled is not None and y_val is not None and len(np.unique(y_val)) > 1:
+                    logger.info("Validation set has both classes, training will proceed.")
+            
             if tune_hyperparameters:
                 model = self._tune_xgboost(X_train_scaled, y_train, X_val_scaled, y_val, n_iter, is_classification=True)
             else:
@@ -551,10 +560,24 @@ class ModelTrainer:
                     eval_metric='logloss',
                     early_stopping_rounds=10 if X_val_scaled is not None else None
                 )
-                if X_val_scaled is not None:
-                    model.fit(X_train_scaled, y_train, eval_set=[(X_val_scaled, y_val)], verbose=False)
-                else:
-                    model.fit(X_train_scaled, y_train)
+                try:
+                    if X_val_scaled is not None:
+                        model.fit(X_train_scaled, y_train, eval_set=[(X_val_scaled, y_val)], verbose=False)
+                    else:
+                        model.fit(X_train_scaled, y_train)
+                except ValueError as e:
+                    if "Invalid classes" in str(e):
+                        logger.error(f"Cannot train XGBoost with only one class. Error: {e}")
+                        logger.info("Attempting to use validation set for training...")
+                        if X_val_scaled is not None and y_val is not None and len(np.unique(y_val)) > 1:
+                            # Combine train and validation for training
+                            X_combined = np.vstack([X_train_scaled, X_val_scaled])
+                            y_combined = np.concatenate([y_train, y_val])
+                            model.fit(X_combined, y_combined)
+                        else:
+                            raise ValueError("Cannot train model: only one class present in all data")
+                    else:
+                        raise
         else:
             logger.info("Using GradientBoostingClassifier (XGBoost fallback)")
             if tune_hyperparameters:
@@ -634,18 +657,85 @@ class ModelTrainer:
         if is_classification:
             base_model = xgb.XGBClassifier(random_state=42, eval_metric='logloss')
             scoring = 'roc_auc'
+            
+            # Check if both classes are present in training data
+            unique_classes = np.unique(y_train)
+            if len(unique_classes) < 2:
+                logger.warning(f"Only one class ({unique_classes}) present in training data. Skipping hyperparameter tuning.")
+                # Use validation set if available, otherwise use a simple split
+                if X_val is not None and y_val is not None and len(np.unique(y_val)) > 1:
+                    # Combine train and validation, then use stratified split to ensure both classes in training
+                    X_combined = np.vstack([X_train, X_val])
+                    y_combined = np.concatenate([y_train, y_val])
+                    
+                    # Use stratified split to ensure both classes are in training fold
+                    from sklearn.model_selection import train_test_split
+                    X_train_cv, X_val_cv, y_train_cv, y_val_cv = train_test_split(
+                        X_combined, y_combined, test_size=len(X_val) / len(X_combined), 
+                        random_state=42, stratify=y_combined
+                    )
+                    
+                    # Verify both classes are present, then train directly without CV
+                    if len(np.unique(y_train_cv)) < 2:
+                        logger.warning("Cannot ensure both classes in training fold. Using default parameters on combined data.")
+                        model = xgb.XGBClassifier(
+                            n_estimators=100,
+                            max_depth=6,
+                            learning_rate=0.1,
+                            subsample=0.8,
+                            colsample_bytree=0.8,
+                            random_state=42,
+                            eval_metric='logloss'
+                        )
+                        model.fit(X_combined, y_combined)
+                        return model
+                    
+                    # Train directly on stratified split without CV
+                    logger.info("Training on stratified split (both classes present) without hyperparameter tuning.")
+                    model = xgb.XGBClassifier(
+                        n_estimators=100,
+                        max_depth=6,
+                        learning_rate=0.1,
+                        subsample=0.8,
+                        colsample_bytree=0.8,
+                        random_state=42,
+                        eval_metric='logloss'
+                    )
+                    model.fit(X_train_cv, y_train_cv, eval_set=[(X_val_cv, y_val_cv)], verbose=False)
+                    return model
+                else:
+                    # Cannot use CV with single class, use default parameters
+                    logger.warning("Cannot use cross-validation with single class. Using default parameters.")
+                    model = xgb.XGBClassifier(
+                        n_estimators=100,
+                        max_depth=6,
+                        learning_rate=0.1,
+                        subsample=0.8,
+                        colsample_bytree=0.8,
+                        random_state=42,
+                        eval_metric='logloss'
+                    )
+                    if X_val is not None and y_val is not None:
+                        model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=False)
+                    else:
+                        model.fit(X_train, y_train)
+                    return model
+            else:
+                # Both classes present, use time series split
+                tscv = TimeSeriesSplit(n_splits=3)
+                cv = tscv
         else:
+            # Regression - use time series split
+            tscv = TimeSeriesSplit(n_splits=3)
+            cv = tscv
             base_model = xgb.XGBRegressor(random_state=42, eval_metric='rmse')
             scoring = 'neg_mean_absolute_error'
-        
-        # Use time series split for cross-validation
-        tscv = TimeSeriesSplit(n_splits=3)
         
         random_search = RandomizedSearchCV(
             base_model,
             param_distributions=param_dist,
             n_iter=n_iter,
-            cv=tscv,
+            cv=cv,
             scoring=scoring,
             n_jobs=-1,
             random_state=42,
@@ -672,13 +762,69 @@ class ModelTrainer:
         
         base_model = GradientBoostingClassifier(random_state=42)
         
-        tscv = TimeSeriesSplit(n_splits=3)
+        # Check if both classes are present in training data
+        unique_classes = np.unique(y_train)
+        if len(unique_classes) < 2:
+            logger.warning(f"Only one class ({unique_classes}) present in training data. Skipping hyperparameter tuning.")
+            # Use validation set if available, otherwise use a simple split
+            if X_val is not None and y_val is not None and len(np.unique(y_val)) > 1:
+                # Combine train and validation, then use stratified split to ensure both classes in training
+                X_combined = np.vstack([X_train, X_val])
+                y_combined = np.concatenate([y_train, y_val])
+                
+                # Use stratified split to ensure both classes are in training fold
+                from sklearn.model_selection import train_test_split
+                X_train_cv, X_val_cv, y_train_cv, y_val_cv = train_test_split(
+                    X_combined, y_combined, test_size=len(X_val) / len(X_combined), 
+                    random_state=42, stratify=y_combined
+                )
+                
+                # Verify both classes are present, then train directly without CV
+                if len(np.unique(y_train_cv)) < 2:
+                    logger.warning("Cannot ensure both classes in training fold. Using default parameters on combined data.")
+                    model = GradientBoostingClassifier(
+                        n_estimators=100,
+                        max_depth=6,
+                        learning_rate=0.1,
+                        subsample=0.8,
+                        random_state=42
+                    )
+                    model.fit(X_combined, y_combined)
+                    return model
+                
+                # Train directly on stratified split without CV
+                logger.info("Training on stratified split (both classes present) without hyperparameter tuning.")
+                model = GradientBoostingClassifier(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    subsample=0.8,
+                    random_state=42
+                )
+                model.fit(X_train_cv, y_train_cv)
+                return model
+            else:
+                # Cannot use CV with single class, use default parameters
+                logger.warning("Cannot use cross-validation with single class. Using default parameters.")
+                model = GradientBoostingClassifier(
+                    n_estimators=100,
+                    max_depth=6,
+                    learning_rate=0.1,
+                    subsample=0.8,
+                    random_state=42
+                )
+                model.fit(X_train, y_train)
+                return model
+        else:
+            # Both classes present, use time series split
+            tscv = TimeSeriesSplit(n_splits=3)
+            cv = tscv
         
         random_search = RandomizedSearchCV(
             base_model,
             param_distributions=param_dist,
             n_iter=n_iter,
-            cv=tscv,
+            cv=cv,
             scoring='roc_auc',
             n_jobs=-1,
             random_state=42,
@@ -1087,10 +1233,28 @@ class ArtifactManager:
         with open(feature_path, 'w') as f:
             json.dump(feature_names, f, indent=2)
         
-        # Save metrics
+        # Save metrics (convert numpy types to native Python types)
+        def convert_numpy_types(obj):
+            """Recursively convert numpy types to native Python types for JSON serialization"""
+            if isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {key: convert_numpy_types(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy_types(item) for item in obj]
+            elif isinstance(obj, tuple):
+                return tuple(convert_numpy_types(item) for item in obj)
+            else:
+                return obj
+        
+        metrics_serializable = convert_numpy_types(metrics)
         metrics_path = self.version_dir / 'metrics.json'
         with open(metrics_path, 'w') as f:
-            json.dump(metrics, f, indent=2)
+            json.dump(metrics_serializable, f, indent=2)
         
         # Save prediction thresholds
         if prediction_thresholds is None:
@@ -1105,10 +1269,11 @@ class ArtifactManager:
         with open(thresholds_path, 'w') as f:
             json.dump(prediction_thresholds, f, indent=2)
         
-        # Save config
+        # Save config (convert numpy types to native Python types)
+        config_serializable = convert_numpy_types(config)
         config_path = self.version_dir / 'config.json'
         with open(config_path, 'w') as f:
-            json.dump(config, f, indent=2)
+            json.dump(config_serializable, f, indent=2)
         
         logger.info(f"Model artifacts saved to {self.version_dir}")
     
@@ -1117,6 +1282,10 @@ class ArtifactManager:
         latest_dir = self.base_dir / 'latest'
         if latest_dir.exists():
             if latest_dir.is_symlink():
+                latest_dir.unlink()
+            elif latest_dir.is_file():
+                # Handle case where 'latest' is a text file (git may track it as a file)
+                logger.warning(f"'{latest_dir}' exists as a file, removing it to create symlink")
                 latest_dir.unlink()
             else:
                 import shutil
@@ -1130,7 +1299,10 @@ class ArtifactManager:
             logger.warning(f"Could not create symlink, copying instead: {e}")
             import shutil
             if latest_dir.exists():
-                shutil.rmtree(latest_dir)
+                if latest_dir.is_file():
+                    latest_dir.unlink()
+                else:
+                    shutil.rmtree(latest_dir)
             shutil.copytree(self.version_dir, latest_dir)
     
     def get_version_dir(self) -> Path:

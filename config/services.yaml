@@ -1,0 +1,75 @@
+# =============================================================================
+# HEAL-X-BOT - Service Configuration
+# =============================================================================
+# Defines all services, their dependencies, ports, and startup configuration
+# =============================================================================
+
+services:
+  model:
+    name: "DDoS Model API"
+    path: "model"
+    script: "main.py"
+    port: 8080
+    health_url: "http://localhost:8080/health"
+    dependencies: []
+    env_vars: ["MODEL_PORT=8080"]
+    startup_timeout: 60
+    health_check_interval: 2
+    max_health_check_attempts: 30
+  
+  network-analyzer:
+    name: "Network Analyzer"
+    path: "monitoring/server"
+    script: "network_analyzer.py"
+    port: 8000
+    health_url: "http://localhost:8000/health"
+    dependencies: ["model"]
+    env_vars: ["PORT=8000"]
+    startup_timeout: 45
+    health_check_interval: 2
+    max_health_check_attempts: 30
+  
+  monitoring-server:
+    name: "Monitoring Server"
+    path: "monitoring/server"
+    script: "app.py"
+    port: 5000
+    health_url: "http://localhost:5000/health"
+    dependencies: ["model"]
+    env_vars: []
+    startup_timeout: 45
+    health_check_interval: 2
+    max_health_check_attempts: 30
+  
+  healing-dashboard:
+    name: "Healing Dashboard API"
+    path: "monitoring/server"
+    script: "healing_dashboard_api.py"
+    port: 5001
+    health_url: "http://localhost:5001/api/health"
+    dependencies: ["monitoring-server"]
+    env_vars: ["HEALING_DASHBOARD_PORT=5001"]
+    startup_timeout: 45
+    health_check_interval: 2
+    max_health_check_attempts: 30
+  
+  incident-bot:
+    name: "Incident Bot"
+    path: "incident-bot"
+    script: "main.py"
+    port: 8001
+    health_url: "http://localhost:8001/health"
+    dependencies: ["model"]
+    env_vars: ["PORT=8001"]
+    startup_timeout: 45
+    health_check_interval: 2
+    max_health_check_attempts: 30
+
+# Service startup order (topological sort based on dependencies)
+startup_order:
+  - model
+  - network-analyzer
+  - monitoring-server
+  - incident-bot
+  - healing-dashboard
+

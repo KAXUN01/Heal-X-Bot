@@ -1,0 +1,312 @@
+version: '3.8'
+
+# Production Docker Compose configuration for Heal-X-Bot
+# This configuration includes all services with production optimizations
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "5"
+    compress: "true"
+
+x-common-labels: &common-labels
+  com.heal-x-bot.version: "${VERSION:-latest}"
+  com.heal-x-bot.environment: "production"
+  com.heal-x-bot.managed-by: "docker-compose"
+
+networks:
+  healing-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  prometheus_data:
+    driver: local
+  model-cache:
+    driver: local
+  healing-data:
+    driver: local
+  healing-logs:
+    driver: local
+
+services:
+  # DDoS Detection Model API
+  model:
+    build:
+      context: ../../model
+      dockerfile: Dockerfile.prod
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+        VERSION: ${VERSION:-latest}
+    image: heal-x-bot/model:${VERSION:-latest}
+    container_name: heal-x-bot-model
+    labels:
+      <<: *common-labels
+      com.heal-x-bot.service: "model"
+    ports:
+      - "${MODEL_PORT:-8080}:8080"
+    environment:
+      - MODEL_PORT=8080
+      - MODEL_HOST=0.0.0.0
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - TENSORFLOW_CACHE=/app/cache
+      - PROMETHEUS_MULTIPROC_DIR=/tmp
+    volumes:
+      - ../../model/ddos_model.keras:/app/ddos_model.keras:ro
+      - ../../model/ddos_model:/app/ddos_model:ro
+      - ../../model/artifacts:/app/artifacts:ro
+      - model-cache:/app/cache
+      - ../../model/visualizations:/app/visualizations
+    networks:
+      - healing-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    logging: *default-logging
+
+  # Monitoring Server
+  server:
+    build:
+      context: ../../monitoring/server
+      dockerfile: Dockerfile.prod
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+        VERSION: ${VERSION:-latest}
+    image: heal-x-bot/monitoring:${VERSION:-latest}
+    container_name: heal-x-bot-monitoring
+    labels:
+      <<: *common-labels
+      com.heal-x-bot.service: "monitoring"
+    ports:
+      - "${MONITORING_SERVER_PORT:-5000}:5000"
+    environment:
+      - PORT=5000
+      - HOST=0.0.0.0
+      - MODEL_HOST=model
+      - MODEL_PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - FLASK_ENV=production
+      - TZ=UTC
+      - PROMETHEUS_MULTIPROC_DIR=/tmp
+    volumes:
+      - healing-data:/app/data
+      - healing-logs:/app/logs
+      - ../../monitoring/server/static:/app/static:ro
+      - ../../monitoring/server/templates:/app/templates:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - healing-network
+    restart: unless-stopped
+    depends_on:
+      model:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    logging: *default-logging
+
+  # Healing Dashboard API
+  healing-dashboard:
+    build:
+      context: ../../monitoring/server
+      dockerfile: Dockerfile.dashboard
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+        VERSION: ${VERSION:-latest}
+    image: heal-x-bot/dashboard:${VERSION:-latest}
+    container_name: heal-x-bot-dashboard
+    labels:
+      <<: *common-labels
+      com.heal-x-bot.service: "healing-dashboard"
+    ports:
+      - "${HEALING_DASHBOARD_PORT:-5001}:5001"
+    environment:
+      - PORT=5001
+      - HOST=0.0.0.0
+      - MODEL_HOST=model
+      - MODEL_PORT=8080
+      - MONITORING_SERVER_HOST=server
+      - MONITORING_SERVER_PORT=5000
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - DISCORD_WEBHOOK=${DISCORD_WEBHOOK:-}
+      - SLACK_WEBHOOK=${SLACK_WEBHOOK:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+      - TZ=UTC
+    volumes:
+      - healing-data:/app/data
+      - healing-logs:/app/logs
+      - ../../monitoring/dashboard:/app/dashboard:ro
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+    networks:
+      - healing-network
+    restart: unless-stopped
+    depends_on:
+      model:
+        condition: service_healthy
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+    logging: *default-logging
+
+  # Incident Bot
+  incident-bot:
+    build:
+      context: ../../incident-bot
+      dockerfile: Dockerfile.prod
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+        VERSION: ${VERSION:-latest}
+    image: heal-x-bot/incident-bot:${VERSION:-latest}
+    container_name: heal-x-bot-incident-bot
+    labels:
+      <<: *common-labels
+      com.heal-x-bot.service: "incident-bot"
+    ports:
+      - "${INCIDENT_BOT_PORT:-8001}:8001"
+    environment:
+      - PORT=8001
+      - HOST=0.0.0.0
+      - MODEL_HOST=model
+      - MODEL_PORT=8080
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-}
+    volumes:
+      - healing-logs:/app/logs
+    networks:
+      - healing-network
+    restart: unless-stopped
+    depends_on:
+      model:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    read_only: false
+    tmpfs:
+      - /tmp:noexec,nosuid,size=50m
+    logging: *default-logging
+
+  # Prometheus Metrics
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: heal-x-bot-prometheus
+    labels:
+      <<: *common-labels
+      com.heal-x-bot.service: "prometheus"
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    volumes:
+      - ../../monitoring/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - healing-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+

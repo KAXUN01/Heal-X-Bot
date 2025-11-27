@@ -42,14 +42,7 @@ class HealingBotLauncher:
                 "health_url": "http://localhost:8000/active-threats",
                 "docker_service": "network-analyzer"
             },
-            "dashboard": {
-                "name": "ML Dashboard",
-                "port": 3001,
-                "path": "monitoring/dashboard",
-                "script": "app.py",
-                "health_url": "http://localhost:3001/api/health",
-                "docker_service": "dashboard"
-            },
+            # Removed dashboard service (port 3001) - using healing-dashboard (port 5001) instead
             "incident-bot": {
                 "name": "Incident Bot",
                 "port": 8000,
@@ -78,7 +71,7 @@ class HealingBotLauncher:
         
         # Docker services (full stack)
         self.docker_services = [
-            "model", "server", "network-analyzer", "dashboard", 
+            "model", "server", "network-analyzer",
             "incident-bot", "healing-dashboard", "prometheus", "grafana"
         ]
 
@@ -118,14 +111,25 @@ class HealingBotLauncher:
         
         # Check if Docker Compose is available
         if self.docker_available:
+            # Try newer syntax first (docker compose)
             try:
-                result = subprocess.run(["docker-compose", "--version"], 
+                result = subprocess.run(["docker", "compose", "version"], 
                                       capture_output=True, text=True, check=True)
                 print(f"✅ Docker Compose detected: {result.stdout.strip()}")
                 self.docker_compose_available = True
+                self.docker_compose_cmd = ["docker", "compose"]
             except (subprocess.CalledProcessError, FileNotFoundError):
-                print("⚠️  Docker Compose not available")
-                self.docker_compose_available = False
+                # Try older syntax (docker-compose)
+                try:
+                    result = subprocess.run(["docker-compose", "--version"], 
+                                          capture_output=True, text=True, check=True)
+                    print(f"✅ Docker Compose detected: {result.stdout.strip()}")
+                    self.docker_compose_available = True
+                    self.docker_compose_cmd = ["docker-compose"]
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    print("⚠️  Docker Compose not available")
+                    self.docker_compose_available = False
+                    self.docker_compose_cmd = None
         
         return True
 
@@ -228,7 +232,7 @@ class HealingBotLauncher:
         
         import socket
         
-        ports_to_check = [8080, 8000, 3001, 5000, 5001, 9090, 3000]
+        ports_to_check = [8080, 8000, 5000, 5001, 9090, 3000]
         occupied_ports = []
         
         for port in ports_to_check:
@@ -424,7 +428,6 @@ class HealingBotLauncher:
         print("="*60)
         
         access_points = [
-            ("📊 Dashboard", "http://localhost:3001", "Main monitoring dashboard"),
             ("🛡️ Healing Dashboard", "http://localhost:5001", "Healing bot dashboard"),
             ("🤖 Model API", "http://localhost:8080", "DDoS detection model"),
             ("🔍 Network Analyzer", "http://localhost:8000", "Network traffic analysis"),
@@ -473,7 +476,16 @@ class HealingBotLauncher:
         if hasattr(self, 'docker_started') and self.docker_started:
             try:
                 print("🛑 Stopping Docker services...")
-                subprocess.run(["docker-compose", "down"], cwd=self.project_root)
+                # Use the detected docker compose command
+                if hasattr(self, 'docker_compose_cmd') and self.docker_compose_cmd:
+                    cmd = self.docker_compose_cmd + ["down"]
+                else:
+                    # Fallback: try newer syntax first
+                    try:
+                        cmd = ["docker", "compose", "down"]
+                    except:
+                        cmd = ["docker-compose", "down"]
+                subprocess.run(cmd, cwd=self.project_root)
             except:
                 pass
         

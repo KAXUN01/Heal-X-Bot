@@ -14,13 +14,48 @@ import json
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from log_monitor import initialize_log_monitoring, log_monitor
-from centralized_logger import initialize_centralized_logging, centralized_logger
-from service_discovery import ServiceDiscovery
-from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
-from system_log_collector import initialize_system_log_collector, get_system_log_collector
-from critical_services_monitor import initialize_critical_services_monitor, get_critical_services_monitor
-from auto_healer import initialize_auto_healer, get_auto_healer
+try:
+    from .log_monitor import initialize_log_monitoring, log_monitor
+except ImportError:
+    from log_monitor import initialize_log_monitoring, log_monitor
+try:
+    from .centralized_logger import initialize_centralized_logging, centralized_logger
+except ImportError:
+    from centralized_logger import initialize_centralized_logging, centralized_logger
+try:
+    from .service_discovery import ServiceDiscovery
+except ImportError:
+    from service_discovery import ServiceDiscovery
+try:
+    from .gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
+except ImportError:
+    from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
+try:
+    from .system_log_collector import initialize_system_log_collector, get_system_log_collector
+except ImportError:
+    from system_log_collector import initialize_system_log_collector, get_system_log_collector
+try:
+    from .critical_services_monitor import initialize_critical_services_monitor, get_critical_services_monitor
+except ImportError:
+    from critical_services_monitor import initialize_critical_services_monitor, get_critical_services_monitor
+try:
+    from .healing import initialize_auto_healer, get_auto_healer
+except ImportError:
+    # Fallback to old import path for backward compatibility
+    try:
+        from auto_healer import initialize_auto_healer, get_auto_healer
+    except ImportError:
+        # If running as module, try absolute import
+        try:
+            from monitoring.server.healing import initialize_auto_healer, get_auto_healer
+        except ImportError:
+            # Last resort: import directly from healing directory
+            import sys
+            from pathlib import Path
+            healing_path = Path(__file__).parent / 'healing'
+            if healing_path.exists():
+                sys.path.insert(0, str(Path(__file__).parent))
+                from healing import initialize_auto_healer, get_auto_healer
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
@@ -33,6 +68,10 @@ if not os.getenv('GEMINI_API_KEY') and not os.getenv('GOOGLE_API_KEY'):
     print("   Please add GEMINI_API_KEY to your .env file")
 
 app = Flask(__name__)
+# Set Flask configuration to avoid KeyError (must be set before Bootstrap)
+# Flask 3.1.0 requires this config to be set explicitly
+if 'PROVIDE_AUTOMATIC_OPTIONS' not in app.config:
+    app.config['PROVIDE_AUTOMATIC_OPTIONS'] = True
 bootstrap = Bootstrap(app)
 
 # Enable CORS for all routes to allow dashboard to access the API
@@ -129,13 +168,13 @@ def get_system_metrics():
 
 @app.route('/')
 def index():
-    """API Server - No web UI, use dashboard at port 3001"""
+    """API Server - No web UI, use dashboard at port 5001"""
     REQUEST_COUNT.labels(endpoint="/").inc()
     return jsonify({
         'status': 'success',
         'message': 'Healing-bot Monitoring API Server',
         'version': '2.0',
-        'info': 'This is an API-only server. For the web UI, visit http://localhost:3001',
+        'info': 'This is an API-only server. For the web UI, visit http://localhost:5001',
         'endpoints': {
             'health': '/health',
             'metrics': '/metrics (Prometheus)',
@@ -878,19 +917,68 @@ def initialize_services():
         print("✅ Critical services monitor initialized")
         print("   📊 Monitoring critical services: Docker, systemd-journald, dbus, cron, etc.")
         
-        # Initialize AI-powered auto-healer
-        global auto_healer
-        auto_healer = initialize_auto_healer(
-            gemini_analyzer=gemini_analyzer,
-            system_log_collector=system_log_collector,
-            critical_services_monitor=critical_services_monitor
-        )
-        print("✅ AI-powered auto-healer initialized")
-        print("   🤖 Auto-healing enabled: System will automatically fix detected errors")
-        
-        # Start auto-healing monitoring (check every 60 seconds)
-        auto_healer.start_monitoring(interval_seconds=60)
-        print("   ⚡ Auto-healing monitoring started (60s interval)")
+        # Initialize cloud simulation components
+        try:
+            from container_healer import initialize_container_healer
+            from root_cause_analyzer import initialize_root_cause_analyzer
+            from fault_detector import initialize_fault_detector
+            
+            # Discord notifier function (simple implementation for app.py)
+            def discord_notifier(message, severity="info", embed_data=None):
+                # Simple Discord notification - can be enhanced
+                try:
+                    import requests
+                    discord_webhook = os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL", "")
+                    if discord_webhook:
+                        payload = {"content": message}
+                        if embed_data:
+                            payload["embeds"] = [embed_data]
+                        requests.post(discord_webhook, json=payload, timeout=10)
+                except:
+                    pass  # Fail silently if Discord not configured
+            
+            # Initialize container healer
+            container_healer = initialize_container_healer(
+                discord_notifier=discord_notifier
+            )
+            
+            # Initialize root cause analyzer
+            root_cause_analyzer = initialize_root_cause_analyzer(
+                gemini_analyzer=gemini_analyzer
+            )
+            
+            # Initialize fault detector
+            fault_detector = initialize_fault_detector(
+                discord_notifier=discord_notifier
+            )
+            fault_detector.start_monitoring(interval=30)
+            print("✅ Cloud fault detector initialized and started")
+            
+            # Initialize AI-powered auto-healer with cloud capabilities
+            auto_healer = initialize_auto_healer(
+                gemini_analyzer=gemini_analyzer,
+                system_log_collector=system_log_collector,
+                critical_services_monitor=critical_services_monitor,
+                container_healer=container_healer,
+                root_cause_analyzer=root_cause_analyzer,
+                discord_notifier=discord_notifier
+            )
+            print("✅ AI-powered auto-healer initialized with cloud healing")
+            print("   🤖 Auto-healing enabled: System will automatically fix detected errors")
+            
+            # Start auto-healing monitoring (check every 60 seconds)
+            auto_healer.start_monitoring(interval_seconds=60)
+            print("   ⚡ Auto-healing monitoring started (60s interval)")
+        except Exception as e:
+            print(f"⚠️  Cloud simulation components not available: {e}")
+            # Fallback to basic auto-healer
+            auto_healer = initialize_auto_healer(
+                gemini_analyzer=gemini_analyzer,
+                system_log_collector=system_log_collector,
+                critical_services_monitor=critical_services_monitor
+            )
+            print("✅ Basic AI-powered auto-healer initialized")
+            auto_healer.start_monitoring(interval_seconds=60)
         
         print(f"\n📊 Active Services:")
         print(f"   - gemini_analyzer: {gemini_analyzer is not None} (AI analysis)")
@@ -982,7 +1070,8 @@ def get_auto_healer_status():
                 'enabled': auto_healer.enabled,
                 'auto_execute': auto_healer.auto_execute,
                 'monitoring': auto_healer.running,
-                'max_attempts': auto_healer.max_healing_attempts
+                'max_attempts': auto_healer.max_healing_attempts,
+                'monitoring_interval': getattr(auto_healer, 'monitoring_interval', 60)
             }
         })
     except Exception as e:
@@ -1068,6 +1157,50 @@ def manual_heal_error():
             'status': 'success',
             'healing_result': result
         })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route("/api/auto-healer/config", methods=['PUT', 'POST'])
+def update_auto_healer_config():
+    """Update auto-healer configuration"""
+    global auto_healer
+    
+    if not auto_healer:
+        return jsonify({
+            'status': 'error',
+            'message': 'Auto-healer not initialized'
+        }), 503
+    
+    try:
+        data = request.get_json() or {}
+        
+        # Extract configuration parameters
+        enabled = data.get('enabled')
+        auto_execute = data.get('auto_execute')
+        max_attempts = data.get('max_attempts')
+        monitoring_interval = data.get('monitoring_interval')
+        
+        # Update configuration
+        updated_config = auto_healer.update_config(
+            enabled=enabled if enabled is not None else None,
+            auto_execute=auto_execute if auto_execute is not None else None,
+            max_healing_attempts=max_attempts if max_attempts is not None else None,
+            monitoring_interval=monitoring_interval if monitoring_interval is not None else None
+        )
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Configuration updated successfully',
+            'auto_healer': updated_config
+        })
+    except ValueError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 400
     except Exception as e:
         return jsonify({
             'status': 'error',

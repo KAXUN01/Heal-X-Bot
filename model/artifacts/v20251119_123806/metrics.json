@@ -1,0 +1,30 @@
+{
+  "accuracy": 1.0,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1_score": 1.0,
+  "roc_auc": 1.0,
+  "pr_auc": 1.0,
+  "confusion_matrix": [
+    [
+      70,
+      0
+    ],
+    [
+      0,
+      1930
+    ]
+  ],
+  "tn": 70,
+  "fp": 0,
+  "fn": 0,
+  "tp": 1930,
+  "early_detection_rate": 0.9994818652849741,
+  "mean_lead_time_hours": 0.9847071021254536,
+  "median_lead_time_hours": 1.0,
+  "mae_hours": 1.8004796287039917,
+  "rmse_hours": 8.66215339803969,
+  "accuracy_within_15min": 0.726,
+  "accuracy_within_1hour": 0.965,
+  "accuracy_within_6hours": 0.965
+}

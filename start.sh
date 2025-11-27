@@ -124,12 +124,29 @@ fi
 
 # Ensure and activate virtual environment, then install Python deps
 VENV_DIR=""
-if [ -d ".venv" ]; then
+ALT_VENV=".venv-user"
+# Prefer existing writable virtualenvs; fall back to alternate location if needed
+for candidate in ".venv" "venv"; do
+    if [ -d "$candidate" ]; then
+        if [ -w "$candidate" ]; then
+            VENV_DIR="$candidate"
+            break
+        else
+            echo -e "${YELLOW}⚠️  WARNING: Virtualenv ${candidate} is not writable. Creating a user-owned env instead.${NC}"
+            VENV_DIR="$ALT_VENV"
+            break
+        fi
+    fi
+done
+
+if [ -z "$VENV_DIR" ]; then
     VENV_DIR=".venv"
-elif [ -d "venv" ]; then
-    VENV_DIR="venv"
-else
-    VENV_DIR=".venv"
+fi
+
+# If the selected directory exists but is still not writable, fall back again
+if [ -d "$VENV_DIR" ] && [ ! -w "$VENV_DIR" ]; then
+    echo -e "${YELLOW}⚠️  WARNING: Selected virtualenv ${VENV_DIR} is not writable. Using ${ALT_VENV}.${NC}"
+    VENV_DIR="$ALT_VENV"
 fi
 
 if [ ! -f "$VENV_DIR/bin/activate" ]; then
@@ -158,14 +175,11 @@ fi
 if [ -f "monitoring/server/requirements.txt" ]; then
     python3 -m pip install -r monitoring/server/requirements.txt
 fi
-if [ -f "monitoring/dashboard/requirements.txt" ]; then
-    python3 -m pip install -r monitoring/dashboard/requirements.txt
-fi
 if [ -f "incident-bot/requirements.txt" ]; then
     python3 -m pip install -r incident-bot/requirements.txt
 fi
-# Ensure protobuf is compatible with TensorFlow
-python3 -m pip install --upgrade "protobuf>=4.25.3,<5" googleapis-common-protos >/dev/null || true
+# Ensure protobuf is compatible with TensorFlow (requires >=5.28.0)
+python3 -m pip install --upgrade "protobuf>=5.28.0" googleapis-common-protos >/dev/null || true
 echo -e "${GREEN}✅ Virtual environment ready${NC}"
 
 # Check if .env file exists
@@ -193,7 +207,7 @@ echo -e "${GREEN}✅ Project structure verified${NC}"
 
 # Check if ports are available
 echo -e "${YELLOW}🔍 Checking port availability...${NC}"
-PORTS=(8080 8000 8001 3001 5000 5001 8888)
+PORTS=(8080 8000 8001 5000 5001 8888)
 OCCUPIED_PORTS=()
 
 for port in "${PORTS[@]}"; do
@@ -299,7 +313,6 @@ mkdir -p logs
 # Note: Using different ports to avoid conflicts
 start_service "DDoS Model API" "model" "main.py" "8080" "MODEL_PORT=8080"
 start_service "Network Analyzer" "monitoring/server" "network_analyzer.py" "8000" "PORT=8000"
-start_service "ML Dashboard" "monitoring/dashboard" "app.py" "3001" "DASHBOARD_PORT=3001"
 start_service "Incident Bot" "incident-bot" "main.py" "8001" "PORT=8001"
 start_service "Monitoring Server" "monitoring/server" "app.py" "5000"
 start_service "Healing Dashboard API" "monitoring/server" "healing_dashboard_api.py" "5001" "HEALING_DASHBOARD_PORT=5001"
@@ -315,7 +328,6 @@ echo -e "${BLUE}╔════════════════════�
 echo -e "${BLUE}║                    🌐 ACCESS POINTS                          ║${NC}"
 echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${GREEN}📊 Dashboard:${NC}              http://localhost:3001"
 echo -e "${GREEN}🛡️  Healing Dashboard:${NC}      http://localhost:5001"
 echo -e "${GREEN}🤖 Model API:${NC}               http://localhost:8080"
 echo -e "${GREEN}🔍 Network Analyzer:${NC}        http://localhost:8000"

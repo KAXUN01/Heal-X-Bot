@@ -1097,9 +1097,27 @@ async def startup_event():
 @app.get("/")
 async def root():
     """Serve the dashboard"""
-    dashboard_path = Path(__file__).parent.parent / "dashboard" / "static" / "healing-dashboard.html"
-    with open(dashboard_path, "r") as f:
-        return HTMLResponse(content=f.read())
+    try:
+        dashboard_path = Path(__file__).parent.parent / "dashboard" / "static" / "healing-dashboard.html"
+        if dashboard_path.exists():
+            with open(dashboard_path, "r") as f:
+                return HTMLResponse(content=f.read())
+        else:
+            # Return a simple HTML page if dashboard file not found
+            return HTMLResponse(content="""
+            <!DOCTYPE html>
+            <html>
+            <head><title>Healing Dashboard API</title></head>
+            <body>
+                <h1>Healing Dashboard API</h1>
+                <p>API is running. Use <a href="/api/health">/api/health</a> for health checks.</p>
+                <p>Available endpoints: <a href="/api/metrics">/api/metrics</a>, <a href="/api/services">/api/services</a></p>
+            </body>
+            </html>
+            """)
+    except Exception as e:
+        logger.error(f"Error serving dashboard: {e}")
+        return HTMLResponse(content=f"<h1>Healing Dashboard API</h1><p>Error: {str(e)}</p>", status_code=500)
 
 @app.websocket("/ws/healing")
 async def websocket_endpoint(websocket: WebSocket):

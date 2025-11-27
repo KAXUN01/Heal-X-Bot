@@ -31,10 +31,9 @@ STATUS_FILE="$SCRIPT_DIR/.service_status.json"
 declare -A SERVICES
 SERVICES[model]="DDoS Model API|model|main.py|8080|MODEL_PORT=8080|http://localhost:8080/health"
 SERVICES[network-analyzer]="Network Analyzer|monitoring/server|network_analyzer.py|8000|PORT=8000|http://localhost:8000/health"
-SERVICES[dashboard]="ML Dashboard|monitoring/dashboard|app.py|3001|DASHBOARD_PORT=3001|http://localhost:3001/"
 SERVICES[incident-bot]="Incident Bot|incident-bot|main.py|8001|PORT=8001|http://localhost:8001/health"
 SERVICES[monitoring-server]="Monitoring Server|monitoring/server|app.py|5000||http://localhost:5000/health"
-SERVICES[healing-dashboard]="Healing Dashboard API|monitoring/server|healing_dashboard_api.py|5001|HEALING_DASHBOARD_PORT=5001|http://localhost:5001/"
+SERVICES[healing-dashboard]="Healing Dashboard API|monitoring/server|healing_dashboard_api.py|5001|HEALING_DASHBOARD_PORT=5001|http://localhost:5001/api/health"
 
 # Service status tracking
 declare -A SERVICE_PIDS
@@ -403,14 +402,14 @@ setup_venv() {
     
     # Install per-service requirements
     for req_file in "model/requirements.txt" "monitoring/server/requirements.txt" \
-                    "monitoring/dashboard/requirements.txt" "incident-bot/requirements.txt"; do
+                    "incident-bot/requirements.txt"; do
         if [ -f "$req_file" ]; then
             python3 -m pip install -r "$req_file" -q
         fi
     done
     
-    # Fix protobuf compatibility
-    python3 -m pip install --upgrade "protobuf>=4.25.3,<5" "numpy<2" googleapis-common-protos -q 2>/dev/null || true
+    # Fix protobuf compatibility (TensorFlow requires >=5.28.0)
+    python3 -m pip install --upgrade "protobuf>=5.28.0" "numpy<2" googleapis-common-protos -q 2>/dev/null || true
     
     log_info "Dependencies installed"
 }
@@ -479,7 +478,7 @@ main() {
     
     # Check project structure
     log_info "Checking project structure..."
-    for dir in "monitoring/server" "model" "incident-bot" "config" "monitoring/dashboard"; do
+    for dir in "monitoring/server" "model" "incident-bot" "config"; do
         if [ ! -d "$dir" ]; then
             log_error "Required directory not found: $dir"
             exit 1
@@ -505,7 +504,6 @@ main() {
     echo -e "${BLUE}║                    🌐 ACCESS POINTS                          ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "${GREEN}📊 ML Dashboard:${NC}              http://localhost:3001"
     echo -e "${GREEN}🛡️  Healing Dashboard:${NC}      http://localhost:5001"
     echo -e "${GREEN}🤖 DDoS Model API:${NC}               http://localhost:8080"
     echo -e "${GREEN}🔍 Network Analyzer:${NC}        http://localhost:8000"

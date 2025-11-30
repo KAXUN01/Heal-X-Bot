@@ -6593,6 +6593,7 @@
             }
             
             try {
+                console.log('Ignoring alert:', issue);
                 const response = await fetch('/api/critical-services/ignore', {
                     method: 'POST',
                     headers: {
@@ -6603,11 +6604,16 @@
                     })
                 });
                 
+                console.log('Response status:', response.status, response.statusText);
+                
                 if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    const errorText = await response.text();
+                    console.error('Error response:', errorText);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}. ${errorText.substring(0, 200)}`);
                 }
                 
                 const result = await response.json();
+                console.log('Ignore result:', result);
                 
                 if (result.status === 'success') {
                     showNotification('✅ Alert ignored and notification sent to Discord', 'success');

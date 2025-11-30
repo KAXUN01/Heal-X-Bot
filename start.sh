@@ -731,7 +731,7 @@ main() {
         
         log_info "Starting all services..."
 echo ""
-        
+
         start_all_services
 
 echo ""

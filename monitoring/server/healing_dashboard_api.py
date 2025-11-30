@@ -2520,14 +2520,15 @@ async def get_critical_services_statistics():
             "message": str(e)
         }
 
-# Gemini AI Log Analysis Endpoints
 @app.post("/api/critical-services/ignore")
 async def ignore_alert(data: dict = Body(...)):
     """Ignore an alert and send notification to Discord"""
     try:
+        logger.info(f"Ignore alert endpoint called with data: {data}")
         issue = data.get('issue', {})
         
         if not issue:
+            logger.error("No issue provided in ignore request")
             return {
                 "status": "error",
                 "message": "No issue provided"
@@ -2539,6 +2540,8 @@ async def ignore_alert(data: dict = Body(...)):
         message = issue.get('message', '')
         message_hash = hashlib.md5(message.encode()).hexdigest()[:8]
         alert_id = (timestamp, service, message_hash)
+        
+        logger.info(f"Ignoring alert: {alert_id}")
         
         # Add to ignored alerts
         ignored_alerts.add(alert_id)
@@ -2554,7 +2557,7 @@ async def ignore_alert(data: dict = Body(...)):
         
         send_discord_alert(discord_message)
         
-        logger.info(f"Alert ignored: {service} - {message[:50]}")
+        logger.info(f"Alert ignored successfully: {service} - {message[:50]}")
         
         return {
             "status": "success",
@@ -2563,7 +2566,7 @@ async def ignore_alert(data: dict = Body(...)):
         }
     
     except Exception as e:
-        logger.error(f"Error ignoring alert: {e}")
+        logger.error(f"Error ignoring alert: {e}", exc_info=True)
         return {
             "status": "error",
             "message": str(e)

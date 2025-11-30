@@ -85,20 +85,20 @@ log_error() {
 
 check_python() {
     log_info "Checking Python version..."
-    if ! command -v python3 &> /dev/null; then
+if ! command -v python3 &> /dev/null; then
         log_error "Python 3 is not installed"
-        exit 1
-    fi
-    
-    PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
-    PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
-    PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
-    
-    if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 8 ]); then
+    exit 1
+fi
+
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
+PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
+
+if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 8 ]); then
         log_error "Python 3.8 or higher is required (found: $PYTHON_VERSION)"
-        exit 1
-    fi
-    
+    exit 1
+fi
+
     log_success "Python ${PYTHON_VERSION} detected"
 }
 
@@ -179,9 +179,9 @@ check_ports() {
         for port in "${ports[@]}"; do
             if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
                 ports_in_use+=($port)
-            fi
-        done
-        
+    fi
+done
+
         if [ ${#ports_in_use[@]} -gt 0 ]; then
             log_error "Ports still in use: ${ports_in_use[*]}"
             log_error ""
@@ -235,12 +235,12 @@ check_project_structure() {
 
 setup_venv() {
     log_info "Setting up virtual environment..."
-    
-    if [ ! -f "$VENV_DIR/bin/activate" ]; then
+
+if [ ! -f "$VENV_DIR/bin/activate" ]; then
         log_info "Creating virtual environment..."
-        python3 -m venv "$VENV_DIR"
-    fi
-    
+    python3 -m venv "$VENV_DIR"
+fi
+
     source "$VENV_DIR/bin/activate"
     log_success "Virtual environment activated"
     
@@ -261,7 +261,7 @@ setup_venv() {
             python3 -m pip install -r requirements.txt --upgrade 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || {
                 log_error "Failed to install dependencies. Check $LOG_DIR/dependency-install.log"
                 log_error "You may need to manually resolve dependency conflicts"
-                exit 1
+    exit 1
             }
         fi
     fi
@@ -317,8 +317,8 @@ load_resource_profile() {
     if [ ! -f "$RESOURCE_CONFIG" ]; then
         log_warning "Resource config not found: $RESOURCE_CONFIG - using defaults"
         return
-    fi
-    
+fi
+
     # Use Python to parse JSON (more reliable than jq which may not be installed)
     local profile_json=$(python3 -c "
 import json
@@ -431,7 +431,7 @@ start_service() {
     cd "$path"
     nohup python3 -u "$script" >> "$LOG_DIR/${service_name}.log" 2>&1 &
     local pid=$!
-    cd "$SCRIPT_DIR"
+        cd "$SCRIPT_DIR"
     
     # Save PID
     echo "$pid" > "$pid_file"
@@ -695,150 +695,6 @@ Access Points (after startup):
 EOF
 }
 
-<<<<<<< HEAD
-if [ "$DOCKER_OK" -eq 1 ]; then
-    echo -e "${GREEN}✅ Docker and Docker Compose detected${NC}"
-else
-    echo -e "${YELLOW}⚠️  Proceeding without Fluent Bit due to Docker/Compose issue${NC}"
-fi
-
-# Ensure and activate virtual environment, then install Python deps
-VENV_DIR=""
-ALT_VENV=".venv-user"
-# Prefer existing writable virtualenvs; fall back to alternate location if needed
-for candidate in ".venv" "venv"; do
-    if [ -d "$candidate" ]; then
-        if [ -w "$candidate" ]; then
-            VENV_DIR="$candidate"
-            break
-        else
-            echo -e "${YELLOW}⚠️  WARNING: Virtualenv ${candidate} is not writable. Creating a user-owned env instead.${NC}"
-            VENV_DIR="$ALT_VENV"
-            break
-        fi
-    fi
-done
-
-if [ -z "$VENV_DIR" ]; then
-    VENV_DIR=".venv"
-fi
-
-# If the selected directory exists but is still not writable, fall back again
-if [ -d "$VENV_DIR" ] && [ ! -w "$VENV_DIR" ]; then
-    echo -e "${YELLOW}⚠️  WARNING: Selected virtualenv ${VENV_DIR} is not writable. Using ${ALT_VENV}.${NC}"
-    VENV_DIR="$ALT_VENV"
-fi
-
-if [ ! -f "$VENV_DIR/bin/activate" ]; then
-    echo -e "${YELLOW}📦 Creating virtual environment (${VENV_DIR})...${NC}"
-    python3 -m venv "$VENV_DIR"
-fi
-
-if [ -f "$VENV_DIR/bin/activate" ]; then
-    # shellcheck disable=SC1090
-    source "$VENV_DIR/bin/activate"
-    echo -e "${GREEN}✅ Virtual environment activated (${VENV_DIR})${NC}"
-else
-    echo -e "${RED}❌ ERROR: Failed to prepare virtual environment at ${VENV_DIR}${NC}"
-    exit 1
-fi
-
-echo -e "${YELLOW}📦 Installing Python dependencies...${NC}"
-python3 -m pip install --upgrade pip >/dev/null
-if [ -f "requirements.txt" ]; then
-    python3 -m pip install -r requirements.txt
-fi
-# Install per-service requirements if present
-if [ -f "model/requirements.txt" ]; then
-    python3 -m pip install -r model/requirements.txt
-fi
-if [ -f "monitoring/server/requirements.txt" ]; then
-    python3 -m pip install -r monitoring/server/requirements.txt
-fi
-if [ -f "incident-bot/requirements.txt" ]; then
-    python3 -m pip install -r incident-bot/requirements.txt
-fi
-# Ensure protobuf is compatible with TensorFlow (requires >=5.28.0)
-python3 -m pip install --upgrade "protobuf>=5.28.0" googleapis-common-protos >/dev/null || true
-echo -e "${GREEN}✅ Virtual environment ready${NC}"
-
-# Check if .env file exists
-if [ ! -f ".env" ]; then
-    echo -e "${YELLOW}⚠️  WARNING: .env file not found${NC}"
-    if [ -f "config/env.template" ]; then
-        echo -e "${YELLOW}📝 Creating .env file from template...${NC}"
-        cp config/env.template .env
-        echo -e "${GREEN}✅ Created .env file - please configure your API keys${NC}"
-    else
-        echo -e "${YELLOW}⚠️  No env.template found - continuing without .env${NC}"
-    fi
-fi
-
-# Check for required directories
-echo -e "${YELLOW}🔍 Checking project structure...${NC}"
-REQUIRED_DIRS=("monitoring/server" "model" "incident-bot" "config")
-for dir in "${REQUIRED_DIRS[@]}"; do
-    if [ ! -d "$dir" ]; then
-        echo -e "${RED}❌ ERROR: Required directory not found: $dir${NC}"
-        exit 1
-    fi
-done
-echo -e "${GREEN}✅ Project structure verified${NC}"
-
-# Check if ports are available
-echo -e "${YELLOW}🔍 Checking port availability...${NC}"
-PORTS=(8080 8000 8001 5000 5001 8888)
-OCCUPIED_PORTS=()
-
-for port in "${PORTS[@]}"; do
-    if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1 || netstat -an 2>/dev/null | grep -q ":$port.*LISTEN"; then
-        OCCUPIED_PORTS+=($port)
-    fi
-done
-
-if [ ${#OCCUPIED_PORTS[@]} -gt 0 ]; then
-    echo -e "${YELLOW}⚠️  WARNING: Ports ${OCCUPIED_PORTS[@]} are already in use${NC}"
-    echo -e "${YELLOW}   The application may not start properly if these ports are needed${NC}"
-    read -p "Continue anyway? (y/n) " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo -e "${RED}❌ Startup cancelled${NC}"
-        exit 1
-    fi
-fi
-
-# Create Docker network for Fluent Bit if it doesn't exist
-if [ "$DOCKER_OK" -eq 1 ]; then
-    echo -e "${YELLOW}🔍 Setting up Docker network for Fluent Bit...${NC}"
-    if ! docker network ls | grep -q "healing-network"; then
-        echo -e "${YELLOW}   Creating healing-network...${NC}"
-        docker network create healing-network 2>/dev/null || true
-        echo -e "${GREEN}✅ Docker network created${NC}"
-    else
-        echo -e "${GREEN}✅ Docker network already exists${NC}"
-    fi
-fi
-
-# Start Fluent Bit with Docker (only if Docker/Compose available)
-if [ "$DOCKER_OK" -eq 1 ]; then
-    echo -e "${YELLOW}🐳 Starting Fluent Bit with Docker...${NC}"
-    cd config
-    if $COMPOSE_CMD -f docker-compose-fluent-bit.yml up -d; then
-        echo -e "${GREEN}✅ Fluent Bit started${NC}"
-    else
-        echo -e "${RED}❌ ERROR: Failed to start Fluent Bit${NC}"
-        exit 1
-    fi
-    cd "$SCRIPT_DIR"
-else
-    echo -e "${YELLOW}⏭️  Skipping Fluent Bit startup (Docker/Compose unavailable)${NC}"
-fi
-
-# Start Python services natively
-echo ""
-echo -e "${GREEN}🚀 Starting Python services...${NC}"
-echo ""
-
 main() {
     local command="${1:-start}"
     
@@ -874,28 +730,28 @@ main() {
         check_ports
         
         log_info "Starting all services..."
-        echo ""
+echo ""
         
         start_all_services
-        
-        echo ""
-        echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║                    🌐 ACCESS POINTS                          ║${NC}"
-        echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-        echo -e "${GREEN}🛡️  Healing Dashboard:${NC}      http://localhost:5001"
+
+echo ""
+echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║                    🌐 ACCESS POINTS                          ║${NC}"
+echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${GREEN}🛡️  Healing Dashboard:${NC}      http://localhost:5001"
         echo -e "${GREEN}📈 Monitoring Server:${NC}       http://localhost:5000"
         echo -e "${GREEN}🤖 DDoS Model API:${NC}               http://localhost:8080"
-        echo -e "${GREEN}🔍 Network Analyzer:${NC}        http://localhost:8000"
-        echo -e "${GREEN}🚨 Incident Bot:${NC}            http://localhost:8001"
-        echo ""
-        echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}🔍 Network Analyzer:${NC}        http://localhost:8000"
+echo -e "${GREEN}🚨 Incident Bot:${NC}            http://localhost:8001"
+echo ""
+echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
         echo -e "${BLUE}║         🛡️  ALL SERVICES ARE RUNNING! 🛡️                    ║${NC}"
-        echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-        echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}"
-        echo ""
-        
+echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}"
+echo ""
+
         # Keep script running
         wait
     fi

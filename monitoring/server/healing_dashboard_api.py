@@ -3,7 +3,7 @@ Healing Bot Dashboard API
 Comprehensive backend for real-time system monitoring and management
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -181,13 +181,13 @@ def load_config():
     }
     
     return {
-        "auto_restart": True,
-        "cpu_threshold": 90.0,
-        "memory_threshold": 85.0,
-        "disk_threshold": 80.0,
+    "auto_restart": True,
+    "cpu_threshold": 90.0,
+    "memory_threshold": 85.0,
+    "disk_threshold": 80.0,
         "discord_webhook": discord_webhook,
-        "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
-        "model_service_url": os.getenv("MODEL_SERVICE_URL", "http://localhost:8080"),
+    "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
+    "model_service_url": os.getenv("MODEL_SERVICE_URL", "http://localhost:8080"),
         "notification_cooldown_minutes": notification_cooldown_minutes,
         "notification_severity_cooldowns": severity_cooldowns,
         "notification_max_retention_hours": notification_max_retention_hours,
@@ -223,6 +223,9 @@ log_buffer = []
 
 # Track notified critical errors to avoid duplicates
 notified_critical_errors = set()  # Set of (timestamp, service, message_hash) tuples
+
+# Track ignored alerts
+ignored_alerts = set()  # Set of alert IDs (timestamp, service, message_hash)
 
 # Track last sent warnings and time-to-failure for Discord notifications
 _last_sent_warnings = set()  # Set of warning types that were sent
@@ -460,12 +463,12 @@ def restart_service(service_name: str) -> bool:
         # If that fails, try with sudo
         if result.returncode != 0:
             logger.info(f"Non-sudo restart failed, trying with sudo for {service_name}")
-            result = subprocess.run(
-                ["sudo", "systemctl", "restart", service_name],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
+        result = subprocess.run(
+            ["sudo", "systemctl", "restart", service_name],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
         
         if result.returncode == 0:
             logger.info(f"✅ Successfully restarted {service_name}")
@@ -490,7 +493,7 @@ def restart_service(service_name: str) -> bool:
             return False
     except subprocess.TimeoutExpired:
         logger.error(f"⏱️  Timeout while restarting service {service_name}")
-        return False
+            return False
     except Exception as e:
         logger.error(f"❌ Error restarting service {service_name}: {e}", exc_info=True)
         return False
@@ -1459,7 +1462,7 @@ def send_detailed_critical_alert(issue: Dict[str, Any], system_metrics: Dict[str
         
         success = send_discord_alert("", "critical", embed_data)
         if success:
-            logger.info(f"Detailed Discord notification sent for CRITICAL error: {service_name}")
+        logger.info(f"Detailed Discord notification sent for CRITICAL error: {service_name}")
         else:
             logger.warning(f"Failed to send detailed Discord notification for CRITICAL error: {service_name}")
         return success
@@ -1568,7 +1571,7 @@ async def monitoring_loop():
                 # Check if cleanup was run in the last hour
                 if last_cleanup_time is None:
                     # Never run before, run it
-                    run_disk_cleanup()
+                run_disk_cleanup()
                 else:
                     time_since_last_cleanup = (datetime.now() - last_cleanup_time).total_seconds()
                     if time_since_last_cleanup >= 3600:  # 1 hour = 3600 seconds
@@ -1602,7 +1605,7 @@ async def startup_event():
     """Start background tasks and initialize cloud components"""
     try:
         # Start monitoring loop (non-blocking)
-        asyncio.create_task(monitoring_loop())
+    asyncio.create_task(monitoring_loop())
         logger.info("✅ Monitoring loop started")
         
         # Initialize cloud simulation components in background (don't block startup)
@@ -1663,10 +1666,10 @@ async def startup_event():
 async def root():
     """Serve the dashboard"""
     try:
-        dashboard_path = Path(__file__).parent.parent / "dashboard" / "static" / "healing-dashboard.html"
+    dashboard_path = Path(__file__).parent.parent / "dashboard" / "static" / "healing-dashboard.html"
         if dashboard_path.exists():
-            with open(dashboard_path, "r") as f:
-                return HTMLResponse(content=f.read())
+    with open(dashboard_path, "r") as f:
+        return HTMLResponse(content=f.read())
         else:
             # Return a simple HTML page if dashboard file not found
             return HTMLResponse(content="""
@@ -1735,8 +1738,8 @@ async def stop_service_endpoint(service_name: str):
 async def restart_service_endpoint(service_name: str):
     """Restart a specific service"""
     try:
-        success = restart_service(service_name)
-        return {"success": success, "service": service_name}
+    success = restart_service(service_name)
+    return {"success": success, "service": service_name}
     except Exception as e:
         logger.error(f"Error restarting service {service_name}: {e}")
         return {"success": False, "service": service_name, "error": str(e)}
@@ -2464,10 +2467,22 @@ async def get_critical_service_issues(include_test: bool = False):
         if new_critical_count > 0:
             logger.info(f"Sent Discord notifications for {new_critical_count} new CRITICAL error(s)")
         
+        # Filter out ignored alerts
+        filtered_issues = []
+        for issue in issues:
+            timestamp = issue.get('timestamp', '')
+            service = issue.get('service', 'unknown')
+            message = issue.get('message', '')
+            message_hash = hashlib.md5(message.encode()).hexdigest()[:8]
+            alert_id = (timestamp, service, message_hash)
+            
+            if alert_id not in ignored_alerts:
+                filtered_issues.append(issue)
+        
         return {
             "status": "success",
-            "issues": issues,
-            "count": len(issues)
+            "issues": filtered_issues,
+            "count": len(filtered_issues)
         }
     except Exception as e:
         logger.error(f"Error getting critical service issues: {e}")
@@ -2506,13 +2521,62 @@ async def get_critical_services_statistics():
         }
 
 # Gemini AI Log Analysis Endpoints
+@app.post("/api/critical-services/ignore")
+async def ignore_alert(data: dict = Body(...)):
+    """Ignore an alert and send notification to Discord"""
+    try:
+        issue = data.get('issue', {})
+        
+        if not issue:
+            return {
+                "status": "error",
+                "message": "No issue provided"
+            }
+        
+        # Create alert ID
+        timestamp = issue.get('timestamp', '')
+        service = issue.get('service', 'unknown')
+        message = issue.get('message', '')
+        message_hash = hashlib.md5(message.encode()).hexdigest()[:8]
+        alert_id = (timestamp, service, message_hash)
+        
+        # Add to ignored alerts
+        ignored_alerts.add(alert_id)
+        
+        # Send Discord notification
+        severity = issue.get('severity', issue.get('level', 'CRITICAL'))
+        discord_message = f"🚫 **Alert Ignored**\n\n"
+        discord_message += f"**Service:** {service}\n"
+        discord_message += f"**Severity:** {severity}\n"
+        discord_message += f"**Message:** {message[:200]}\n"
+        discord_message += f"**Time:** {timestamp}\n"
+        discord_message += f"\n*This alert has been ignored and will no longer appear in the dashboard.*"
+        
+        send_discord_alert(discord_message)
+        
+        logger.info(f"Alert ignored: {service} - {message[:50]}")
+        
+        return {
+            "status": "success",
+            "message": "Alert ignored successfully",
+            "alert_id": f"{timestamp}_{service}_{message_hash}"
+        }
+    
+    except Exception as e:
+        logger.error(f"Error ignoring alert: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 @app.post("/api/gemini/analyze-log")
-async def analyze_single_log(data: dict):
+async def analyze_single_log(data: dict = Body(...)):
     """Analyze a single log entry using Gemini AI"""
     try:
         # Use the global gemini_analyzer from the module
         from gemini_log_analyzer import gemini_analyzer as _gemini_analyzer
         if not _gemini_analyzer:
+            logger.error("Gemini analyzer not initialized")
             return {
                 "status": "error",
                 "message": "Gemini analyzer not initialized. Check GEMINI_API_KEY"
@@ -2521,25 +2585,29 @@ async def analyze_single_log(data: dict):
         log_entry = data
         
         if not log_entry:
+            logger.error("No log entry provided")
             return {
                 "status": "error",
                 "message": "No log entry provided"
             }
         
+        logger.info(f"Analyzing log entry: service={log_entry.get('service')}, message={log_entry.get('message', '')[:50]}")
+        
         # Analyze the log
         analysis = _gemini_analyzer.analyze_error_log(log_entry)
         
+        logger.info(f"Analysis result status: {analysis.get('status')}")
         return analysis
     
     except Exception as e:
-        logger.error(f"Error analyzing log: {e}")
+        logger.error(f"Error analyzing log: {e}", exc_info=True)
         return {
             "status": "error",
             "message": str(e)
         }
 
 @app.post("/api/gemini/analyze-pattern")
-async def analyze_log_pattern(data: dict):
+async def analyze_log_pattern(data: dict = Body(...)):
     """Analyze multiple logs for patterns using Gemini AI"""
     try:
         from gemini_log_analyzer import gemini_analyzer as _gemini_analyzer
@@ -2973,7 +3041,7 @@ Machine: {uname.machine}"""
                     output = f"❌ Path not found: {path}"
                 elif path_obj.is_file():
                     output = str(path_obj)
-                else:
+        else:
                     items = sorted(path_obj.iterdir())
                     dirs = [item for item in items if item.is_dir()]
                     files = [item for item in items if item.is_file()]
@@ -3307,7 +3375,24 @@ async def get_config():
 @app.post("/api/config")
 async def update_config(data: dict):
     """Update configuration"""
+    # Store old auto_restart value before updating
+    old_auto_restart = CONFIG.get("auto_restart", True)
+    
+    # Check if auto_restart is being disabled
+    if "auto_restart" in data and not data["auto_restart"] and old_auto_restart:
+        logger.info("⏸️ Auto-restart has been disabled - auto-start process will stop")
+        log_event("info", "Auto-restart disabled - service auto-start process stopped")
+        send_discord_alert("⏸️ Auto-restart disabled - service auto-start process stopped")
+    
+    # Update the configuration
     CONFIG.update(data)
+    
+    # Log when auto-restart is enabled (checking new value)
+    if "auto_restart" in data and data["auto_restart"] and not old_auto_restart:
+        logger.info("▶️ Auto-restart has been enabled - auto-start process will resume")
+        log_event("info", "Auto-restart enabled - service auto-start process active")
+        send_discord_alert("▶️ Auto-restart enabled - service auto-start process active")
+    
     return {"success": True, "config": CONFIG}
 
 # ============================================================================
@@ -3384,18 +3469,18 @@ def load_predictive_model():
                 model_path = latest_path / "model_loader.py"
             
             if model_path.exists() and model_path.is_file():
-                import importlib.util
-                spec = importlib.util.spec_from_file_location("model_loader", model_path)
-                model_loader = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(model_loader)
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("model_loader", model_path)
+            model_loader = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(model_loader)
                 logger.info(f"Successfully loaded predictive model from {model_path}")
-                return model_loader
+            return model_loader
             else:
                 logger.warning(f"Model loader file not found at {model_path}")
                 return None
         else:
             logger.debug(f"Model artifacts directory 'latest' not found at {latest_path}")
-            return None
+        return None
     except Exception as e:
         logger.warning(f"Could not load predictive model: {e}", exc_info=True)
         return None
@@ -3511,7 +3596,7 @@ async def get_early_warnings():
             metrics = _last_demo_metrics.copy()
             logger.debug(f"Using demo metrics for early warnings: {metrics}")
         else:
-            # Get current system metrics
+        # Get current system metrics
             system_metrics = get_system_metrics()
             # Normalize field names to match model expectations
             metrics = {
@@ -3533,11 +3618,11 @@ async def get_early_warnings():
         if 'disk_percent' not in metrics:
             metrics['disk_percent'] = metrics.get('disk', 0)
         if 'error_count' not in metrics:
-            metrics['error_count'] = 0
+        metrics['error_count'] = 0
         if 'warning_count' not in metrics:
-            metrics['warning_count'] = 0
+        metrics['warning_count'] = 0
         if 'service_failures' not in metrics:
-            metrics['service_failures'] = 0
+        metrics['service_failures'] = 0
         
         # Check if model functions exist
         if not hasattr(predictive_model, 'get_early_warnings'):
@@ -3629,7 +3714,7 @@ async def get_early_warnings():
         try:
             # Log metrics being sent to model
             logger.debug(f"Calling get_early_warnings with metrics: CPU={metrics.get('cpu_percent', 0)}%, Memory={metrics.get('memory_percent', 0)}%, Disk={metrics.get('disk_percent', 0)}%, Errors={metrics.get('error_count', 0)}")
-            result = predictive_model.get_early_warnings(metrics)
+        result = predictive_model.get_early_warnings(metrics)
             logger.info(f"Model get_early_warnings returned {result.get('warning_count', 0)} warnings: {result}")
             # Ensure result is a dict
             if not isinstance(result, dict):
@@ -3832,7 +3917,7 @@ async def predict_time_to_failure():
             metrics = _last_demo_metrics.copy()
             logger.debug(f"Using demo metrics for time-to-failure: {metrics}")
         else:
-            # Get current system metrics
+        # Get current system metrics
             system_metrics = get_system_metrics()
             # Normalize field names to match model expectations
             metrics = {
@@ -3854,11 +3939,11 @@ async def predict_time_to_failure():
         if 'disk_percent' not in metrics:
             metrics['disk_percent'] = metrics.get('disk', 0)
         if 'error_count' not in metrics:
-            metrics['error_count'] = 0
+        metrics['error_count'] = 0
         if 'warning_count' not in metrics:
-            metrics['warning_count'] = 0
+        metrics['warning_count'] = 0
         if 'service_failures' not in metrics:
-            metrics['service_failures'] = 0
+        metrics['service_failures'] = 0
         
         # Predict time to failure
         result = predictive_model.predict_time_to_failure(metrics)

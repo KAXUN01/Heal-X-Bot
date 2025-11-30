@@ -74,8 +74,16 @@ if 'PROVIDE_AUTOMATIC_OPTIONS' not in app.config:
     app.config['PROVIDE_AUTOMATIC_OPTIONS'] = True
 bootstrap = Bootstrap(app)
 
-# Enable CORS for all routes to allow dashboard to access the API
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+# Enable CORS for all routes - configurable via environment variable
+# Default: allow localhost origins for development
+# Set CORS_ORIGINS environment variable to specify allowed origins (comma-separated)
+# Example: CORS_ORIGINS=http://localhost:5001,http://localhost:3000
+cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5001,http://localhost:3000,http://127.0.0.1:5001,http://127.0.0.1:3000').split(',')
+cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
+# Allow all origins only in development mode
+if os.getenv('FLASK_ENV', '').lower() == 'development' or os.getenv('CORS_ALLOW_ALL', 'false').lower() == 'true':
+    cors_origins = ['*']
+CORS(app, resources={r"/api/*": {"origins": cors_origins}})
 
 # Initialize monitoring services on startup
 log_monitoring_service = None
@@ -1211,4 +1219,9 @@ if __name__ == "__main__":
     # Initialize all services before starting the app
     initialize_services()
     
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # Debug mode should only be enabled in development
+    # Set FLASK_ENV=development or FLASK_DEBUG=1 to enable debug mode
+    debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() in ('true', '1', 'yes') or \
+                 os.getenv('FLASK_ENV', '').lower() == 'development'
+    
+    app.run(host="0.0.0.0", port=5000, debug=debug_mode)

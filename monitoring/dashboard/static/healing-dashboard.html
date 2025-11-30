@@ -6099,7 +6099,7 @@
                 <div style="text-align: center; padding: 3rem;">
                     <div style="border: 3px solid var(--accent-blue); border-top-color: transparent; border-radius: 50%; width: 3rem; height: 3rem; margin: 0 auto 1rem; animation: spin 1s linear infinite;"></div>
                     <p style="margin-top: 1rem;">Analyzing ${logSource} log with Google Gemini AI...</p>
-                    <small style="color: var(--text-secondary);">This may take a few seconds</small>
+                    <small style="color: var(--text-secondary);">Optimized for speed - usually completes in 3-6 seconds</small>
                     ${logEntry.source === 'fluent-bit' ? '<div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 0.25rem; font-size: 0.8rem; color: var(--accent-blue);"><i class="fas fa-info-circle"></i> Analyzing Fluent Bit log entry</div>' : ''}
                 </div>
                 <style>
@@ -8057,14 +8057,25 @@
                 
                 if (!data.success) {
                     if (data.error && data.error.includes('not available')) {
-                        analysisContent.innerHTML = `
+                        let errorHtml = `
                             <div style="padding: 1rem; background: rgba(255, 193, 7, 0.1); border-radius: 4px; border-left: 3px solid var(--accent-yellow);">
                                 <strong style="color: var(--accent-yellow);"><i class="fas fa-exclamation-triangle"></i> AI Analysis Unavailable</strong>
                                 <p style="margin: 0.5rem 0 0 0; color: var(--text-secondary); font-size: 0.9rem;">
-                                    ${data.error}. Please configure GEMINI_API_KEY to enable AI-powered fault analysis.
-                                </p>
-                            </div>
-                        `;
+                                    ${data.error}
+                                </p>`;
+                        
+                        if (data.setup_instructions) {
+                            errorHtml += `
+                                <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(0, 0, 0, 0.2); border-radius: 4px;">
+                                    <strong style="color: var(--accent-yellow); font-size: 0.85rem;">Setup Instructions:</strong>
+                                    <ol style="margin: 0.5rem 0 0 0; padding-left: 1.5rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                        ${data.setup_instructions.steps.map((step, idx) => `<li style="margin: 0.25rem 0;">${step}</li>`).join('')}
+                                    </ol>
+                                </div>`;
+                        }
+                        
+                        errorHtml += `</div>`;
+                        analysisContent.innerHTML = errorHtml;
                     } else {
                         throw new Error(data.error || 'Analysis failed');
                     }
@@ -8237,7 +8248,12 @@
             if (!analysisData) {
                 // Fetch analysis if not cached
                 try {
-                    const response = await fetch(`/api/cloud/faults/${faultId}/analyze`);
+                    const response = await fetch(`/api/cloud/faults/${faultId}/analyze`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
                     if (response.ok) {
                         const data = await response.json();
                         if (data.success) {
@@ -8498,7 +8514,12 @@
                     displayManualInstructions(faultId, analysisData.manual_instructions);
                 } else {
                     // Fetch analysis if not cached
-                    const response = await fetch(`/api/cloud/faults/${faultId}/analyze`);
+                    const response = await fetch(`/api/cloud/faults/${faultId}/analyze`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    });
                     if (response.ok) {
                         const data = await response.json();
                         if (data.success) {
@@ -8882,7 +8903,7 @@
                     return;
                 }
                 try {
-                    const data = await cachedFetch('/api/cloud/healing/history?limit=10', {}, 5000);
+                    const data = await cachedFetch('/api/cloud/healing/history?limit=10', { timeout: 15000 }, 10000);
                     if (data && data.success) {
                             updateHealingActions(data.history, data.statistics);
                             
@@ -8890,9 +8911,11 @@
                             if (data.history && data.history.length > 0) {
                                 const latest = data.history[0];
                                 if (!latest.success && latest.manual_instructions) {
-                                    updateManualInstructions(latest.manual_instructions);
+                                    if (typeof window.updateManualInstructions === 'function') {
+                                        window.updateManualInstructions(latest.manual_instructions);
+                                    }
+                                }
                             }
-                        }
                     }
                 } catch (e) {
                     // Silently handle errors
@@ -9035,41 +9058,46 @@
             // All other data loading is now handled by lazy loading in switchTab()
             
             // Setup event listeners (lightweight, no API calls)
+            // Define updateManualInstructions before setupPeriodicUpdates uses it
+            function updateManualInstructions(instructions) {
+                const panel = document.getElementById('manualInstructionsPanel');
+                if (!panel) return;
+                
+                panel.innerHTML = `
+                    <div style="background: rgba(251, 191, 36, 0.2); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--accent-yellow);">
+                        <h4 style="margin-top: 0; color: var(--accent-yellow);">⚠️ Manual Intervention Required</h4>
+                        <div style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.6;">
+                            ${instructions}
+                        </div>
+                        <button class="btn btn-secondary" onclick="copyInstructions()" style="margin-top: 1rem;">
+                            📋 Copy Instructions
+                        </button>
+                    </div>
+                `;
+            }
+            
+            function copyInstructions() {
+                const panel = document.getElementById('manualInstructionsPanel');
+                if (!panel) return;
+                
+                const text = panel.innerText;
+                navigator.clipboard.writeText(text).then(() => {
+                    showNotification('✅ Instructions copied to clipboard', 'success');
+                }).catch(err => {
+                    console.error('Failed to copy:', err);
+                    showNotification('❌ Failed to copy instructions', 'error');
+                });
+            }
+            
+            // Make functions globally accessible
+            window.updateManualInstructions = updateManualInstructions;
+            window.copyInstructions = copyInstructions;
+            
             setupAutoHealingConfigListeners();
             setupAutoRestartToggle();
             
             // Setup periodic updates (only for active tabs)
             setupPeriodicUpdates();
-        
-        function updateManualInstructions(instructions) {
-            const panel = document.getElementById('manualInstructionsPanel');
-            if (!panel) return;
-            
-            panel.innerHTML = `
-                <div style="background: rgba(251, 191, 36, 0.2); padding: 1rem; border-radius: 8px; border-left: 4px solid var(--accent-yellow);">
-                    <h4 style="margin-top: 0; color: var(--accent-yellow);">⚠️ Manual Intervention Required</h4>
-                    <div style="white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 0.9rem; line-height: 1.6;">
-                        ${instructions}
-                    </div>
-                    <button class="btn btn-secondary" onclick="copyInstructions()" style="margin-top: 1rem;">
-                        📋 Copy Instructions
-                    </button>
-                </div>
-            `;
-        }
-        
-        function copyInstructions() {
-            const panel = document.getElementById('manualInstructionsPanel');
-            if (!panel) return;
-            
-            const text = panel.innerText;
-            navigator.clipboard.writeText(text).then(() => {
-                showNotification('✅ Instructions copied to clipboard', 'success');
-            }).catch(err => {
-                console.error('Failed to copy:', err);
-                showNotification('❌ Failed to copy instructions', 'error');
-            });
-        }
             
             // Add initial activity logs (deferred to not block render)
             setTimeout(() => {

@@ -17,18 +17,31 @@ from fastapi.responses import Response
 # Load environment variables from .env file
 load_dotenv()
 
-# Set up logging
-log_dir = Path(__file__).parent.parent / "logs"
-log_dir.mkdir(exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_dir / "incident_bot.log"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger("incident_bot")
+# Set up logging using standardized configuration
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+try:
+    from monitoring.server.core.logging_config import setup_logger
+    log_dir = Path(__file__).parent.parent / "logs"
+    logger = setup_logger(
+        name="incident_bot",
+        log_file="incident_bot.log",
+        log_dir=str(log_dir),
+        console_output=True
+    )
+except ImportError:
+    # Fallback to basic logging if core module not available
+    log_dir = Path(__file__).parent.parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_dir / "incident_bot.log"),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger("incident_bot")
 
 # Initialize Gemini API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")

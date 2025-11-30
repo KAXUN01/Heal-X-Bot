@@ -103,12 +103,17 @@ class CriticalServicesMonitor:
             is_active = result.stdout.strip() == 'active'
             
             # Get detailed status
-            status_result = subprocess.run(
-                ['systemctl', 'status', service_name, '--no-pager', '-l'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
+            try:
+                status_result = subprocess.run(
+                    ['systemctl', 'status', service_name, '--no-pager', '-l'],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+            except subprocess.TimeoutExpired:
+                logger.warning(f"Status check for {service_name} timed out")
+            except Exception as e:
+                logger.warning(f"Error getting detailed status for {service_name}: {e}")
             
             return {
                 'service': service_name,
@@ -117,8 +122,24 @@ class CriticalServicesMonitor:
                 'timestamp': datetime.now().isoformat()
             }
             
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Service status check for {service_name} timed out")
+            return {
+                'service': service_name,
+                'active': False,
+                'status': 'unknown',
+                'timestamp': datetime.now().isoformat()
+            }
+        except FileNotFoundError:
+            logger.error(f"systemctl command not found - systemd may not be available")
+            return {
+                'service': service_name,
+                'active': False,
+                'status': 'unknown',
+                'timestamp': datetime.now().isoformat()
+            }
         except Exception as e:
-            logger.debug(f"Error getting status for {service_name}: {e}")
+            logger.debug(f"Error getting status for {service_name}: {e}", exc_info=True)
             return {
                 'service': service_name,
                 'active': False,

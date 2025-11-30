@@ -90,22 +90,104 @@ class Config:
             required_keys = []
         
         errors = []
+        warnings = []
         
         # Check for required API keys if specified
         if 'gemini_api_key' in required_keys and not self.gemini_api_key:
             errors.append("GEMINI_API_KEY or GOOGLE_API_KEY is required but not set")
+        elif self.gemini_api_key:
+            # Validate API key format (should start with AIza and be at least 20 chars)
+            if len(self.gemini_api_key) < 20 or not self.gemini_api_key.startswith('AIza'):
+                warnings.append("GEMINI_API_KEY format appears invalid (should start with 'AIza' and be at least 20 characters)")
         
         if 'discord_webhook' in required_keys and not self.discord_webhook:
             errors.append("DISCORD_WEBHOOK is required but not set")
+        elif self.discord_webhook:
+            # Validate Discord webhook URL format
+            if not self.discord_webhook.startswith('https://discord.com/api/webhooks/'):
+                warnings.append("DISCORD_WEBHOOK URL format appears invalid")
         
         if 'aws_credentials' in required_keys:
             if not self.aws_access_key_id or not self.aws_secret_access_key:
                 errors.append("AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are required but not set")
+            elif self.aws_access_key_id and len(self.aws_access_key_id) < 16:
+                warnings.append("AWS_ACCESS_KEY_ID format appears invalid (should be at least 16 characters)")
+        
+        # Validate port numbers
+        ports = {
+            'model_port': self.model_port,
+            'monitoring_server_port': self.monitoring_server_port,
+            'healing_dashboard_port': self.healing_dashboard_port,
+            'network_analyzer_port': self.network_analyzer_port,
+            'incident_bot_port': self.incident_bot_port,
+        }
+        for port_name, port_value in ports.items():
+            if not (1024 <= port_value <= 65535):
+                errors.append(f"{port_name} must be between 1024 and 65535, got {port_value}")
+        
+        # Check for port conflicts
+        port_values = list(ports.values())
+        if len(port_values) != len(set(port_values)):
+            duplicates = [p for p in port_values if port_values.count(p) > 1]
+            errors.append(f"Port conflicts detected: {set(duplicates)}")
+        
+        # Validate thresholds
+        if hasattr(self, 'self_healing_confidence_threshold'):
+            if not (0.0 <= self.self_healing_confidence_threshold <= 1.0):
+                errors.append(f"SELF_HEALING_CONFIDENCE_THRESHOLD must be between 0.0 and 1.0, got {self.self_healing_confidence_threshold}")
         
         if errors:
             raise ConfigurationError(f"Configuration validation failed:\n" + "\n".join(errors))
         
+        if warnings:
+            import logging
+            logger = logging.getLogger(__name__)
+            for warning in warnings:
+                logger.warning(f"Configuration warning: {warning}")
+        
         return True
+    
+    def validate_all(self) -> tuple[bool, list[str], list[str]]:
+        """Validate all configuration values
+        
+        Returns:
+            Tuple of (is_valid, errors, warnings)
+        """
+        errors = []
+        warnings = []
+        
+        # Validate ports
+        ports = {
+            'model_port': self.model_port,
+            'monitoring_server_port': self.monitoring_server_port,
+            'healing_dashboard_port': self.healing_dashboard_port,
+            'network_analyzer_port': self.network_analyzer_port,
+            'incident_bot_port': self.incident_bot_port,
+        }
+        for port_name, port_value in ports.items():
+            if not (1024 <= port_value <= 65535):
+                errors.append(f"{port_name} must be between 1024 and 65535, got {port_value}")
+        
+        # Check for port conflicts
+        port_values = list(ports.values())
+        if len(port_values) != len(set(port_values)):
+            duplicates = [p for p in port_values if port_values.count(p) > 1]
+            errors.append(f"Port conflicts detected: {set(duplicates)}")
+        
+        # Validate API keys format if present
+        if self.gemini_api_key:
+            if len(self.gemini_api_key) < 20 or not self.gemini_api_key.startswith('AIza'):
+                warnings.append("GEMINI_API_KEY format appears invalid")
+        
+        if self.discord_webhook and not self.discord_webhook.startswith('https://discord.com/api/webhooks/'):
+            warnings.append("DISCORD_WEBHOOK URL format appears invalid")
+        
+        # Validate thresholds
+        if hasattr(self, 'self_healing_confidence_threshold'):
+            if not (0.0 <= self.self_healing_confidence_threshold <= 1.0):
+                errors.append(f"SELF_HEALING_CONFIDENCE_THRESHOLD must be between 0.0 and 1.0")
+        
+        return (len(errors) == 0, errors, warnings)
     
     def get_port(self, service: str) -> int:
         """Get port for a service

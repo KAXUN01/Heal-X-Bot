@@ -7,6 +7,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Requ
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field, validator, IPv4Address, IPv6Address
+from typing import Union
 import psutil
 import subprocess
 import asyncio
@@ -28,6 +30,68 @@ from dotenv import load_dotenv
 from blocked_ips_db import BlockedIPsDatabase
 from healing.notification_manager import NotificationManager
 
+# Pydantic models for request validation
+class BlockIPRequest(BaseModel):
+    """Request model for blocking an IP address"""
+    ip: str = Field(..., description="IP address to block")
+    reason: Optional[str] = Field(None, description="Reason for blocking")
+    threat_level: Optional[float] = Field(None, ge=0.0, le=1.0, description="Threat level (0.0-1.0)")
+    
+    @validator('ip')
+    def validate_ip(cls, v):
+        """Validate IP address format"""
+        import ipaddress
+        try:
+            ipaddress.ip_address(v)
+            return v
+        except ValueError:
+            raise ValueError(f"Invalid IP address format: {v}")
+
+class CLIExecuteRequest(BaseModel):
+    """Request model for CLI command execution"""
+    command: str = Field(..., min_length=1, max_length=500, description="Command to execute")
+
+class ServiceActionRequest(BaseModel):
+    """Request model for service actions"""
+    service: Optional[str] = Field(None, description="Service name")
+    force: Optional[bool] = Field(False, description="Force action")
+
+class ProcessKillRequest(BaseModel):
+    """Request model for killing a process"""
+    pid: int = Field(..., gt=0, description="Process ID to kill")
+    signal: Optional[int] = Field(15, description="Signal to send (default: 15=SIGTERM)")
+
+class GeminiAnalyzeRequest(BaseModel):
+    """Request model for Gemini log analysis"""
+    log_entry: Optional[Dict[str, Any]] = Field(None, description="Single log entry to analyze")
+    logs: Optional[List[Dict[str, Any]]] = Field(None, description="Multiple log entries for pattern analysis")
+    limit: Optional[int] = Field(10, ge=1, le=100, description="Maximum number of logs to analyze")
+    
+    @validator('log_entry', 'logs')
+    def validate_logs(cls, v, values):
+        """Ensure at least one log entry is provided"""
+        if not v and not values.get('logs'):
+            raise ValueError("Either log_entry or logs must be provided")
+        return v
+
+class DiscordConfigRequest(BaseModel):
+    """Request model for Discord webhook configuration"""
+    webhook_url: str = Field(..., min_length=1, description="Discord webhook URL")
+    
+    @validator('webhook_url')
+    def validate_webhook_url(cls, v):
+        """Validate Discord webhook URL format"""
+        if not v.startswith('https://discord.com/api/webhooks/'):
+            raise ValueError("Invalid Discord webhook URL format")
+        return v
+
+class ConfigUpdateRequest(BaseModel):
+    """Request model for configuration updates"""
+    auto_restart: Optional[bool] = None
+    cpu_threshold: Optional[float] = Field(None, ge=0.0, le=100.0)
+    memory_threshold: Optional[float] = Field(None, ge=0.0, le=100.0)
+    disk_threshold: Optional[float] = Field(None, ge=0.0, le=100.0)
+
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
 env_path_abs = env_path.resolve()
@@ -45,18 +109,39 @@ app = FastAPI(title="Healing Bot Dashboard API")
 # Initialize blocked IPs database
 blocked_ips_db = BlockedIPsDatabase("monitoring/server/data/blocked_ips.db")
 
-# Add CORS middleware
+# Add CORS middleware - configurable via environment variable
+# Default: allow localhost origins for development
+# Set CORS_ORIGINS environment variable to specify allowed origins (comma-separated)
+# Example: CORS_ORIGINS=http://localhost:5001,http://localhost:3000
+cors_origins_env = os.getenv('CORS_ORIGINS', 'http://localhost:5001,http://localhost:3000,http://127.0.0.1:5001,http://127.0.0.1:3000')
+# Allow all origins only in development mode
+if os.getenv('FLASK_ENV', '').lower() == 'development' or os.getenv('CORS_ALLOW_ALL', 'false').lower() == 'true':
+    cors_origins = ["*"]
+else:
+    cors_origins = [origin.strip() for origin in cors_origins_env.split(',') if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configure logging using standardized configuration
+try:
+    from monitoring.server.core.logging_config import setup_logger
+    log_dir = Path(__file__).parent.parent.parent / "logs"
+    logger = setup_logger(
+        name=__name__,
+        log_file="Healing Dashboard API.log",
+        log_dir=str(log_dir),
+        console_output=True
+    )
+except ImportError:
+    # Fallback to basic logging if core module not available
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
 # Log .env file status
 logger.info(f"Loading .env file from: {env_path_abs}")
@@ -493,7 +578,7 @@ def restart_service(service_name: str) -> bool:
             return False
     except subprocess.TimeoutExpired:
         logger.error(f"⏱️  Timeout while restarting service {service_name}")
-            return False
+        return False
     except Exception as e:
         logger.error(f"❌ Error restarting service {service_name}: {e}", exc_info=True)
         return False
@@ -1462,7 +1547,7 @@ def send_detailed_critical_alert(issue: Dict[str, Any], system_metrics: Dict[str
         
         success = send_discord_alert("", "critical", embed_data)
         if success:
-        logger.info(f"Detailed Discord notification sent for CRITICAL error: {service_name}")
+            logger.info(f"Detailed Discord notification sent for CRITICAL error: {service_name}")
         else:
             logger.warning(f"Failed to send detailed Discord notification for CRITICAL error: {service_name}")
         return success
@@ -1571,7 +1656,7 @@ async def monitoring_loop():
                 # Check if cleanup was run in the last hour
                 if last_cleanup_time is None:
                     # Never run before, run it
-                run_disk_cleanup()
+                    run_disk_cleanup()
                 else:
                     time_since_last_cleanup = (datetime.now() - last_cleanup_time).total_seconds()
                     if time_since_last_cleanup >= 3600:  # 1 hour = 3600 seconds
@@ -1605,7 +1690,7 @@ async def startup_event():
     """Start background tasks and initialize cloud components"""
     try:
         # Start monitoring loop (non-blocking)
-    asyncio.create_task(monitoring_loop())
+        asyncio.create_task(monitoring_loop())
         logger.info("✅ Monitoring loop started")
         
         # Initialize cloud simulation components in background (don't block startup)
@@ -1666,10 +1751,10 @@ async def startup_event():
 async def root():
     """Serve the dashboard"""
     try:
-    dashboard_path = Path(__file__).parent.parent / "dashboard" / "static" / "healing-dashboard.html"
+        dashboard_path = Path(__file__).parent.parent / "dashboard" / "static" / "healing-dashboard.html"
         if dashboard_path.exists():
-    with open(dashboard_path, "r") as f:
-        return HTMLResponse(content=f.read())
+            with open(dashboard_path, "r") as f:
+                return HTMLResponse(content=f.read())
         else:
             # Return a simple HTML page if dashboard file not found
             return HTMLResponse(content="""
@@ -1738,8 +1823,8 @@ async def stop_service_endpoint(service_name: str):
 async def restart_service_endpoint(service_name: str):
     """Restart a specific service"""
     try:
-    success = restart_service(service_name)
-    return {"success": success, "service": service_name}
+        success = restart_service(service_name)
+        return {"success": success, "service": service_name}
     except Exception as e:
         logger.error(f"Error restarting service {service_name}: {e}")
         return {"success": False, "service": service_name, "error": str(e)}
@@ -2573,7 +2658,7 @@ async def ignore_alert(data: dict = Body(...)):
         }
 
 @app.post("/api/gemini/analyze-log")
-async def analyze_single_log(data: dict = Body(...)):
+async def analyze_single_log(request: GeminiAnalyzeRequest):
     """Analyze a single log entry using Gemini AI"""
     try:
         # Use the global gemini_analyzer from the module
@@ -2585,7 +2670,7 @@ async def analyze_single_log(data: dict = Body(...)):
                 "message": "Gemini analyzer not initialized. Check GEMINI_API_KEY"
             }
         
-        log_entry = data
+        log_entry = request.log_entry
         
         if not log_entry:
             logger.error("No log entry provided")
@@ -2610,7 +2695,7 @@ async def analyze_single_log(data: dict = Body(...)):
         }
 
 @app.post("/api/gemini/analyze-pattern")
-async def analyze_log_pattern(data: dict = Body(...)):
+async def analyze_log_pattern(request: GeminiAnalyzeRequest):
     """Analyze multiple logs for patterns using Gemini AI"""
     try:
         from gemini_log_analyzer import gemini_analyzer as _gemini_analyzer
@@ -2620,8 +2705,8 @@ async def analyze_log_pattern(data: dict = Body(...)):
                 "message": "Gemini analyzer not initialized"
             }
         
-        log_entries = data.get("logs", [])
-        limit = data.get("limit", 10)
+        log_entries = request.logs or []
+        limit = request.limit or 10
         
         if not log_entries:
             return {
@@ -2753,9 +2838,9 @@ async def quick_analyze_recent_errors():
         }
 
 @app.post("/api/cli/execute")
-async def execute_cli_endpoint(data: dict):
+async def execute_cli_endpoint(request: CLIExecuteRequest):
     """Execute CLI command with enhanced command set"""
-    command = data.get("command", "").strip()
+    command = request.command.strip()
     
     if not command:
         return {"error": "No command provided"}
@@ -3044,7 +3129,7 @@ Machine: {uname.machine}"""
                     output = f"❌ Path not found: {path}"
                 elif path_obj.is_file():
                     output = str(path_obj)
-        else:
+                else:
                     items = sorted(path_obj.iterdir())
                     dirs = [item for item in items if item.is_dir()]
                     files = [item for item in items if item.is_file()]
@@ -3472,12 +3557,12 @@ def load_predictive_model():
                 model_path = latest_path / "model_loader.py"
             
             if model_path.exists() and model_path.is_file():
-            import importlib.util
-            spec = importlib.util.spec_from_file_location("model_loader", model_path)
-            model_loader = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(model_loader)
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("model_loader", model_path)
+                model_loader = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(model_loader)
                 logger.info(f"Successfully loaded predictive model from {model_path}")
-            return model_loader
+                return model_loader
             else:
                 logger.warning(f"Model loader file not found at {model_path}")
                 return None
@@ -3621,11 +3706,11 @@ async def get_early_warnings():
         if 'disk_percent' not in metrics:
             metrics['disk_percent'] = metrics.get('disk', 0)
         if 'error_count' not in metrics:
-        metrics['error_count'] = 0
+            metrics['error_count'] = 0
         if 'warning_count' not in metrics:
-        metrics['warning_count'] = 0
+            metrics['warning_count'] = 0
         if 'service_failures' not in metrics:
-        metrics['service_failures'] = 0
+            metrics['service_failures'] = 0
         
         # Check if model functions exist
         if not hasattr(predictive_model, 'get_early_warnings'):
@@ -3717,7 +3802,7 @@ async def get_early_warnings():
         try:
             # Log metrics being sent to model
             logger.debug(f"Calling get_early_warnings with metrics: CPU={metrics.get('cpu_percent', 0)}%, Memory={metrics.get('memory_percent', 0)}%, Disk={metrics.get('disk_percent', 0)}%, Errors={metrics.get('error_count', 0)}")
-        result = predictive_model.get_early_warnings(metrics)
+            result = predictive_model.get_early_warnings(metrics)
             logger.info(f"Model get_early_warnings returned {result.get('warning_count', 0)} warnings: {result}")
             # Ensure result is a dict
             if not isinstance(result, dict):
@@ -3942,11 +4027,11 @@ async def predict_time_to_failure():
         if 'disk_percent' not in metrics:
             metrics['disk_percent'] = metrics.get('disk', 0)
         if 'error_count' not in metrics:
-        metrics['error_count'] = 0
+            metrics['error_count'] = 0
         if 'warning_count' not in metrics:
-        metrics['warning_count'] = 0
+            metrics['warning_count'] = 0
         if 'service_failures' not in metrics:
-        metrics['service_failures'] = 0
+            metrics['service_failures'] = 0
         
         # Predict time to failure
         result = predictive_model.predict_time_to_failure(metrics)
@@ -4162,17 +4247,22 @@ async def get_ml_history():
         }
 
 @app.post("/api/blocking/block")
-async def block_ip_ddos(data: dict):
+async def block_ip_ddos(request: BlockIPRequest, additional_data: dict = Body(None)):
     """Block an IP address (DDoS endpoint)"""
-    ip = data.get("ip")
-    if not ip:
-        raise HTTPException(status_code=400, detail="IP is required")
-    
-    attack_count = data.get("attack_count", 1)
-    threat_level = data.get("threat_level", "Medium")
-    attack_type = data.get("attack_type")
-    reason = data.get("reason", f"Manual block via dashboard")
-    blocked_by = data.get("blocked_by", "dashboard")
+    # Use Pydantic model for IP validation, but allow additional fields from body
+    ip = request.ip
+    if additional_data:
+        attack_count = additional_data.get("attack_count", 1)
+        threat_level = additional_data.get("threat_level", "Medium")
+        attack_type = additional_data.get("attack_type")
+        reason = additional_data.get("reason") or request.reason or f"Manual block via dashboard"
+        blocked_by = additional_data.get("blocked_by", "dashboard")
+    else:
+        attack_count = 1
+        threat_level = "Medium"
+        attack_type = None
+        reason = request.reason or f"Manual block via dashboard"
+        blocked_by = "dashboard"
     
     try:
         success = block_ip(
@@ -4668,32 +4758,141 @@ async def update_auto_healer_config(request: Request):
             "message": str(e)
         }
 
+@app.get("/api/gemini/status")
+async def get_gemini_status():
+    """Check Gemini API key status and analyzer initialization"""
+    # Reload .env file to get latest API key
+    load_dotenv(dotenv_path=str(env_path_abs), override=True)
+    
+    api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+    
+    from gemini_log_analyzer import gemini_analyzer as current_analyzer
+    
+    status = {
+        "api_key_configured": bool(api_key and api_key != "your_gemini_api_key_here" and len(api_key) >= 20),
+        "api_key_length": len(api_key) if api_key else 0,
+        "analyzer_initialized": current_analyzer is not None,
+        "model_available": current_analyzer is not None and hasattr(current_analyzer, 'model') and current_analyzer.model is not None,
+        "env_file_path": str(env_path_abs),
+        "env_file_exists": env_path_abs.exists()
+    }
+    
+    # Try to initialize if API key exists but analyzer is not initialized
+    if status["api_key_configured"] and not status["model_available"]:
+        try:
+            logger.info("Attempting to initialize Gemini analyzer from status endpoint")
+            initialize_gemini_analyzer(api_key=api_key)
+            from gemini_log_analyzer import gemini_analyzer as current_analyzer
+            status["analyzer_initialized"] = current_analyzer is not None
+            status["model_available"] = current_analyzer is not None and hasattr(current_analyzer, 'model') and current_analyzer.model is not None
+            if status["model_available"]:
+                status["message"] = "Gemini analyzer initialized successfully"
+            else:
+                status["message"] = "Failed to initialize model. Check API key validity."
+        except Exception as e:
+            status["initialization_error"] = str(e)
+            status["message"] = f"Initialization failed: {str(e)}"
+    
+    if not status["api_key_configured"]:
+        status["message"] = "GEMINI_API_KEY not configured in .env file"
+    elif not status["model_available"]:
+        status["message"] = "Analyzer initialized but model not available. Check API key validity."
+    else:
+        status["message"] = "Gemini analyzer is ready"
+    
+    return status
+
 @app.post("/api/cloud/faults/{fault_id}/analyze")
 async def analyze_fault_with_ai(fault_id: int):
     """Analyze a fault using AI to get healing instructions"""
     try:
-        if not fault_detector:
+        # Check if fault_detector is initialized
+        if fault_detector is None:
+            logger.warning("Fault detector not initialized")
             return JSONResponse(
                 status_code=503,
                 content={"success": False, "error": "Fault detector not initialized"}
             )
         
-        faults = fault_detector.get_detected_faults(limit=100)
-        if fault_id >= len(faults):
+        # Get faults safely
+        try:
+            faults = fault_detector.get_detected_faults(limit=100)
+        except Exception as e:
+            logger.error(f"Error getting detected faults: {e}", exc_info=True)
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": f"Error retrieving faults: {str(e)}"}
+            )
+        
+        if not faults or fault_id >= len(faults):
             return JSONResponse(
                 status_code=404,
-                content={"success": False, "error": "Fault not found"}
+                content={"success": False, "error": f"Fault not found (requested: {fault_id}, available: {len(faults) if faults else 0})"}
             )
         
         fault = faults[fault_id]
         
-        # Check if Gemini analyzer is available
-        if not gemini_analyzer:
-            return {
-                "success": False,
-                "error": "AI analyzer not available. Please configure GEMINI_API_KEY",
-                "fault": fault
-            }
+        # Reload .env file to get latest API key
+        load_dotenv(dotenv_path=str(env_path_abs), override=True)
+        
+        # Check if Gemini analyzer is available and properly configured
+        # Import fresh to get latest state
+        from gemini_log_analyzer import gemini_analyzer as current_analyzer
+        
+        # Get API key from environment
+        api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+        
+        # Try to initialize/reinitialize if needed
+        if not current_analyzer or (current_analyzer and (not hasattr(current_analyzer, 'model') or current_analyzer.model is None)):
+            if api_key and api_key != "your_gemini_api_key_here" and len(api_key) >= 20:
+                try:
+                    logger.info("Attempting to initialize Gemini analyzer with API key from .env")
+                    initialize_gemini_analyzer(api_key=api_key)
+                    from gemini_log_analyzer import gemini_analyzer as current_analyzer
+                    logger.info(f"Gemini analyzer initialized: {current_analyzer is not None}, model: {current_analyzer.model is not None if current_analyzer else 'N/A'}")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Gemini analyzer: {e}", exc_info=True)
+                    return JSONResponse(
+                        status_code=200,
+                        content={
+                            "success": False,
+                            "error": f"AI analyzer initialization failed: {str(e)}\n\nPlease check:\n1. Your GEMINI_API_KEY is valid\n2. You have internet connectivity\n3. The API key has proper permissions",
+                            "fault": fault
+                        }
+                    )
+        
+        # Check if analyzer has valid model
+        if not current_analyzer or not hasattr(current_analyzer, 'model') or current_analyzer.model is None:
+            if not api_key or api_key == "your_gemini_api_key_here" or len(api_key) < 20:
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": False,
+                        "error": "AI analyzer not available. Please configure GEMINI_API_KEY in your .env file.\n\nGet your FREE API key:\n1. Visit: https://aistudio.google.com/app/apikey\n2. Click 'Create API Key'\n3. Copy the key and add to .env file:\n   GEMINI_API_KEY=your_actual_key_here\n4. Restart the monitoring server or reload this page",
+                        "fault": fault,
+                        "setup_instructions": {
+                            "title": "Setup GEMINI_API_KEY",
+                            "steps": [
+                                "Visit: https://aistudio.google.com/app/apikey",
+                                "Click 'Create API Key'",
+                                "Copy the key and add to .env file: GEMINI_API_KEY=your_actual_key_here",
+                                "Restart the monitoring server or reload this page"
+                            ]
+                        }
+                    }
+                )
+            else:
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "success": False,
+                        "error": f"AI analyzer initialization failed even though API key is configured.\n\nAPI key length: {len(api_key)} characters\n\nPlease check:\n1. Your GEMINI_API_KEY is valid and not expired\n2. You have internet connectivity\n3. Restart the monitoring server",
+                        "fault": fault
+                    }
+                )
+        
+        # Use the current analyzer
+        gemini_analyzer = current_analyzer
         
         # Get system metrics for better analysis
         try:
@@ -4709,11 +4908,14 @@ async def analyze_fault_with_ai(fault_id: int):
         )
         
         if analysis_result.get("status") != "success":
-            return {
-                "success": False,
-                "error": analysis_result.get("message", "AI analysis failed"),
-                "fault": fault
-            }
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": analysis_result.get("message", "AI analysis failed"),
+                    "fault": fault
+                }
+            )
         
         # Determine if auto-healing is possible
         analysis = analysis_result.get("analysis", {})
@@ -4783,7 +4985,7 @@ async def analyze_fault_with_ai(fault_id: int):
                     elif len(solution) < 500:  # If solution is short, use it as a single step
                         healing_steps = [solution]
         
-        return {
+        result = {
             "success": True,
             "fault": fault,
             "analysis": {
@@ -4800,11 +5002,16 @@ async def analyze_fault_with_ai(fault_id: int):
             "timestamp": datetime.now().isoformat()
         }
         
+        return JSONResponse(
+            status_code=200,
+            content=result
+        )
+        
     except Exception as e:
-        logger.error(f"Error analyzing fault with AI: {e}")
+        logger.error(f"Error analyzing fault with AI: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={"success": False, "error": str(e)}
+            content={"success": False, "error": f"Internal server error: {str(e)}"}
         )
 
 @app.post("/api/cloud/faults/{fault_id}/analyze-and-heal")

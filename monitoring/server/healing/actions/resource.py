@@ -34,12 +34,28 @@ class ResourceHealingActions:
             
             # Clear system cache
             try:
-                subprocess.run(['sudo', 'sync'], timeout=10, check=False)
-                subprocess.run(['sudo', 'sh', '-c', 'echo 3 > /proc/sys/vm/drop_caches'], 
-                             timeout=10, check=False)
-                cleaned.append('System cache cleared')
-            except:
-                pass
+                sync_result = subprocess.run(
+                    ['sudo', 'sync'], 
+                    timeout=10, 
+                    check=False, 
+                    capture_output=True, 
+                    text=True
+                )
+                drop_cache_result = subprocess.run(
+                    ['sudo', 'sh', '-c', 'echo 3 > /proc/sys/vm/drop_caches'], 
+                    timeout=10, 
+                    check=False,
+                    capture_output=True,
+                    text=True
+                )
+                if sync_result.returncode == 0 and drop_cache_result.returncode == 0:
+                    cleaned.append('System cache cleared')
+                else:
+                    logger.warning(f"Cache clear warnings - sync: {sync_result.stderr}, drop: {drop_cache_result.stderr}")
+            except subprocess.TimeoutExpired:
+                logger.warning("Cache clear operations timed out")
+            except Exception as e:
+                logger.warning(f"Error clearing cache: {e}")
             
             if cleaned:
                 message = f"Resource cleanup: {', '.join(cleaned)}"

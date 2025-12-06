@@ -1189,6 +1189,18 @@
                             </tbody>
                         </table>
                     </div>
+                    <!-- Pagination Controls -->
+                    <div id="alertsPagination" style="display: none; justify-content: space-between; align-items: center; padding: 1.5rem; border-top: 1px solid var(--border-color); background: var(--bg-secondary);">
+                        <button id="alertsPrevBtn" class="btn btn-secondary" onclick="goToAlertsPage(alertsCurrentPage - 1)" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </button>
+                        <div id="alertsPageInfo" style="color: var(--text-primary); font-size: 0.9rem; font-weight: 500;">
+                            Page 1 of 1 (Showing 1-5 of 0 alerts)
+                        </div>
+                        <button id="alertsNextBtn" class="btn btn-secondary" onclick="goToAlertsPage(alertsCurrentPage + 1)" style="padding: 0.5rem 1rem; font-size: 0.9rem;">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
             
@@ -6426,21 +6438,36 @@
         }
 
         // ============================================================================
+        // Load Alerts Tab - Pagination State
+        // ============================================================================
+        let alertsCurrentPage = 1;
+        const alertsItemsPerPage = 5;
+        let alertsFilteredIssues = [];
+
+        // ============================================================================
         // Load Alerts Tab
         // ============================================================================
-        async function loadAlertsTab() {
+        async function loadAlertsTab(page = 1) {
             const tbody = document.getElementById('alertsTable');
             if (!tbody) return;
+            
+            alertsCurrentPage = page;
             
             // Show loading state
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="4" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                    <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
                         <i class="fas fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
                         Loading alerts...
                     </td>
                 </tr>
             `;
+            
+            // Hide pagination while loading
+            const paginationDiv = document.getElementById('alertsPagination');
+            if (paginationDiv) {
+                paginationDiv.style.display = 'none';
+            }
             
             try {
                 // Fetch alerts
@@ -6456,50 +6483,66 @@
                 }
                 
                 if (data.status === 'success' && data.issues !== undefined) {
-                    // Filter to show only CRITICAL severity issues
-                    const criticalIssues = data.issues.filter(issue => {
-                        const severity = (issue.severity || issue.level || '').toUpperCase();
-                        const level = (issue.level || '').toUpperCase();
+                    // Filter to show ONLY errors that cause system crashes or downtime
+                    // Must have priority <= 2 (CRITICAL level) AND contain crash/down keywords
+                    const crashKeywords = ['crash', 'down', 'abort', 'terminated', 'killed', 
+                                          'unavailable', 'stopped', 'failed to start', 
+                                          'service failure', 'system failure', 'fatal', 'panic'];
+                    
+                    const criticalCrashErrors = data.issues.filter(issue => {
                         const priority = issue.priority !== undefined ? issue.priority : 6;
-                        const category = (issue.category || '').toUpperCase();
+                        const message = (issue.message || '').toLowerCase();
                         
-                        return severity === 'CRITICAL' || 
-                               severity === 'CRIT' ||
-                               level === 'CRITICAL' ||
-                               level === 'CRIT' ||
-                               priority <= 2 ||
-                               category === 'CRITICAL';
+                        // Must have priority <= 2 (CRITICAL level: 0=emerg, 1=alert, 2=crit)
+                        if (priority > 2) return false;
+                        
+                        // Must contain crash/down keywords
+                        return crashKeywords.some(keyword => message.includes(keyword));
+                    });
+                    
+                    // Store filtered issues for pagination
+                    alertsFilteredIssues = criticalCrashErrors;
+                    
+                    // Sort by timestamp (newest first)
+                    const sortedIssues = [...alertsFilteredIssues].sort((a, b) => {
+                        const timeA = new Date(a.timestamp || 0);
+                        const timeB = new Date(b.timestamp || 0);
+                        return timeB - timeA;
                     });
                     
                     // Update alert count in overview card
                     const alertCountElement = document.getElementById('alertCount');
                     if (alertCountElement) {
-                        alertCountElement.textContent = criticalIssues.length;
+                        alertCountElement.textContent = sortedIssues.length;
                     }
                     
+                    // Calculate pagination
+                    const totalPages = Math.ceil(sortedIssues.length / alertsItemsPerPage);
+                    const startIndex = (alertsCurrentPage - 1) * alertsItemsPerPage;
+                    const endIndex = startIndex + alertsItemsPerPage;
+                    const displayedIssues = sortedIssues.slice(startIndex, endIndex);
+                    
                     // Display alerts
-                    if (criticalIssues.length === 0) {
+                    if (sortedIssues.length === 0) {
                         tbody.innerHTML = `
                             <tr>
                                 <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
                                     <i class="fas fa-check-circle" style="font-size: 2rem; color: var(--accent-green); margin-bottom: 0.5rem; display: block;"></i>
-                                    No Active Alerts ✅
-                                    <div style="font-size: 0.85rem; margin-top: 0.5rem;">All systems operating normally</div>
+                                    No Critical Crash Errors ✅
+                                    <div style="font-size: 0.85rem; margin-top: 0.5rem;">No system crashes or downtime detected</div>
                                 </td>
                             </tr>
                         `;
-                    } else {
-                        // Sort by timestamp (newest first)
-                        const sortedIssues = [...criticalIssues].sort((a, b) => {
-                            const timeA = new Date(a.timestamp || 0);
-                            const timeB = new Date(b.timestamp || 0);
-                            return timeB - timeA;
-                        });
                         
+                        // Hide pagination when no alerts
+                        if (paginationDiv) {
+                            paginationDiv.style.display = 'none';
+                        }
+                    } else {
                         let html = '';
-                        sortedIssues.forEach(issue => {
-                            const severity = issue.severity || issue.level || 'UNKNOWN';
-                            const severityColor = severity === 'CRITICAL' ? 'var(--accent-red)' : severity === 'ERROR' ? 'var(--accent-red)' : 'var(--accent-yellow)';
+                        displayedIssues.forEach(issue => {
+                            const severity = issue.severity || issue.level || 'CRITICAL';
+                            const severityColor = 'var(--accent-red)';
                             const timeStr = new Date(issue.timestamp).toLocaleString('en-US', {
                                 month: 'short',
                                 day: 'numeric',
@@ -6552,6 +6595,9 @@
                         });
                         
                         tbody.innerHTML = html;
+                        
+                        // Update pagination controls
+                        updateAlertsPagination(sortedIssues.length, totalPages, startIndex + 1, Math.min(endIndex, sortedIssues.length));
                     }
                 } else if (data.status === 'success' && (!data.issues || data.issues.length === 0)) {
                     // No issues found
@@ -6562,13 +6608,19 @@
                     
                     tbody.innerHTML = `
                         <tr>
-                            <td colspan="4" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                            <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
                                 <i class="fas fa-check-circle" style="font-size: 2rem; color: var(--accent-green); margin-bottom: 0.5rem; display: block;"></i>
-                                No Active Alerts ✅
-                                <div style="font-size: 0.85rem; margin-top: 0.5rem;">All systems operating normally</div>
+                                No Critical Crash Errors ✅
+                                <div style="font-size: 0.85rem; margin-top: 0.5rem;">No system crashes or downtime detected</div>
                             </td>
                         </tr>
                     `;
+                    
+                    // Hide pagination when no alerts
+                    const paginationDiv = document.getElementById('alertsPagination');
+                    if (paginationDiv) {
+                        paginationDiv.style.display = 'none';
+                    }
                 } else {
                     throw new Error(data.message || 'Unknown error');
                 }
@@ -6583,7 +6635,55 @@
                         </td>
                     </tr>
                 `;
+                
+                // Hide pagination on error
+                const paginationDiv = document.getElementById('alertsPagination');
+                if (paginationDiv) {
+                    paginationDiv.style.display = 'none';
+                }
             }
+        }
+
+        // ============================================================================
+        // Update Alerts Pagination Controls
+        // ============================================================================
+        function updateAlertsPagination(totalItems, totalPages, startItem, endItem) {
+            const paginationDiv = document.getElementById('alertsPagination');
+            if (!paginationDiv) return;
+            
+            paginationDiv.style.display = 'flex';
+            
+            const prevButton = document.getElementById('alertsPrevBtn');
+            const nextButton = document.getElementById('alertsNextBtn');
+            const pageInfo = document.getElementById('alertsPageInfo');
+            
+            // Update page info
+            if (pageInfo) {
+                pageInfo.textContent = `Page ${alertsCurrentPage} of ${totalPages} (Showing ${startItem}-${endItem} of ${totalItems} alerts)`;
+            }
+            
+            // Update button states
+            if (prevButton) {
+                prevButton.disabled = alertsCurrentPage === 1;
+                prevButton.style.opacity = alertsCurrentPage === 1 ? '0.5' : '1';
+                prevButton.style.cursor = alertsCurrentPage === 1 ? 'not-allowed' : 'pointer';
+            }
+            
+            if (nextButton) {
+                nextButton.disabled = alertsCurrentPage >= totalPages;
+                nextButton.style.opacity = alertsCurrentPage >= totalPages ? '0.5' : '1';
+                nextButton.style.cursor = alertsCurrentPage >= totalPages ? 'not-allowed' : 'pointer';
+            }
+        }
+
+        // ============================================================================
+        // Alerts Pagination Navigation
+        // ============================================================================
+        function goToAlertsPage(page) {
+            if (page < 1) return;
+            const totalPages = Math.ceil(alertsFilteredIssues.length / alertsItemsPerPage);
+            if (page > totalPages) return;
+            loadAlertsTab(page);
         }
 
         // Ignore Alert Function

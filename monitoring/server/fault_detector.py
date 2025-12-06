@@ -118,7 +118,7 @@ class FaultDetector:
     
     def detect_container_crashes(self) -> List[Dict[str, Any]]:
         """
-        Detect crashed or stopped containers
+        Detect crashed or stopped containers (excluding cloud-sim containers)
         
         Returns:
             List of container crash faults
@@ -127,14 +127,20 @@ class FaultDetector:
         crashed_containers = self.container_monitor.detect_crashed_containers()
         
         for container_info in crashed_containers:
+            container_name = container_info.get('container', '')
+            
+            # Filter out cloud-sim containers
+            if container_name.startswith('cloud-sim'):
+                continue
+            
             fault = {
                 'type': 'service_crash',
                 'severity': 'critical',
-                'service': container_info['container'],
+                'service': container_name,
                 'status': container_info.get('status', 'unknown'),
                 'state': container_info.get('state', 'unknown'),
                 'restart_count': container_info.get('restart_count', 0),
-                'message': f"Service {container_info['container']} has crashed or stopped",
+                'message': f"Service {container_name} has crashed or stopped",
                 'timestamp': datetime.now().isoformat(),
                 'details': container_info
             }

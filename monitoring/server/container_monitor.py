@@ -25,13 +25,8 @@ class ContainerMonitor:
         """
         self.compose_file = compose_file
         self.docker_client = None
-        self.monitored_containers = [
-            'cloud-sim-load-balancer',
-            'cloud-sim-web-server',
-            'cloud-sim-api-server',
-            'cloud-sim-database',
-            'cloud-sim-cache'
-        ]
+        # Removed hardcoded cloud-sim containers - will discover containers dynamically
+        self.monitored_containers = []
         
         try:
             self.docker_client = docker.from_env()
@@ -115,15 +110,34 @@ class ContainerMonitor:
     
     def get_all_containers_status(self) -> List[Dict[str, Any]]:
         """
-        Get status of all monitored containers
+        Get status of all containers (excluding cloud-sim containers)
         
         Returns:
             List of container status dictionaries
         """
         containers_status = []
-        for container_name in self.monitored_containers:
-            status = self.get_container_status(container_name)
-            containers_status.append(status)
+        
+        if not self.docker_client:
+            return containers_status
+        
+        try:
+            # Get all containers (running and stopped)
+            all_containers = self.docker_client.containers.list(all=True)
+            
+            for container in all_containers:
+                container_name = container.name
+                
+                # Filter out cloud-sim containers
+                if container_name.startswith('cloud-sim'):
+                    continue
+                
+                status = self.get_container_status(container_name)
+                # Add service type indicator
+                status['type'] = 'docker'
+                containers_status.append(status)
+        except Exception as e:
+            logger.error(f"Error getting all containers status: {e}")
+        
         return containers_status
     
     def check_container_health(self, container_name: str) -> Dict[str, Any]:
@@ -176,20 +190,34 @@ class ContainerMonitor:
         """
         crashed = []
         
-        for container_name in self.monitored_containers:
-            status = self.get_container_status(container_name)
+        if not self.docker_client:
+            return crashed
+        
+        try:
+            # Get all containers (running and stopped)
+            all_containers = self.docker_client.containers.list(all=True)
             
-            # Check if container is not running when it should be
-            if status.get('status') in ['exited', 'stopped', 'dead'] or \
-               (status.get('status') == 'not_found' and container_name.startswith('cloud-sim')):
-                crashed.append({
-                    'container': container_name,
-                    'status': status.get('status', 'unknown'),
-                    'state': status.get('state', 'unknown'),
-                    'restart_count': status.get('restart_count', 0),
-                    'timestamp': datetime.now().isoformat(),
-                    'error': status.get('error', 'Container stopped or crashed')
-                })
+            for container in all_containers:
+                container_name = container.name
+                
+                # Filter out cloud-sim containers
+                if container_name.startswith('cloud-sim'):
+                    continue
+                
+                status = self.get_container_status(container_name)
+                
+                # Check if container is not running when it should be
+                if status.get('status') in ['exited', 'stopped', 'dead']:
+                    crashed.append({
+                        'container': container_name,
+                        'status': status.get('status', 'unknown'),
+                        'state': status.get('state', 'unknown'),
+                        'restart_count': status.get('restart_count', 0),
+                        'timestamp': datetime.now().isoformat(),
+                        'error': status.get('error', 'Container stopped or crashed')
+                    })
+        except Exception as e:
+            logger.error(f"Error detecting crashed containers: {e}")
         
         return crashed
     

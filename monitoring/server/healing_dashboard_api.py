@@ -102,6 +102,15 @@ from centralized_logger import initialize_centralized_logging, centralized_logge
 from critical_services_monitor import initialize_critical_services_monitor, get_critical_services_monitor
 from fluent_bit_reader import initialize_fluent_bit_reader, fluent_bit_reader
 
+# Import docker for container management
+try:
+    import docker
+    from docker.errors import DockerException
+    DOCKER_AVAILABLE = True
+except ImportError:
+    DOCKER_AVAILABLE = False
+    docker = None
+
 # Optional Gemini analyzer (may not be available if google.generativeai is not installed)
 try:
     from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
@@ -423,8 +432,147 @@ def get_system_metrics() -> Dict[str, Any]:
         logger.error(f"Error getting system metrics: {e}")
         return {}
 
-def check_service_status(service_name: str) -> Dict[str, Any]:
-    """Check if a service is running"""
+def discover_docker_containers() -> List[Dict[str, Any]]:
+    """Discover all Docker containers (excluding cloud-sim containers)"""
+    containers = []
+    
+    if not DOCKER_AVAILABLE:
+        return containers
+    
+    try:
+        docker_client = docker.from_env()
+        all_containers = docker_client.containers.list(all=True)
+        
+        for container in all_containers:
+            container_name = container.name
+            
+            # Filter out cloud-sim containers
+            if container_name.startswith('cloud-sim'):
+                continue
+            
+            # Get container status
+            container_status = container.status
+            is_running = container_status == 'running'
+            
+            # Map Docker status to our status format
+            if container_status == 'running':
+                status = 'running'
+            elif container_status in ['exited', 'stopped']:
+                status = 'stopped'
+            elif container_status == 'dead':
+                status = 'failed'
+            else:
+                status = 'stopped'
+            
+            containers.append({
+                "name": container_name,
+                "status": status,
+                "active": is_running,
+                "type": "docker",
+                "image": container.image.tags[0] if container.image.tags else 'unknown',
+                "state": container_status
+            })
+    except DockerException as e:
+        logger.debug(f"Docker not available: {e}")
+    except Exception as e:
+        logger.error(f"Error discovering Docker containers: {e}")
+    
+    return containers
+
+def discover_kubernetes_services() -> List[Dict[str, Any]]:
+    """Discover Kubernetes services and pods"""
+    services = []
+    
+    # Check if kubectl is available
+    try:
+        result = subprocess.run(
+            ["kubectl", "version", "--client"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode != 0:
+            return services
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return services
+    
+    try:
+        # Get all pods
+        result = subprocess.run(
+            ["kubectl", "get", "pods", "-o", "json"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            pods_data = json.loads(result.stdout)
+            
+            for pod in pods_data.get('items', []):
+                pod_name = pod['metadata']['name']
+                namespace = pod['metadata'].get('namespace', 'default')
+                
+                # Get pod status
+                phase = pod.get('status', {}).get('phase', 'Unknown')
+                is_running = phase == 'Running'
+                
+                # Map Kubernetes phase to our status format
+                if phase == 'Running':
+                    status = 'running'
+                elif phase in ['Pending', 'ContainerCreating']:
+                    status = 'starting'
+                elif phase in ['Succeeded', 'Failed', 'Unknown']:
+                    status = 'stopped'
+                else:
+                    status = 'stopped'
+                
+                services.append({
+                    "name": f"{namespace}/{pod_name}",
+                    "status": status,
+                    "active": is_running,
+                    "type": "kubernetes",
+                    "namespace": namespace,
+                    "phase": phase
+                })
+    except subprocess.TimeoutExpired:
+        logger.warning("Timeout discovering Kubernetes services")
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse Kubernetes output")
+    except Exception as e:
+        logger.error(f"Error discovering Kubernetes services: {e}")
+    
+    return services
+
+def check_service_status(service_name: str, service_type: Optional[str] = None) -> Dict[str, Any]:
+    """Check if a service is running - supports systemd, docker, and kubernetes"""
+    
+    # Auto-detect service type if not provided
+    if service_type is None:
+        # Check if it's a Kubernetes service (format: namespace/name)
+        if '/' in service_name:
+            service_type = 'kubernetes'
+        # Check if it's a Docker container
+        elif DOCKER_AVAILABLE:
+            try:
+                docker_client = docker.from_env()
+                docker_client.containers.get(service_name)
+                service_type = 'docker'
+            except:
+                service_type = 'systemd'
+        else:
+            service_type = 'systemd'
+    
+    # Handle different service types
+    if service_type == 'docker':
+        return check_docker_container_status(service_name)
+    elif service_type == 'kubernetes':
+        return check_kubernetes_service_status(service_name)
+    else:
+        # Default to systemd
+        return check_systemd_service_status(service_name)
+
+def check_systemd_service_status(service_name: str) -> Dict[str, Any]:
+    """Check if a systemd service is running"""
     try:
         result = subprocess.run(
             ["systemctl", "is-active", service_name],
@@ -451,47 +599,261 @@ def check_service_status(service_name: str) -> Dict[str, Any]:
         return {
             "name": service_name,
             "status": status,
-            "active": is_active
+            "active": is_active,
+            "type": "systemd"
         }
     except subprocess.TimeoutExpired:
         logger.warning(f"Timeout checking service {service_name}")
-        return {"name": service_name, "status": "timeout", "active": False}
+        return {"name": service_name, "status": "timeout", "active": False, "type": "systemd"}
     except Exception as e:
         logger.error(f"Error checking service {service_name}: {e}")
-        return {"name": service_name, "status": "unknown", "active": False}
+        return {"name": service_name, "status": "unknown", "active": False, "type": "systemd"}
 
-def get_all_services_status() -> List[Dict[str, Any]]:
-    """Get status of all monitored services"""
-    services = []
-    for service in CONFIG["services_to_monitor"]:
-        status = check_service_status(service)
-        services.append(status)
-    return services
-
-def start_service(service_name: str) -> bool:
-    """Start a service"""
+def check_docker_container_status(container_name: str) -> Dict[str, Any]:
+    """Check if a Docker container is running"""
+    if not DOCKER_AVAILABLE:
+        return {"name": container_name, "status": "unknown", "active": False, "type": "docker"}
+    
     try:
-        logger.info(f"▶️ Attempting to start service: {service_name}")
+        docker_client = docker.from_env()
+        container = docker_client.containers.get(container_name)
         
-        # First try without sudo (in case user has permissions)
+        container_status = container.status
+        is_running = container_status == 'running'
+        
+        if container_status == 'running':
+            status = 'running'
+        elif container_status in ['exited', 'stopped']:
+            status = 'stopped'
+        elif container_status == 'dead':
+            status = 'failed'
+        else:
+            status = 'stopped'
+        
+        return {
+            "name": container_name,
+            "status": status,
+            "active": is_running,
+            "type": "docker",
+            "state": container_status
+        }
+    except docker.errors.NotFound:
+        return {"name": container_name, "status": "not_found", "active": False, "type": "docker"}
+    except Exception as e:
+        logger.error(f"Error checking Docker container {container_name}: {e}")
+        return {"name": container_name, "status": "unknown", "active": False, "type": "docker"}
+
+def check_kubernetes_service_status(service_name: str) -> Dict[str, Any]:
+    """Check if a Kubernetes service/pod is running"""
+    try:
+        # Parse namespace/name format
+        if '/' in service_name:
+            namespace, name = service_name.split('/', 1)
+        else:
+            namespace = 'default'
+            name = service_name
+        
         result = subprocess.run(
-            ["systemctl", "start", service_name],
+            ["kubectl", "get", "pod", name, "-n", namespace, "-o", "json"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=10
         )
         
-        # If that fails, try with sudo
         if result.returncode != 0:
-            logger.info(f"Non-sudo start failed, trying with sudo for {service_name}")
-            result = subprocess.run(
-                ["sudo", "systemctl", "start", service_name],
+            return {"name": service_name, "status": "not_found", "active": False, "type": "kubernetes"}
+        
+        pod_data = json.loads(result.stdout)
+        phase = pod_data.get('status', {}).get('phase', 'Unknown')
+        is_running = phase == 'Running'
+        
+        if phase == 'Running':
+            status = 'running'
+        elif phase in ['Pending', 'ContainerCreating']:
+            status = 'starting'
+        elif phase in ['Succeeded', 'Failed', 'Unknown']:
+            status = 'stopped'
+        else:
+            status = 'stopped'
+        
+        return {
+            "name": service_name,
+            "status": status,
+            "active": is_running,
+            "type": "kubernetes",
+            "phase": phase
+        }
+    except subprocess.TimeoutExpired:
+        logger.warning(f"Timeout checking Kubernetes service {service_name}")
+        return {"name": service_name, "status": "timeout", "active": False, "type": "kubernetes"}
+    except Exception as e:
+        logger.error(f"Error checking Kubernetes service {service_name}: {e}")
+        return {"name": service_name, "status": "unknown", "active": False, "type": "kubernetes"}
+
+def get_all_services_status() -> List[Dict[str, Any]]:
+    """Get status of all monitored services (systemd, Docker, and Kubernetes)"""
+    services = []
+    
+    # 1. Get systemd services
+    for service in CONFIG["services_to_monitor"]:
+        status = check_systemd_service_status(service)
+        services.append(status)
+    
+    # 2. Get Docker containers (excluding cloud-sim)
+    docker_containers = discover_docker_containers()
+    services.extend(docker_containers)
+    
+    # 3. Get Kubernetes services
+    kubernetes_services = discover_kubernetes_services()
+    services.extend(kubernetes_services)
+    
+    return services
+
+def detect_service_type(service_name: str) -> str:
+    """Detect the type of service (systemd, docker, or kubernetes)"""
+    # Check if it's a Kubernetes service (format: namespace/name)
+    if '/' in service_name:
+        return 'kubernetes'
+    
+    # Check if it's a Docker container
+    if DOCKER_AVAILABLE:
+        try:
+            docker_client = docker.from_env()
+            docker_client.containers.get(service_name)
+            return 'docker'
+        except:
+            pass
+    
+    # Default to systemd
+    return 'systemd'
+
+def start_docker_container(container_name: str) -> bool:
+    """Start a Docker container"""
+    if not DOCKER_AVAILABLE:
+        logger.error("Docker is not available")
+        return False
+    
+    try:
+        docker_client = docker.from_env()
+        container = docker_client.containers.get(container_name)
+        container.start()
+        logger.info(f"✅ Successfully started Docker container: {container_name}")
+        return True
+    except docker.errors.NotFound:
+        logger.error(f"❌ Docker container not found: {container_name}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Error starting Docker container {container_name}: {e}")
+        return False
+
+def start_kubernetes_service(service_name: str) -> bool:
+    """Start/restart a Kubernetes pod"""
+    try:
+        # Parse namespace/name format
+        if '/' in service_name:
+            namespace, name = service_name.split('/', 1)
+        else:
+            namespace = 'default'
+            name = service_name
+        
+        # Try to restart the pod using rollout restart (if it's a deployment)
+        # First, try to find the deployment
+        result = subprocess.run(
+            ["kubectl", "get", "pod", name, "-n", namespace, "-o", "json"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        if result.returncode == 0:
+            pod_data = json.loads(result.stdout)
+            owner_refs = pod_data.get('metadata', {}).get('ownerReferences', [])
+            
+            # Try to restart via deployment if available
+            for owner in owner_refs:
+                if owner.get('kind') == 'ReplicaSet':
+                    # Get the deployment name from the ReplicaSet
+                    rs_name = owner.get('name', '')
+                    rs_result = subprocess.run(
+                        ["kubectl", "get", "replicaset", rs_name, "-n", namespace, "-o", "json"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if rs_result.returncode == 0:
+                        rs_data = json.loads(rs_result.stdout)
+                        rs_owner_refs = rs_data.get('metadata', {}).get('ownerReferences', [])
+                        for rs_owner in rs_owner_refs:
+                            if rs_owner.get('kind') == 'Deployment':
+                                deployment_name = rs_owner.get('name')
+                                # Restart the deployment
+                                restart_result = subprocess.run(
+                                    ["kubectl", "rollout", "restart", f"deployment/{deployment_name}", "-n", namespace],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=30
+                                )
+                                if restart_result.returncode == 0:
+                                    logger.info(f"✅ Successfully restarted Kubernetes deployment: {deployment_name}")
+                                    return True
+            
+            # If no deployment found, delete the pod to force recreation
+            delete_result = subprocess.run(
+                ["kubectl", "delete", "pod", name, "-n", namespace],
                 capture_output=True,
                 text=True,
                 timeout=30
             )
+            if delete_result.returncode == 0:
+                logger.info(f"✅ Successfully deleted Kubernetes pod (will be recreated): {name}")
+                return True
         
-        if result.returncode == 0:
+        logger.error(f"❌ Failed to start Kubernetes service: {service_name}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Error starting Kubernetes service {service_name}: {e}")
+        return False
+
+def start_service(service_name: str) -> bool:
+    """Start a service (systemd, Docker, or Kubernetes)"""
+    try:
+        logger.info(f"▶️ Attempting to start service: {service_name}")
+        
+        # Detect service type
+        service_type = detect_service_type(service_name)
+        
+        success = False
+        
+        if service_type == 'docker':
+            success = start_docker_container(service_name)
+        elif service_type == 'kubernetes':
+            success = start_kubernetes_service(service_name)
+        else:
+            # systemd service
+            # First try without sudo (in case user has permissions)
+            result = subprocess.run(
+                ["systemctl", "start", service_name],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # If that fails, try with sudo
+            if result.returncode != 0:
+                logger.info(f"Non-sudo start failed, trying with sudo for {service_name}")
+                result = subprocess.run(
+                    ["sudo", "systemctl", "start", service_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            
+            success = result.returncode == 0
+            if not success:
+                error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                logger.error(f"❌ Failed to start {service_name}: {error_msg}")
+        
+        if success:
             logger.info(f"✅ Successfully started {service_name}")
             log_event("info", f"Service {service_name} started successfully")
             
@@ -520,7 +882,7 @@ def start_service(service_name: str) -> bool:
             
             # Verify the service actually started
             time.sleep(1)  # Give it a moment to start
-            status_check = check_service_status(service_name)
+            status_check = check_service_status(service_name, service_type)
             is_active = status_check.get("active", False)
             status = status_check.get("status", "unknown")
             
@@ -531,8 +893,6 @@ def start_service(service_name: str) -> bool:
             
             return True
         else:
-            error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
-            logger.error(f"❌ Failed to start {service_name}: {error_msg}")
             return False
     except subprocess.TimeoutExpired:
         logger.error(f"⏱️  Timeout while starting service {service_name}")
@@ -541,30 +901,94 @@ def start_service(service_name: str) -> bool:
         logger.error(f"❌ Error starting service {service_name}: {e}", exc_info=True)
         return False
 
-def stop_service(service_name: str) -> bool:
-    """Stop a service"""
+def stop_docker_container(container_name: str) -> bool:
+    """Stop a Docker container"""
+    if not DOCKER_AVAILABLE:
+        logger.error("Docker is not available")
+        return False
+    
     try:
-        logger.info(f"⏹️ Attempting to stop service: {service_name}")
+        docker_client = docker.from_env()
+        container = docker_client.containers.get(container_name)
+        container.stop()
+        logger.info(f"✅ Successfully stopped Docker container: {container_name}")
+        return True
+    except docker.errors.NotFound:
+        logger.error(f"❌ Docker container not found: {container_name}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Error stopping Docker container {container_name}: {e}")
+        return False
+
+def stop_kubernetes_service(service_name: str) -> bool:
+    """Stop/delete a Kubernetes pod"""
+    try:
+        # Parse namespace/name format
+        if '/' in service_name:
+            namespace, name = service_name.split('/', 1)
+        else:
+            namespace = 'default'
+            name = service_name
         
-        # First try without sudo (in case user has permissions)
+        # Delete the pod
         result = subprocess.run(
-            ["systemctl", "stop", service_name],
+            ["kubectl", "delete", "pod", name, "-n", namespace],
             capture_output=True,
             text=True,
             timeout=30
         )
         
-        # If that fails, try with sudo
-        if result.returncode != 0:
-            logger.info(f"Non-sudo stop failed, trying with sudo for {service_name}")
+        if result.returncode == 0:
+            logger.info(f"✅ Successfully deleted Kubernetes pod: {name}")
+            return True
+        else:
+            error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+            logger.error(f"❌ Failed to stop Kubernetes service {service_name}: {error_msg}")
+            return False
+    except Exception as e:
+        logger.error(f"❌ Error stopping Kubernetes service {service_name}: {e}")
+        return False
+
+def stop_service(service_name: str) -> bool:
+    """Stop a service (systemd, Docker, or Kubernetes)"""
+    try:
+        logger.info(f"⏹️ Attempting to stop service: {service_name}")
+        
+        # Detect service type
+        service_type = detect_service_type(service_name)
+        
+        success = False
+        
+        if service_type == 'docker':
+            success = stop_docker_container(service_name)
+        elif service_type == 'kubernetes':
+            success = stop_kubernetes_service(service_name)
+        else:
+            # systemd service
+            # First try without sudo (in case user has permissions)
             result = subprocess.run(
-                ["sudo", "systemctl", "stop", service_name],
+                ["systemctl", "stop", service_name],
                 capture_output=True,
                 text=True,
                 timeout=30
             )
+            
+            # If that fails, try with sudo
+            if result.returncode != 0:
+                logger.info(f"Non-sudo stop failed, trying with sudo for {service_name}")
+                result = subprocess.run(
+                    ["sudo", "systemctl", "stop", service_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            
+            success = result.returncode == 0
+            if not success:
+                error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                logger.error(f"❌ Failed to stop {service_name}: {error_msg}")
         
-        if result.returncode == 0:
+        if success:
             logger.info(f"✅ Successfully stopped {service_name}")
             log_event("info", f"Service {service_name} stopped successfully")
             
@@ -593,8 +1017,6 @@ def stop_service(service_name: str) -> bool:
             
             return True
         else:
-            error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
-            logger.error(f"❌ Failed to stop {service_name}: {error_msg}")
             return False
     except subprocess.TimeoutExpired:
         logger.error(f"⏱️  Timeout while stopping service {service_name}")
@@ -603,30 +1025,66 @@ def stop_service(service_name: str) -> bool:
         logger.error(f"❌ Error stopping service {service_name}: {e}", exc_info=True)
         return False
 
+def restart_docker_container(container_name: str) -> bool:
+    """Restart a Docker container"""
+    if not DOCKER_AVAILABLE:
+        logger.error("Docker is not available")
+        return False
+    
+    try:
+        docker_client = docker.from_env()
+        container = docker_client.containers.get(container_name)
+        container.restart()
+        logger.info(f"✅ Successfully restarted Docker container: {container_name}")
+        return True
+    except docker.errors.NotFound:
+        logger.error(f"❌ Docker container not found: {container_name}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Error restarting Docker container {container_name}: {e}")
+        return False
+
 def restart_service(service_name: str) -> bool:
-    """Restart a failed service"""
+    """Restart a failed service (systemd, Docker, or Kubernetes)"""
     try:
         logger.info(f"🔄 Attempting to restart service: {service_name}")
         
-        # First try without sudo (in case user has permissions)
-        result = subprocess.run(
-            ["systemctl", "restart", service_name],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        # Detect service type
+        service_type = detect_service_type(service_name)
         
-        # If that fails, try with sudo
-        if result.returncode != 0:
-            logger.info(f"Non-sudo restart failed, trying with sudo for {service_name}")
-        result = subprocess.run(
-            ["sudo", "systemctl", "restart", service_name],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        success = False
         
-        if result.returncode == 0:
+        if service_type == 'docker':
+            success = restart_docker_container(service_name)
+        elif service_type == 'kubernetes':
+            # For Kubernetes, restart is the same as start (it will restart the pod)
+            success = start_kubernetes_service(service_name)
+        else:
+            # systemd service
+            # First try without sudo (in case user has permissions)
+            result = subprocess.run(
+                ["systemctl", "restart", service_name],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            # If that fails, try with sudo
+            if result.returncode != 0:
+                logger.info(f"Non-sudo restart failed, trying with sudo for {service_name}")
+                result = subprocess.run(
+                    ["sudo", "systemctl", "restart", service_name],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+            
+            success = result.returncode == 0
+            if not success:
+                error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                logger.error(f"❌ Failed to restart {service_name}: {error_msg}")
+        
+        if success:
             logger.info(f"✅ Successfully restarted {service_name}")
             log_event("info", f"Service {service_name} restarted successfully")
             
@@ -655,7 +1113,7 @@ def restart_service(service_name: str) -> bool:
             
             # Verify the service actually started
             time.sleep(1)  # Give it a moment to start
-            status_check = check_service_status(service_name)
+            status_check = check_service_status(service_name, service_type)
             is_active = status_check.get("active", False)
             status = status_check.get("status", "unknown")
             
@@ -666,8 +1124,6 @@ def restart_service(service_name: str) -> bool:
             
             return True
         else:
-            error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
-            logger.error(f"❌ Failed to restart {service_name}: {error_msg}")
             return False
     except subprocess.TimeoutExpired:
         logger.error(f"⏱️  Timeout while restarting service {service_name}")

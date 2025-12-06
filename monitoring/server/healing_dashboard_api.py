@@ -3,11 +3,17 @@ Healing Bot Dashboard API
 Comprehensive backend for real-time system monitoring and management
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request, Body, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator, root_validator
+from pydantic import BaseModel, Field, validator
+try:
+    from pydantic import model_validator
+    _HAS_MODEL_VALIDATOR = True
+except ImportError:
+    from pydantic import root_validator
+    _HAS_MODEL_VALIDATOR = False
 from typing import Union
 import psutil
 import subprocess
@@ -67,18 +73,36 @@ class GeminiAnalyzeRequest(BaseModel):
     logs: Optional[List[Dict[str, Any]]] = Field(None, description="Multiple log entries for pattern analysis")
     limit: Optional[int] = Field(10, ge=1, le=100, description="Maximum number of logs to analyze")
     
-    @root_validator
-    def validate_logs(cls, values):
-        """Ensure at least one log entry is provided"""
-        log_entry = values.get('log_entry')
-        logs = values.get('logs')
-        # Check if at least one is provided and not empty
-        has_log_entry = log_entry is not None and log_entry != {}
-        has_logs = logs is not None and len(logs) > 0 if logs else False
-        
-        if not has_log_entry and not has_logs:
-            raise ValueError("Either log_entry or logs must be provided")
-        return values
+    if _HAS_MODEL_VALIDATOR:
+        @model_validator(mode='after')
+        def validate_logs(cls, values):
+            """Ensure at least one log entry is provided (Pydantic v2)"""
+            # In Pydantic v2, values is the model instance
+            log_entry = values.log_entry if hasattr(values, 'log_entry') else None
+            logs = values.logs if hasattr(values, 'logs') else None
+            
+            # Check if at least one is provided and not empty
+            has_log_entry = log_entry is not None and log_entry != {}
+            has_logs = logs is not None and len(logs) > 0 if logs else False
+            
+            if not has_log_entry and not has_logs:
+                raise ValueError("Either log_entry or logs must be provided")
+            return values
+    else:
+        @root_validator
+        def validate_logs(cls, values):
+            """Ensure at least one log entry is provided (Pydantic v1)"""
+            # In Pydantic v1, values is a dict
+            log_entry = values.get('log_entry')
+            logs = values.get('logs')
+            
+            # Check if at least one is provided and not empty
+            has_log_entry = log_entry is not None and log_entry != {}
+            has_logs = logs is not None and len(logs) > 0 if logs else False
+            
+            if not has_log_entry and not has_logs:
+                raise ValueError("Either log_entry or logs must be provided")
+            return values
 
 class DiscordConfigRequest(BaseModel):
     """Request model for Discord webhook configuration"""

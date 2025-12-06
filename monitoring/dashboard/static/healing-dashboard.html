@@ -4675,22 +4675,21 @@
                     return;
                 }
                 
-                // Separate running and non-running services
+                // Filter to show only running services
                 const runningServices = allServices.filter(s => s.status === 'running' || s.active === true);
-                const otherServices = allServices.filter(s => s.status !== 'running' && s.active !== true);
                 
                 // Update service count in overview card
                 const serviceCountElement = document.getElementById('serviceCount');
                 if (serviceCountElement) {
-                    serviceCountElement.textContent = `${runningServices.length} / ${allServices.length}`;
+                    serviceCountElement.textContent = `${runningServices.length}`;
                 }
                 
                 // Debug: log services to console
-                console.log('Services loaded - Running:', runningServices.length, 'Other:', otherServices.length);
+                console.log('Services loaded - Running:', runningServices.length);
                 
                 let html = '';
                 
-                // Always show running services first with a header
+                // Show only running services
                 if (runningServices.length > 0) {
                     html += `
                         <div style="margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--border-color);">
@@ -4704,6 +4703,8 @@
                     html += runningServices.map(service => {
                         const statusClass = 'running';
                         const statusText = 'Running';
+                        const serviceType = service.type || 'systemd';
+                        const typeLabel = serviceType === 'docker' ? '🐳 Docker' : serviceType === 'kubernetes' ? '☸️ Kubernetes' : '⚙️ Systemd';
                         
                         return `
                             <div class="service-item" style="border-left: 4px solid var(--accent-green);">
@@ -4714,6 +4715,7 @@
                                         <div style="font-size: 0.85rem; color: var(--accent-green); display: flex; align-items: center; gap: 0.5rem;">
                                             <span>●</span>
                                             <span>${statusText}</span>
+                                            <span style="margin-left: 0.5rem; color: var(--text-secondary);">${typeLabel}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -4730,50 +4732,15 @@
                             </div>
                         `;
                     }).join('');
-                }
-                
-                // Show other services (stopped/unknown) with a header
-                if (otherServices.length > 0) {
-                    html += `
-                        <div style="margin-top: 2rem; margin-bottom: 1rem; padding-top: 1rem; padding-bottom: 0.5rem; border-top: 2px solid var(--border-color); border-bottom: 2px solid var(--border-color);">
-                            <h3 style="margin: 0; color: var(--text-secondary); font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
-                                <span class="service-status stopped"></span>
-                                Stopped Services (${otherServices.length})
-                            </h3>
+                } else {
+                    // No running services
+                    html = `
+                        <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                            <div style="font-size: 3rem; margin-bottom: 1rem;">📋</div>
+                            <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 0.5rem;">No Running Services</div>
+                            <div>No services are currently running</div>
                         </div>
                     `;
-                    
-                    html += otherServices.map(service => {
-                        const statusClass = service.status === 'stopped' ? 'stopped' : 'restarting';
-                        const statusText = service.status === 'stopped' ? 'Stopped' : 
-                                          service.status === 'restarting' ? 'Restarting' : 'Unknown';
-                        const statusColor = service.status === 'stopped' ? 'var(--accent-red)' : 'var(--accent-yellow)';
-                        
-                        return `
-                            <div class="service-item" style="border-left: 4px solid ${statusColor};">
-                                <div style="display: flex; align-items: center; gap: 1rem; flex: 1;">
-                                    <span class="service-status ${statusClass}"></span>
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: 600; font-size: 1rem; color: var(--text-primary); margin-bottom: 0.25rem;">${escapeHtml(service.name)}</div>
-                                        <div style="font-size: 0.85rem; color: ${statusColor}; display: flex; align-items: center; gap: 0.5rem;">
-                                            <span>●</span>
-                                            <span>${statusText}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style="display: flex; gap: 0.5rem;">
-                                    <button class="btn btn-success btn-sm" onclick="startService('${service.name}')" 
-                                            style="white-space: nowrap; padding: 0.5rem 1rem;" title="Start Service">
-                                        ▶️ Start
-                                    </button>
-                                    <button class="btn btn-primary btn-sm" onclick="restartService('${service.name}')" 
-                                            style="white-space: nowrap; padding: 0.5rem 1rem;" title="Restart Service">
-                                        🔄 Restart
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
                 }
                 
                 serviceList.innerHTML = html;

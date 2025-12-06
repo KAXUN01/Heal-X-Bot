@@ -29,10 +29,11 @@ class GeminiLogAnalyzer:
             try:
                 # Configure the API key
                 genai.configure(api_key=self.api_key)
-                # Try fastest models first: gemini-1.5-flash is the fastest and most reliable
+                # Try fastest models first: gemini-2.5-flash is the latest and most capable
                 # Fallback to other fast models if needed
                 model_priority = [
-                    "gemini-1.5-flash",      # Fastest, most reliable
+                    "gemini-2.5-flash",      # Latest and most capable model
+                    "gemini-1.5-flash",      # Reliable fallback
                     "gemini-2.0-flash-exp",  # Experimental fast model
                     "gemini-2.0-flash-lite"  # Fallback
                 ]
@@ -73,7 +74,7 @@ class GeminiLogAnalyzer:
             if self.api_key and self.api_key != "your_gemini_api_key_here" and len(self.api_key) >= 20:
                 try:
                     genai.configure(api_key=self.api_key)
-                    model_priority = ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.0-flash-lite"]
+                    model_priority = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.0-flash-lite"]
                     for model_name in model_priority:
                         try:
                             self.model = genai.GenerativeModel(model_name)

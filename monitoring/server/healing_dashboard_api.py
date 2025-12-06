@@ -223,10 +223,17 @@ def initialize_log_services():
         logger.warning(f"Centralized logger not available: {e}")
     
     try:
+        # Get API key from environment (reload to ensure latest value)
+        api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
         # gemini_analyzer is a global variable from the module
-        initialize_gemini_analyzer()
+        initialize_gemini_analyzer(api_key=api_key)
         from gemini_log_analyzer import gemini_analyzer as _gemini_analyzer
-        logger.info("Gemini AI analyzer initialized")
+        if _gemini_analyzer and _gemini_analyzer.model:
+            logger.info("Gemini AI analyzer initialized with API key")
+        elif api_key:
+            logger.warning(f"Gemini AI analyzer initialized but model not available (API key length: {len(api_key)})")
+        else:
+            logger.warning("Gemini AI analyzer initialized without API key (AI analysis disabled)")
     except Exception as e:
         logger.warning(f"Gemini analyzer not available: {e}")
     

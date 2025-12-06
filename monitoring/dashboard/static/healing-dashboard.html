@@ -3159,6 +3159,9 @@
             loadTabData(tabName);
         }
         
+        // Make switchTab globally accessible for inline onclick handlers
+        window.switchTab = switchTab;
+        
         function updateDashboard(data) {
             // Update system metrics
             if (data.cpu !== undefined) {

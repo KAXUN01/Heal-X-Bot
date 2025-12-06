@@ -6140,6 +6140,18 @@ async def analyze_fault_with_ai(fault_id: int):
             system_metrics=metrics
         )
         
+        # Validate analysis_result is a dict (handle cases where it might be None or wrong type)
+        if not isinstance(analysis_result, dict):
+            logger.error(f"analyze_cloud_fault returned non-dict: {type(analysis_result)}, value: {analysis_result}")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": f"AI analysis returned invalid result type: {type(analysis_result).__name__}",
+                    "fault": fault
+                }
+            )
+        
         if analysis_result.get("status") != "success":
             return JSONResponse(
                 status_code=200,
@@ -6152,8 +6164,18 @@ async def analyze_fault_with_ai(fault_id: int):
         
         # Determine if auto-healing is possible
         analysis = analysis_result.get("analysis", {})
+        # Validate analysis is a dict (handle cases where it might be a float or other type)
+        if not isinstance(analysis, dict):
+            logger.error(f"analysis_result['analysis'] is not a dict: {type(analysis)}, value: {analysis}")
+            # If analysis is a float (confidence value), treat it as missing analysis
+            analysis = {}
+        
         solution = analysis.get("solution", "")
         confidence = analysis.get("confidence", 0)
+        # Ensure confidence is a number, not a dict
+        if not isinstance(confidence, (int, float)):
+            logger.warning(f"confidence is not a number: {type(confidence)}, value: {confidence}")
+            confidence = 0
         
         # Check if solution contains executable commands that can be auto-healed
         auto_healable = False

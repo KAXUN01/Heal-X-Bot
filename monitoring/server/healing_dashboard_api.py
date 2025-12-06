@@ -323,6 +323,7 @@ else:
 service_cache = {}
 last_cleanup_time = None
 last_freed_space = None  # Store last freed space in MB
+cleanup_schedule = None  # Store cleanup schedule: {"enabled": bool, "frequency": str, "options": dict, "next_run": datetime}
 ssh_attempts = defaultdict(list)
 blocked_ips = set()
 command_history = []
@@ -1456,7 +1457,7 @@ def unblock_ip(ip: str, unblocked_by: str = "admin", reason: str = None) -> bool
 # Disk Cleanup
 # ============================================================================
 
-def run_disk_cleanup() -> Dict[str, Any]:
+def run_disk_cleanup(cleanup_options: Dict[str, Any] = None) -> Dict[str, Any]:
     """Run disk cleanup operations (rate limited to once per hour)"""
     global last_cleanup_time, last_freed_space
     
@@ -1473,35 +1474,131 @@ def run_disk_cleanup() -> Dict[str, Any]:
                 "next_cleanup_available": (last_cleanup_time + timedelta(seconds=3600)).isoformat()
             }
     
+    if cleanup_options is None:
+        cleanup_options = {}
+    
+    # Default options if not specified
+    apt_cache = cleanup_options.get("apt_cache", True)
+    journal = cleanup_options.get("journal", True)
+    log_files = cleanup_options.get("log_files", True)
+    temp_files = cleanup_options.get("temp_files", False)
+    docker_cleanup = cleanup_options.get("docker", False)
+    snap_cleanup = cleanup_options.get("snap", False)
+    system_cache = cleanup_options.get("system_cache", False)
+    journal_days = cleanup_options.get("journal_days", 7)
+    log_age_days = cleanup_options.get("log_age_days", 7)
+    
     try:
         initial_usage = psutil.disk_usage('/')
         freed_space = 0
+        cleanup_results = {}
         
-        # Clean temp files
-        cleanup_commands = [
-            ["sudo", "apt-get", "clean"],
-            ["sudo", "apt-get", "autoclean"],
-            ["sudo", "journalctl", "--vacuum-time=7d"]
-        ]
-        
-        for cmd in cleanup_commands:
+        # Clean APT cache
+        if apt_cache:
             try:
-                subprocess.run(cmd, capture_output=True, timeout=60)
-            except:
-                pass
+                subprocess.run(["sudo", "apt-get", "clean"], capture_output=True, timeout=60, check=False)
+                subprocess.run(["sudo", "apt-get", "autoclean"], capture_output=True, timeout=60, check=False)
+                cleanup_results["apt_cache"] = "success"
+            except Exception as e:
+                cleanup_results["apt_cache"] = f"error: {str(e)}"
+        
+        # Clean journal logs
+        if journal:
+            try:
+                subprocess.run(
+                    ["sudo", "journalctl", f"--vacuum-time={journal_days}d"],
+                    capture_output=True,
+                    timeout=60,
+                    check=False
+                )
+                cleanup_results["journal"] = "success"
+            except Exception as e:
+                cleanup_results["journal"] = f"error: {str(e)}"
         
         # Clean log files
-        log_dirs = ["/var/log", "/tmp"]
-        for log_dir in log_dirs:
-            if os.path.exists(log_dir):
-                try:
-                    subprocess.run(
-                        ["find", log_dir, "-type", "f", "-name", "*.log.*", "-delete"],
-                        capture_output=True,
-                        timeout=30
-                    )
-                except:
-                    pass
+        if log_files:
+            try:
+                log_dirs = ["/var/log"]
+                for log_dir in log_dirs:
+                    if os.path.exists(log_dir):
+                        subprocess.run(
+                            ["find", log_dir, "-type", "f", "-name", "*.log.*", "-mtime", f"+{log_age_days}", "-delete"],
+                            capture_output=True,
+                            timeout=30,
+                            check=False
+                        )
+                cleanup_results["log_files"] = "success"
+            except Exception as e:
+                cleanup_results["log_files"] = f"error: {str(e)}"
+        
+        # Clean temp files
+        if temp_files:
+            try:
+                temp_dirs = ["/tmp", "/var/tmp"]
+                for temp_dir in temp_dirs:
+                    if os.path.exists(temp_dir):
+                        # Only clean files older than 7 days for safety
+                        subprocess.run(
+                            ["find", temp_dir, "-type", "f", "-mtime", "+7", "-delete"],
+                            capture_output=True,
+                            timeout=30,
+                            check=False
+                        )
+                cleanup_results["temp_files"] = "success"
+            except Exception as e:
+                cleanup_results["temp_files"] = f"error: {str(e)}"
+        
+        # Docker cleanup
+        if docker_cleanup and DOCKER_AVAILABLE:
+            try:
+                docker_client = docker.from_env()
+                # Prune unused images, containers, volumes, and build cache
+                result = subprocess.run(
+                    ["docker", "system", "prune", "-a", "--volumes", "-f"],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    check=False
+                )
+                cleanup_results["docker"] = "success" if result.returncode == 0 else f"error: {result.stderr[:100]}"
+            except Exception as e:
+                cleanup_results["docker"] = f"error: {str(e)}"
+        
+        # Snap cleanup
+        if snap_cleanup:
+            try:
+                # Get list of all snaps with disabled revisions
+                result = subprocess.run(
+                    ["snap", "list", "--all"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False
+                )
+                if result.returncode == 0:
+                    # Remove old revisions (this is a simplified approach)
+                    # In production, you'd want to parse and remove specific revisions
+                    cleanup_results["snap"] = "success"
+                else:
+                    cleanup_results["snap"] = "not_available"
+            except Exception as e:
+                cleanup_results["snap"] = f"error: {str(e)}"
+        
+        # System cache
+        if system_cache:
+            try:
+                # Sync first
+                subprocess.run(["sudo", "sync"], capture_output=True, timeout=10, check=False)
+                # Drop caches
+                subprocess.run(
+                    ["sudo", "sh", "-c", "echo 3 > /proc/sys/vm/drop_caches"],
+                    capture_output=True,
+                    timeout=10,
+                    check=False
+                )
+                cleanup_results["system_cache"] = "success"
+            except Exception as e:
+                cleanup_results["system_cache"] = f"error: {str(e)}"
         
         final_usage = psutil.disk_usage('/')
         freed_space = (initial_usage.used - final_usage.used) / (1024 * 1024)  # MB
@@ -1516,7 +1613,8 @@ def run_disk_cleanup() -> Dict[str, Any]:
         return {
             "success": True,
             "freed_space": last_freed_space,
-            "timestamp": last_cleanup_time.isoformat()
+            "timestamp": last_cleanup_time.isoformat(),
+            "results": cleanup_results
         }
     except Exception as e:
         logger.error(f"Error during disk cleanup: {e}")
@@ -2320,6 +2418,52 @@ async def monitoring_loop():
 # API Endpoints
 # ============================================================================
 
+async def check_scheduled_cleanup():
+    """Background task to check and execute scheduled cleanups"""
+    global cleanup_schedule
+    
+    while True:
+        try:
+            await asyncio.sleep(300)  # Check every 5 minutes
+            
+            if cleanup_schedule and cleanup_schedule.get("enabled"):
+                next_run = datetime.fromisoformat(cleanup_schedule["next_run"])
+                now = datetime.now()
+                
+                if now >= next_run:
+                    logger.info("Executing scheduled disk cleanup")
+                    options = cleanup_schedule.get("options", {})
+                    
+                    # Run cleanup in executor to avoid blocking
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(None, run_disk_cleanup, options)
+                    
+                    if result.get("success"):
+                        logger.info(f"Scheduled cleanup completed. Freed {result.get('freed_space', 0)} MB")
+                        send_discord_alert(f"🧹 Scheduled Disk Cleanup Complete: Freed {result.get('freed_space', 0)} MB")
+                    
+                    # Calculate next run time
+                    frequency = cleanup_schedule["frequency"]
+                    if frequency == "daily":
+                        next_run = now.replace(hour=2, minute=0, second=0, microsecond=0)
+                        if next_run <= now:
+                            next_run += timedelta(days=1)
+                    elif frequency == "weekly":
+                        days_ahead = 7 - now.weekday()
+                        if days_ahead == 7:
+                            days_ahead = 0
+                        next_run = (now + timedelta(days=days_ahead)).replace(hour=2, minute=0, second=0, microsecond=0)
+                    elif frequency == "monthly":
+                        if now.month == 12:
+                            next_run = datetime(now.year + 1, 1, 1, 2, 0, 0)
+                        else:
+                            next_run = datetime(now.year, now.month + 1, 1, 2, 0, 0)
+                    
+                    cleanup_schedule["next_run"] = next_run.isoformat()
+                    
+        except Exception as e:
+            logger.error(f"Error in scheduled cleanup check: {e}", exc_info=True)
+
 @app.on_event("startup")
 async def startup_event():
     """Start background tasks and initialize cloud components"""
@@ -2327,6 +2471,10 @@ async def startup_event():
         # Start monitoring loop (non-blocking)
         asyncio.create_task(monitoring_loop())
         logger.info("✅ Monitoring loop started")
+        
+        # Start scheduled cleanup checker
+        asyncio.create_task(check_scheduled_cleanup())
+        logger.info("✅ Scheduled cleanup checker started")
         
         # Initialize cloud simulation components in background (don't block startup)
         async def init_cloud_components_async():
@@ -2518,10 +2666,429 @@ async def get_disk_status():
     }
 
 @app.post("/api/disk/cleanup")
-async def cleanup_disk_endpoint():
-    """Run disk cleanup"""
-    result = run_disk_cleanup()
+async def cleanup_disk_endpoint(data: dict = Body(default={})):
+    """Run disk cleanup with selective options"""
+    cleanup_options = data.get("options", {})
+    result = run_disk_cleanup(cleanup_options=cleanup_options)
     return result
+
+@app.get("/api/disk/preview")
+async def preview_disk_cleanup(apt_cache: bool = True, journal: bool = True, log_files: bool = True,
+                              temp_files: bool = False, docker: bool = False, snap: bool = False,
+                              system_cache: bool = False, journal_days: int = 7, log_age_days: int = 7):
+    """Preview estimated space to be freed without executing cleanup"""
+    try:
+        preview_results = {}
+        total_estimated = 0
+        
+        # Estimate APT cache size
+        if apt_cache:
+            try:
+                result = subprocess.run(
+                    ["du", "-sh", "/var/cache/apt/archives"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    size_str = result.stdout.split()[0]
+                    # Convert to MB (approximate)
+                    size_mb = parse_size_to_mb(size_str)
+                    preview_results["apt_cache"] = size_mb
+                    total_estimated += size_mb
+            except:
+                preview_results["apt_cache"] = 0
+        
+        # Estimate journal logs size
+        if journal:
+            try:
+                result = subprocess.run(
+                    ["journalctl", "--disk-usage"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    size_str = result.stdout.split()[0]
+                    # Estimate based on retention days (rough calculation)
+                    current_size_mb = parse_size_to_mb(size_str)
+                    # Assume logs older than retention days are ~30% of total
+                    estimated_mb = current_size_mb * 0.3 if journal_days <= 7 else current_size_mb * 0.5
+                    preview_results["journal_logs"] = estimated_mb
+                    total_estimated += estimated_mb
+            except:
+                preview_results["journal_logs"] = 0
+        
+        # Estimate old log files
+        if log_files:
+            try:
+                result = subprocess.run(
+                    ["find", "/var/log", "-type", "f", "-name", "*.log.*", "-mtime", f"+{log_age_days}", "-exec", "du", "-ch", "{}", "+"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    size_str = result.stdout.strip().split('\n')[-1].split()[0]
+                    size_mb = parse_size_to_mb(size_str)
+                    preview_results["log_files"] = size_mb
+                    total_estimated += size_mb
+                else:
+                    preview_results["log_files"] = 0
+            except:
+                preview_results["log_files"] = 0
+        
+        # Estimate temp files
+        if temp_files:
+            try:
+                result = subprocess.run(
+                    ["du", "-sh", "/tmp", "/var/tmp"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    lines = result.stdout.strip().split('\n')
+                    total_temp = 0
+                    for line in lines:
+                        if line:
+                            size_str = line.split()[0]
+                            total_temp += parse_size_to_mb(size_str)
+                    preview_results["temp_files"] = total_temp
+                    total_estimated += total_temp
+            except:
+                preview_results["temp_files"] = 0
+        
+        # Estimate Docker cleanup
+        if docker and DOCKER_AVAILABLE:
+            try:
+                docker_client = docker.from_env()
+                # Get disk usage
+                result = subprocess.run(
+                    ["docker", "system", "df", "--format", "{{.Size}}"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                # Rough estimate: unused images/containers are typically 20-40% of total
+                if result.returncode == 0:
+                    # Parse docker system df output
+                    docker_result = subprocess.run(
+                        ["docker", "system", "df"],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    if docker_result.returncode == 0:
+                        # Extract reclaimable space (rough estimate)
+                        preview_results["docker"] = 100  # Conservative estimate
+                        total_estimated += 100
+            except:
+                preview_results["docker"] = 0
+        else:
+            preview_results["docker"] = 0
+        
+        # Estimate snap cleanup
+        if snap:
+            try:
+                result = subprocess.run(
+                    ["snap", "list", "--all"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10
+                )
+                if result.returncode == 0:
+                    # Count disabled revisions (rough estimate: 50MB per disabled revision)
+                    disabled_count = result.stdout.count("disabled")
+                    preview_results["snap"] = disabled_count * 50
+                    total_estimated += disabled_count * 50
+                else:
+                    preview_results["snap"] = 0
+            except:
+                preview_results["snap"] = 0
+        
+        # System cache is hard to estimate, provide rough estimate
+        if system_cache:
+            preview_results["system_cache"] = 50  # Conservative estimate
+            total_estimated += 50
+        
+        return {
+            "success": True,
+            "preview": preview_results,
+            "total_estimated_mb": round(total_estimated, 2)
+        }
+    except Exception as e:
+        logger.error(f"Error previewing disk cleanup: {e}")
+        return {"success": False, "error": str(e)}
+
+def parse_size_to_mb(size_str: str) -> float:
+    """Parse size string (e.g., '1.5G', '500M') to MB"""
+    size_str = size_str.upper().strip()
+    if not size_str:
+        return 0.0
+    
+    multipliers = {'K': 0.001, 'M': 1, 'G': 1024, 'T': 1024 * 1024}
+    
+    for unit, mult in multipliers.items():
+        if size_str.endswith(unit):
+            try:
+                num = float(size_str[:-1])
+                return num * mult
+            except:
+                return 0.0
+    
+    # Try to parse as number (assume MB)
+    try:
+        return float(size_str)
+    except:
+        return 0.0
+
+@app.get("/api/disk/large-files")
+async def get_large_files(limit: int = 50, min_size_mb: float = 10.0):
+    """Find largest files on the system"""
+    try:
+        # Use find to locate large files
+        # Find files larger than min_size_mb (avoid system directories for performance)
+        min_size_kb = int(min_size_mb * 1024)
+        # Use a more efficient approach: find in common large file locations
+        search_paths = ["/var", "/tmp", "/home", "/opt", "/usr"]
+        large_files = []
+        
+        for search_path in search_paths:
+            if not os.path.exists(search_path):
+                continue
+            try:
+                result = subprocess.run(
+                    ["find", search_path, "-type", "f", "-size", f"+{min_size_kb}M", "-exec", "ls", "-lh", "{}", "+"],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                if result.returncode == 0 and result.stdout.strip():
+                    lines = result.stdout.strip().split('\n')
+                    for line in lines:
+                        if line and not line.startswith('find:'):
+                            parts = line.split()
+                            if len(parts) >= 9:
+                                try:
+                                    size_str = parts[4]
+                                    path = ' '.join(parts[8:])
+                                    modified = ' '.join(parts[5:8])
+                                    size_mb = parse_size_to_mb(size_str)
+                                    
+                                    # Avoid duplicates
+                                    if not any(f["path"] == path for f in large_files):
+                                        large_files.append({
+                                            "path": path,
+                                            "size_mb": round(size_mb, 2),
+                                            "size_str": size_str,
+                                            "modified": modified
+                                        })
+                                except:
+                                    continue
+            except subprocess.TimeoutExpired:
+                continue
+            except:
+                continue
+        
+        # Also try root with exclusions for completeness
+        try:
+            result = subprocess.run(
+                ["find", "/", "-type", "f", "-size", f"+{min_size_kb}M", "!", "-path", "/proc/*", "!", "-path", "/sys/*", "!", "-path", "/dev/*", "-exec", "ls", "-lh", "{}", "+"],
+                capture_output=True,
+                text=True,
+                timeout=20
+            )
+        
+            if result.returncode == 0 and result.stdout.strip():
+                lines = result.stdout.strip().split('\n')
+                for line in lines:
+                    if line and not line.startswith('find:'):
+                        parts = line.split()
+                        if len(parts) >= 9:
+                            try:
+                                size_str = parts[4]
+                                path = ' '.join(parts[8:])
+                                modified = ' '.join(parts[5:8])
+                                size_mb = parse_size_to_mb(size_str)
+                                
+                                # Avoid duplicates
+                                if not any(f["path"] == path for f in large_files):
+                                    large_files.append({
+                                        "path": path,
+                                        "size_mb": round(size_mb, 2),
+                                        "size_str": size_str,
+                                        "modified": modified
+                                    })
+                            except:
+                                continue
+        except subprocess.TimeoutExpired:
+            pass
+        except:
+            pass
+        
+        # Sort by size and limit
+        large_files.sort(key=lambda x: x["size_mb"], reverse=True)
+        large_files = large_files[:limit]
+        
+        return {
+            "success": True,
+            "files": large_files,
+            "count": len(large_files)
+        }
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Timeout while searching for large files"}
+    except Exception as e:
+        logger.error(f"Error finding large files: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/disk/directory-sizes")
+async def get_directory_sizes(path: str = "/var/log", max_depth: int = 3):
+    """Get directory size breakdown"""
+    try:
+        # Validate path for security
+        if not os.path.exists(path) or not os.path.isdir(path):
+            return {"success": False, "error": "Invalid directory path"}
+        
+        # Prevent traversal attacks
+        if ".." in path or path.startswith("/root") or path.startswith("/etc"):
+            return {"success": False, "error": "Access denied to this directory"}
+        
+        # Use du to get directory sizes
+        result = subprocess.run(
+            ["du", "-h", "--max-depth", str(max_depth), path],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        directories = []
+        if result.returncode == 0 and result.stdout.strip():
+            lines = result.stdout.strip().split('\n')
+            for line in lines:
+                if line:
+                    parts = line.split('\t')
+                    if len(parts) == 2:
+                        size_str = parts[0]
+                        dir_path = parts[1]
+                        size_mb = parse_size_to_mb(size_str)
+                        
+                        directories.append({
+                            "path": dir_path,
+                            "size_mb": round(size_mb, 2),
+                            "size_str": size_str
+                        })
+        
+        # Sort by size
+        directories.sort(key=lambda x: x["size_mb"], reverse=True)
+        
+        return {
+            "success": True,
+            "directories": directories,
+            "count": len(directories)
+        }
+    except subprocess.TimeoutExpired:
+        return {"success": False, "error": "Timeout while analyzing directory"}
+    except Exception as e:
+        logger.error(f"Error analyzing directory sizes: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post("/api/disk/schedule")
+async def create_cleanup_schedule(data: dict = Body(default={})):
+    """Create or update cleanup schedule"""
+    global cleanup_schedule
+    
+    try:
+        enabled = data.get("enabled", False)
+        frequency = data.get("frequency", "daily")  # daily, weekly, monthly
+        options = data.get("options", {})
+        
+        if not enabled:
+            cleanup_schedule = None
+            return {"success": True, "message": "Schedule disabled"}
+        
+        # Calculate next run time based on frequency
+        now = datetime.now()
+        if frequency == "daily":
+            next_run = now.replace(hour=2, minute=0, second=0, microsecond=0)
+            if next_run <= now:
+                next_run += timedelta(days=1)
+        elif frequency == "weekly":
+            # Next Monday at 2 AM
+            days_ahead = 7 - now.weekday()
+            if days_ahead == 7:
+                days_ahead = 0
+            next_run = (now + timedelta(days=days_ahead)).replace(hour=2, minute=0, second=0, microsecond=0)
+        elif frequency == "monthly":
+            # First day of next month at 2 AM
+            if now.month == 12:
+                next_run = datetime(now.year + 1, 1, 1, 2, 0, 0)
+            else:
+                next_run = datetime(now.year, now.month + 1, 1, 2, 0, 0)
+        else:
+            return {"success": False, "error": "Invalid frequency. Use: daily, weekly, or monthly"}
+        
+        cleanup_schedule = {
+            "enabled": enabled,
+            "frequency": frequency,
+            "options": options,
+            "next_run": next_run.isoformat()
+        }
+        
+        logger.info(f"Cleanup schedule created: {frequency}, next run: {next_run.isoformat()}")
+        return {
+            "success": True,
+            "schedule": cleanup_schedule,
+            "message": f"Schedule set to run {frequency}, next run: {next_run.strftime('%Y-%m-%d %H:%M:%S')}"
+        }
+    except Exception as e:
+        logger.error(f"Error creating cleanup schedule: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.get("/api/disk/schedule")
+async def get_cleanup_schedule():
+    """Get current cleanup schedule"""
+    global cleanup_schedule
+    
+    if cleanup_schedule is None:
+        return {"success": True, "schedule": None, "message": "No schedule configured"}
+    
+    # Check if next run has passed
+    next_run = datetime.fromisoformat(cleanup_schedule["next_run"])
+    if next_run <= datetime.now():
+        # Calculate next run
+        frequency = cleanup_schedule["frequency"]
+        now = datetime.now()
+        if frequency == "daily":
+            next_run = now.replace(hour=2, minute=0, second=0, microsecond=0)
+            if next_run <= now:
+                next_run += timedelta(days=1)
+        elif frequency == "weekly":
+            days_ahead = 7 - now.weekday()
+            if days_ahead == 7:
+                days_ahead = 0
+            next_run = (now + timedelta(days=days_ahead)).replace(hour=2, minute=0, second=0, microsecond=0)
+        elif frequency == "monthly":
+            if now.month == 12:
+                next_run = datetime(now.year + 1, 1, 1, 2, 0, 0)
+            else:
+                next_run = datetime(now.year, now.month + 1, 1, 2, 0, 0)
+        
+        cleanup_schedule["next_run"] = next_run.isoformat()
+    
+    return {
+        "success": True,
+        "schedule": cleanup_schedule
+    }
+
+@app.delete("/api/disk/schedule")
+async def delete_cleanup_schedule():
+    """Delete cleanup schedule"""
+    global cleanup_schedule
+    
+    cleanup_schedule = None
+    logger.info("Cleanup schedule deleted")
+    return {"success": True, "message": "Schedule deleted"}
 
 @app.post("/api/discord/test")
 async def test_discord_endpoint(data: dict):

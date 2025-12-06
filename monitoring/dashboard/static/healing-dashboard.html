@@ -1594,22 +1594,202 @@
         <div id="disk" class="tab-content">
             <h2 style="margin-bottom: 1.5rem;">Disk Cleanup Management</h2>
             
+            <!-- Disk Usage Stats Card -->
             <div class="card" style="margin-bottom: 1.5rem;">
-                <h3>Cleanup Configuration</h3>
+                <h3 style="margin-bottom: 1rem;">Disk Usage Overview</h3>
+                <div id="diskUsageStats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                    <div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Total Space</div>
+                        <div id="diskTotal" style="font-size: 1.5rem; font-weight: 600; color: var(--accent-blue);">-</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Used Space</div>
+                        <div id="diskUsed" style="font-size: 1.5rem; font-weight: 600; color: var(--accent-orange);">-</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Free Space</div>
+                        <div id="diskFree" style="font-size: 1.5rem; font-weight: 600; color: var(--accent-green);">-</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.25rem;">Usage</div>
+                        <div id="diskPercent" style="font-size: 1.5rem; font-weight: 600; color: var(--accent-red);">-</div>
+                    </div>
+                </div>
                 <div style="margin-top: 1rem;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.875rem;">
+                        <span>Disk Usage</span>
+                        <span id="diskPercentText">-</span>
+                    </div>
+                    <div style="width: 100%; height: 24px; background: var(--bg-tertiary); border-radius: 12px; overflow: hidden;">
+                        <div id="diskUsageBar" style="height: 100%; background: linear-gradient(90deg, var(--accent-green) 0%, var(--accent-yellow) 70%, var(--accent-red) 90%); width: 0%; transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color); font-size: 0.875rem; color: var(--text-secondary);">
+                    <div>Last Cleanup: <span id="lastCleanup">Never</span></div>
+                    <div style="margin-top: 0.25rem;">Last Freed: <span id="lastFreedSpace">-</span></div>
+                </div>
+            </div>
+
+            <!-- Selective Cleanup Options -->
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 1rem;">Selective Cleanup Options</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; transition: background 0.2s;">
+                        <input type="checkbox" id="cleanupAptCache" class="cleanup-option" checked>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500;">APT Cache</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Clean apt-get cache and autoclean</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; transition: background 0.2s;">
+                        <input type="checkbox" id="cleanupJournal" class="cleanup-option" checked>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500;">Journal Logs</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Vacuum journal logs older than <input type="number" id="journalRetentionDays" value="7" min="1" max="30" style="width: 50px; padding: 0.25rem; border: 1px solid var(--border-color); border-radius: 0.25rem;"> days</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; transition: background 0.2s;">
+                        <input type="checkbox" id="cleanupLogFiles" class="cleanup-option" checked>
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500;">Old Log Files</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Delete log files older than <input type="number" id="logFileAgeDays" value="7" min="1" max="90" style="width: 50px; padding: 0.25rem; border: 1px solid var(--border-color); border-radius: 0.25rem;"> days</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; transition: background 0.2s;">
+                        <input type="checkbox" id="cleanupTempFiles" class="cleanup-option">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500;">Temporary Files</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Clean /tmp and /var/tmp</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; transition: background 0.2s;">
+                        <input type="checkbox" id="cleanupDocker" class="cleanup-option">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500;">Docker Cleanup</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Remove unused images, containers, volumes</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; transition: background 0.2s;">
+                        <input type="checkbox" id="cleanupSnap" class="cleanup-option">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500;">Snap Packages</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Remove old snap revisions</div>
+                        </div>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 0.375rem; transition: background 0.2s;">
+                        <input type="checkbox" id="cleanupSystemCache" class="cleanup-option">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500;">System Cache</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">Drop pagecache, dentries, and inodes</div>
+                        </div>
+                    </label>
+                </div>
+                <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
                     <label>Disk Usage Threshold: <span id="diskThreshold">80</span>%</label>
                     <input type="range" min="50" max="95" value="80" id="diskThresholdSlider" 
                            style="width: 100%; margin: 1rem 0;"
                            oninput="document.getElementById('diskThreshold').textContent = this.value">
                 </div>
-                <div style="display: flex; gap: 1rem; margin-top: 1rem;">
+            </div>
+
+            <!-- Cleanup Preview -->
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">Cleanup Preview</h3>
+                    <button class="btn btn-secondary" onclick="updateCleanupPreview()" style="font-size: 0.875rem;">
+                        <i class="fas fa-sync-alt"></i> Refresh Preview
+                    </button>
+                </div>
+                <div id="cleanupPreview" style="min-height: 100px; padding: 1rem; background: var(--bg-tertiary); border-radius: 0.375rem;">
+                    <div style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+                        <i class="fas fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+                        Calculating preview...
+                    </div>
+                </div>
+                <div style="margin-top: 1rem; display: flex; gap: 1rem; flex-wrap: wrap;">
                     <button class="btn btn-primary" onclick="saveCleanupConfig()">💾 Save Config</button>
-                    <button class="btn btn-success" onclick="runCleanup()">🧹 Run Cleanup Now</button>
-                    <button class="btn btn-warning" onclick="scheduleCleanup()">⏰ Schedule</button>
+                    <button class="btn btn-success" onclick="runCleanup()" id="runCleanupBtn">
+                        <i class="fas fa-broom"></i> Run Cleanup Now
+                    </button>
+                    <button class="btn btn-warning" onclick="openScheduleModal()">⏰ Schedule</button>
                 </div>
             </div>
-            
-            <div class="log-container scrollbar" id="cleanupLogs"></div>
+
+            <!-- Large File Finder -->
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">Large File Finder</h3>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <label style="font-size: 0.875rem; color: var(--text-secondary);">Limit:</label>
+                        <select id="largeFilesLimit" onchange="loadLargeFiles()" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.375rem; background: var(--bg-primary);">
+                            <option value="20">Top 20</option>
+                            <option value="50" selected>Top 50</option>
+                            <option value="100">Top 100</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="loadLargeFiles()" style="font-size: 0.875rem;">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                </div>
+                <div id="largeFilesContainer" style="overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: var(--bg-tertiary); border-bottom: 2px solid var(--border-color);">
+                                <th style="padding: 0.75rem; text-align: left; font-weight: 600; cursor: pointer;" onclick="sortLargeFiles('path')">Path</th>
+                                <th style="padding: 0.75rem; text-align: right; font-weight: 600; cursor: pointer;" onclick="sortLargeFiles('size')">Size</th>
+                                <th style="padding: 0.75rem; text-align: left; font-weight: 600; cursor: pointer;" onclick="sortLargeFiles('modified')">Last Modified</th>
+                            </tr>
+                        </thead>
+                        <tbody id="largeFilesTable">
+                            <tr>
+                                <td colspan="3" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                                    <i class="fas fa-spinner fa-spin" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+                                    Loading large files...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Directory Size Analysis -->
+            <div class="card" style="margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">Directory Size Analysis</h3>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <input type="text" id="directoryPath" placeholder="/var/log" value="/var/log" 
+                               style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.375rem; background: var(--bg-primary); width: 200px;">
+                        <button class="btn btn-secondary" onclick="loadDirectorySizes()" style="font-size: 0.875rem;">
+                            <i class="fas fa-search"></i> Analyze
+                        </button>
+                    </div>
+                </div>
+                <div id="directorySizesContainer" style="max-height: 400px; overflow-y: auto;">
+                    <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                        <i class="fas fa-folder-open" style="font-size: 2rem; margin-bottom: 0.5rem; display: block; opacity: 0.3;"></i>
+                        Enter a directory path and click Analyze to view size breakdown
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cleanup Logs -->
+            <div class="card">
+                <h3 style="margin-bottom: 1rem;">Cleanup Logs</h3>
+                <div class="log-container scrollbar" id="cleanupLogs" style="min-height: 200px; max-height: 400px; padding: 1rem; background: var(--bg-tertiary); border-radius: 0.375rem; font-family: 'Courier New', monospace; font-size: 0.875rem;"></div>
+            </div>
+
+            <!-- Schedule Modal -->
+            <div id="scheduleModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;" onclick="if(event.target === this) closeScheduleModal()">
+                <div class="card" style="max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;" onclick="event.stopPropagation()">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="margin: 0;">Schedule Cleanup</h3>
+                        <button onclick="closeScheduleModal()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--text-secondary);">&times;</button>
+                    </div>
+                    <div id="scheduleModalContent">
+                        <!-- Schedule form will be inserted here -->
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div id="logs" class="tab-content">
@@ -2892,8 +3072,14 @@
                     case 'disk':
                         await Promise.all([
                             updateStatistics().catch(err => console.warn('Statistics load failed:', err)),
-                            updateLastCleanup().catch(err => console.warn('Last cleanup load failed:', err))
+                            updateDiskUsage().catch(err => console.warn('Disk usage load failed:', err)),
+                            updateCleanupPreview().catch(err => console.warn('Cleanup preview load failed:', err)),
+                            loadLargeFiles().catch(err => console.warn('Large files load failed:', err))
                         ]);
+                        // Setup event listeners for cleanup options
+                        setupCleanupOptionListeners();
+                        // Load saved config
+                        loadCleanupConfig();
                         break;
                         
                     case 'logs':
@@ -4964,8 +5150,12 @@
         // Save cleanup configuration
         async function saveCleanupConfig() {
             try {
-                // Get cleanup settings from the form (if there are any)
-                // For now, just show a notification
+                // Save cleanup configuration to localStorage
+                const config = {
+                    threshold: parseInt(document.getElementById('diskThresholdSlider').value) || 80,
+                    options: getCleanupOptions()
+                };
+                localStorage.setItem('cleanupConfig', JSON.stringify(config));
                 showNotification('✅ Cleanup configuration saved', 'success');
             } catch (error) {
                 console.error('Error saving cleanup config:', error);
@@ -4973,15 +5163,9 @@
             }
         }
         
-        // Schedule cleanup
-        async function scheduleCleanup() {
-            try {
-                // Schedule cleanup using cron or similar
-                showNotification('ℹ️ Cleanup scheduling feature coming soon', 'info');
-            } catch (error) {
-                console.error('Error scheduling cleanup:', error);
-                showNotification('❌ Error scheduling cleanup', 'error');
-            }
+        // Schedule cleanup - now opens modal
+        function scheduleCleanup() {
+            openScheduleModal();
         }
         
         function displayProcesses(processes) {
@@ -5428,22 +5612,63 @@
         
         async function runCleanup() {
             try {
-                const result = await fetch('/api/disk/cleanup', {method: 'POST'});
-                if (!result.ok) {
-                    throw new Error(`API returned ${result.status}: ${result.statusText}`);
+                const btn = document.getElementById('runCleanupBtn');
+                const originalText = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running Cleanup...';
+
+                const options = getCleanupOptions();
+                const response = await fetch('/api/disk/cleanup', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({options})
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API returned ${response.status}: ${response.statusText}`);
                 }
-                const data = await result.json();
+
+                const data = await response.json();
                 if (data.success) {
-                    const freedSpace = data.freed_space || data.freed_space_mb || 0;
+                    const freedSpace = data.freed_space || 0;
                     showNotification(`✅ Cleanup complete! Freed ${freedSpace}MB`, 'success');
+                    
+                    // Update cleanup logs
+                    const logsDiv = document.getElementById('cleanupLogs');
+                    const timestamp = new Date().toLocaleString();
+                    let logEntry = `[${timestamp}] Cleanup completed successfully. Freed ${freedSpace}MB\n`;
+                    
+                    if (data.results) {
+                        logEntry += 'Results:\n';
+                        for (const [key, value] of Object.entries(data.results)) {
+                            logEntry += `  - ${key}: ${value}\n`;
+                        }
+                    }
+                    
+                    logsDiv.textContent = logEntry + logsDiv.textContent;
+                    
+                    // Update disk usage and preview
+                    await updateDiskUsage();
+                    await updateCleanupPreview();
                 } else {
                     showNotification(`❌ Cleanup failed: ${data.error || 'Unknown error'}`, 'error');
+                    
+                    const logsDiv = document.getElementById('cleanupLogs');
+                    const timestamp = new Date().toLocaleString();
+                    logsDiv.textContent = `[${timestamp}] Cleanup failed: ${data.error || 'Unknown error'}\n` + logsDiv.textContent;
                 }
-                // Update the last cleanup display
-                await updateLastCleanup();
+
+                btn.disabled = false;
+                btn.innerHTML = originalText;
             } catch (error) {
                 console.error('Error running cleanup:', error);
                 showNotification(`❌ Error running cleanup: ${error.message}`, 'error');
+                
+                const btn = document.getElementById('runCleanupBtn');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-broom"></i> Run Cleanup Now';
+                }
             }
         }
         
@@ -7073,6 +7298,415 @@
                 }
             } catch (error) {
                 console.error('Error updating last cleanup:', error);
+            }
+        }
+
+        // Enhanced Disk Cleanup Functions
+        let largeFilesSortColumn = 'size';
+        let largeFilesSortDirection = 'desc';
+
+        async function updateDiskUsage() {
+            try {
+                const data = await cachedFetch('/api/disk/status', {}, 30000);
+                if (!data) return;
+
+                const formatBytes = (bytes) => {
+                    if (bytes === 0) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
+                };
+
+                document.getElementById('diskTotal').textContent = formatBytes(data.total);
+                document.getElementById('diskUsed').textContent = formatBytes(data.used);
+                document.getElementById('diskFree').textContent = formatBytes(data.free);
+                document.getElementById('diskPercent').textContent = data.percent.toFixed(1) + '%';
+                document.getElementById('diskPercentText').textContent = data.percent.toFixed(1) + '%';
+                document.getElementById('diskUsageBar').style.width = data.percent + '%';
+
+                // Update last cleanup info
+                if (data.last_cleanup) {
+                    const cleanupDate = new Date(data.last_cleanup);
+                    const now = new Date();
+                    const diffMs = now - cleanupDate;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    const diffDays = Math.floor(diffMs / 86400000);
+                    
+                    let timeAgo = '';
+                    if (diffMins < 1) {
+                        timeAgo = 'Just now';
+                    } else if (diffMins < 60) {
+                        timeAgo = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+                    } else if (diffHours < 24) {
+                        timeAgo = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+                    } else {
+                        timeAgo = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+                    }
+                    document.getElementById('lastCleanup').textContent = timeAgo;
+                } else {
+                    document.getElementById('lastCleanup').textContent = 'Never';
+                }
+
+                if (data.last_freed_space !== null && data.last_freed_space !== undefined) {
+                    document.getElementById('lastFreedSpace').textContent = data.last_freed_space + ' MB';
+                } else {
+                    document.getElementById('lastFreedSpace').textContent = '-';
+                }
+            } catch (error) {
+                console.error('Error updating disk usage:', error);
+            }
+        }
+
+        async function updateCleanupPreview() {
+            try {
+                const previewDiv = document.getElementById('cleanupPreview');
+                previewDiv.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 1rem;"><i class="fas fa-spinner fa-spin"></i> Calculating preview...</div>';
+
+                const options = getCleanupOptions();
+                const params = new URLSearchParams({
+                    apt_cache: options.apt_cache,
+                    journal: options.journal,
+                    log_files: options.log_files,
+                    temp_files: options.temp_files,
+                    docker: options.docker,
+                    snap: options.snap,
+                    system_cache: options.system_cache,
+                    journal_days: options.journal_days,
+                    log_age_days: options.log_age_days
+                });
+
+                const response = await fetch(`/api/disk/preview?${params}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    const preview = data.preview;
+                    const total = data.total_estimated_mb;
+
+                    let html = '<div style="display: grid; gap: 0.75rem;">';
+                    html += `<div style="font-weight: 600; font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--accent-green);">Total Estimated: ${total.toFixed(2)} MB</div>`;
+                    
+                    const labels = {
+                        apt_cache: 'APT Cache',
+                        journal_logs: 'Journal Logs',
+                        log_files: 'Log Files',
+                        temp_files: 'Temporary Files',
+                        docker: 'Docker',
+                        snap: 'Snap Packages',
+                        system_cache: 'System Cache'
+                    };
+
+                    for (const [key, value] of Object.entries(preview)) {
+                        if (value > 0) {
+                            html += `
+                                <div style="display: flex; justify-content: space-between; padding: 0.5rem; background: var(--bg-secondary); border-radius: 0.25rem;">
+                                    <span>${labels[key] || key}:</span>
+                                    <span style="font-weight: 600; color: var(--accent-blue);">${value.toFixed(2)} MB</span>
+                                </div>
+                            `;
+                        }
+                    }
+
+                    if (total === 0) {
+                        html += '<div style="text-align: center; color: var(--text-secondary); padding: 1rem;">No significant space to be freed with selected options.</div>';
+                    }
+
+                    html += '</div>';
+                    previewDiv.innerHTML = html;
+                } else {
+                    previewDiv.innerHTML = `<div style="color: var(--accent-red); padding: 1rem;">Error: ${data.error || 'Unknown error'}</div>`;
+                }
+            } catch (error) {
+                console.error('Error updating cleanup preview:', error);
+                document.getElementById('cleanupPreview').innerHTML = `<div style="color: var(--accent-red); padding: 1rem;">Error: ${error.message}</div>`;
+            }
+        }
+
+        function getCleanupOptions() {
+            return {
+                apt_cache: document.getElementById('cleanupAptCache').checked,
+                journal: document.getElementById('cleanupJournal').checked,
+                log_files: document.getElementById('cleanupLogFiles').checked,
+                temp_files: document.getElementById('cleanupTempFiles').checked,
+                docker: document.getElementById('cleanupDocker').checked,
+                snap: document.getElementById('cleanupSnap').checked,
+                system_cache: document.getElementById('cleanupSystemCache').checked,
+                journal_days: parseInt(document.getElementById('journalRetentionDays').value) || 7,
+                log_age_days: parseInt(document.getElementById('logFileAgeDays').value) || 7
+            };
+        }
+
+        async function loadLargeFiles() {
+            try {
+                const tableBody = document.getElementById('largeFilesTable');
+                tableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 2rem; color: var(--text-secondary);"><i class="fas fa-spinner fa-spin"></i> Loading large files...</td></tr>';
+
+                const limit = parseInt(document.getElementById('largeFilesLimit').value) || 50;
+                const response = await fetch(`/api/disk/large-files?limit=${limit}&min_size_mb=10`);
+                const data = await response.json();
+
+                if (data.success && data.files.length > 0) {
+                    let html = '';
+                    data.files.forEach(file => {
+                        html += `
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <td style="padding: 0.75rem; word-break: break-all;">${escapeHtml(file.path)}</td>
+                                <td style="padding: 0.75rem; text-align: right; font-weight: 600; color: var(--accent-orange);">${file.size_mb.toFixed(2)} MB</td>
+                                <td style="padding: 0.75rem; color: var(--text-secondary); font-size: 0.875rem;">${file.modified || '-'}</td>
+                            </tr>
+                        `;
+                    });
+                    tableBody.innerHTML = html;
+                } else {
+                    tableBody.innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 2rem; color: var(--text-secondary);">No large files found</td></tr>';
+                }
+            } catch (error) {
+                console.error('Error loading large files:', error);
+                document.getElementById('largeFilesTable').innerHTML = '<tr><td colspan="3" style="text-align: center; padding: 2rem; color: var(--accent-red);">Error loading large files</td></tr>';
+            }
+        }
+
+        function sortLargeFiles(column) {
+            if (largeFilesSortColumn === column) {
+                largeFilesSortDirection = largeFilesSortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                largeFilesSortColumn = column;
+                largeFilesSortDirection = 'desc';
+            }
+            loadLargeFiles();
+        }
+
+        async function loadDirectorySizes() {
+            try {
+                const container = document.getElementById('directorySizesContainer');
+                container.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-secondary);"><i class="fas fa-spinner fa-spin"></i> Analyzing directory...</div>';
+
+                const path = document.getElementById('directoryPath').value.trim() || '/var/log';
+                const response = await fetch(`/api/disk/directory-sizes?path=${encodeURIComponent(path)}&max_depth=3`);
+                const data = await response.json();
+
+                if (data.success && data.directories.length > 0) {
+                    let html = '<div style="display: grid; gap: 0.5rem;">';
+                    data.directories.forEach(dir => {
+                        html += `
+                            <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: var(--bg-secondary); border-radius: 0.375rem; border-left: 3px solid var(--accent-blue);">
+                                <span style="font-family: monospace; font-size: 0.875rem; word-break: break-all;">${escapeHtml(dir.path)}</span>
+                                <span style="font-weight: 600; color: var(--accent-orange); margin-left: 1rem; white-space: nowrap;">${dir.size_str}</span>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">${data.error || 'No directories found or access denied'}</div>`;
+                }
+            } catch (error) {
+                console.error('Error loading directory sizes:', error);
+                document.getElementById('directorySizesContainer').innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--accent-red);">Error analyzing directory</div>';
+            }
+        }
+
+        function openScheduleModal() {
+            document.getElementById('scheduleModal').style.display = 'flex';
+            loadScheduleModal();
+        }
+
+        function closeScheduleModal() {
+            document.getElementById('scheduleModal').style.display = 'none';
+        }
+
+        async function loadScheduleModal() {
+            try {
+                const response = await fetch('/api/disk/schedule');
+                const data = await response.json();
+
+                const content = document.getElementById('scheduleModalContent');
+                let html = '';
+
+                if (data.success && data.schedule) {
+                    const schedule = data.schedule;
+                    const nextRun = new Date(schedule.next_run);
+                    
+                    html = `
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                                <input type="checkbox" id="scheduleEnabled" ${schedule.enabled ? 'checked' : ''}>
+                                <span>Enable Scheduled Cleanup</span>
+                            </label>
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Frequency:</label>
+                                <select id="scheduleFrequency" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.375rem;">
+                                    <option value="daily" ${schedule.frequency === 'daily' ? 'selected' : ''}>Daily (2:00 AM)</option>
+                                    <option value="weekly" ${schedule.frequency === 'weekly' ? 'selected' : ''}>Weekly (Monday 2:00 AM)</option>
+                                    <option value="monthly" ${schedule.frequency === 'monthly' ? 'selected' : ''}>Monthly (1st at 2:00 AM)</option>
+                                </select>
+                            </div>
+                            <div style="padding: 1rem; background: var(--bg-tertiary); border-radius: 0.375rem; margin-bottom: 1rem;">
+                                <div style="font-size: 0.875rem; color: var(--text-secondary);">Next Run:</div>
+                                <div style="font-weight: 600; margin-top: 0.25rem;">${nextRun.toLocaleString()}</div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    html = `
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+                                <input type="checkbox" id="scheduleEnabled">
+                                <span>Enable Scheduled Cleanup</span>
+                            </label>
+                            <div style="margin-bottom: 1rem;">
+                                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Frequency:</label>
+                                <select id="scheduleFrequency" style="width: 100%; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 0.375rem;">
+                                    <option value="daily" selected>Daily (2:00 AM)</option>
+                                    <option value="weekly">Weekly (Monday 2:00 AM)</option>
+                                    <option value="monthly">Monthly (1st at 2:00 AM)</option>
+                                </select>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                html += `
+                    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <div style="font-weight: 500; margin-bottom: 0.5rem;">Cleanup Options:</div>
+                        <div style="display: grid; gap: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="scheduleAptCache" checked>
+                                <span>APT Cache</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="scheduleJournal" checked>
+                                <span>Journal Logs</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="scheduleLogFiles" checked>
+                                <span>Log Files</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                        <button class="btn btn-primary" onclick="saveSchedule()" style="flex: 1;">Save Schedule</button>
+                        <button class="btn btn-danger" onclick="deleteSchedule()" style="flex: 1;">Delete Schedule</button>
+                    </div>
+                `;
+
+                content.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading schedule modal:', error);
+            }
+        }
+
+        async function saveSchedule() {
+            try {
+                const enabled = document.getElementById('scheduleEnabled').checked;
+                const frequency = document.getElementById('scheduleFrequency').value;
+                const options = {
+                    apt_cache: document.getElementById('scheduleAptCache').checked,
+                    journal: document.getElementById('scheduleJournal').checked,
+                    log_files: document.getElementById('scheduleLogFiles').checked
+                };
+
+                const response = await fetch('/api/disk/schedule', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({enabled, frequency, options})
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    showNotification('✅ Schedule saved successfully', 'success');
+                    closeScheduleModal();
+                } else {
+                    showNotification(`❌ Error: ${data.error || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error saving schedule:', error);
+                showNotification(`❌ Error saving schedule: ${error.message}`, 'error');
+            }
+        }
+
+        async function deleteSchedule() {
+            try {
+                const response = await fetch('/api/disk/schedule', {method: 'DELETE'});
+                const data = await response.json();
+                if (data.success) {
+                    showNotification('✅ Schedule deleted', 'success');
+                    closeScheduleModal();
+                } else {
+                    showNotification(`❌ Error: ${data.error || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting schedule:', error);
+                showNotification(`❌ Error deleting schedule: ${error.message}`, 'error');
+            }
+        }
+
+        function setupCleanupOptionListeners() {
+            // Add event listeners to all cleanup option checkboxes
+            const cleanupOptions = document.querySelectorAll('.cleanup-option');
+            cleanupOptions.forEach(option => {
+                option.addEventListener('change', () => {
+                    updateCleanupPreview();
+                });
+            });
+
+            // Add listeners to number inputs
+            const journalDays = document.getElementById('journalRetentionDays');
+            const logAgeDays = document.getElementById('logFileAgeDays');
+            if (journalDays) {
+                journalDays.addEventListener('change', () => {
+                    updateCleanupPreview();
+                });
+            }
+            if (logAgeDays) {
+                logAgeDays.addEventListener('change', () => {
+                    updateCleanupPreview();
+                });
+            }
+        }
+
+        function loadCleanupConfig() {
+            try {
+                const saved = localStorage.getItem('cleanupConfig');
+                if (saved) {
+                    const config = JSON.parse(saved);
+                    if (config.threshold) {
+                        document.getElementById('diskThresholdSlider').value = config.threshold;
+                        document.getElementById('diskThreshold').textContent = config.threshold;
+                    }
+                    if (config.options) {
+                        if (config.options.apt_cache !== undefined) {
+                            document.getElementById('cleanupAptCache').checked = config.options.apt_cache;
+                        }
+                        if (config.options.journal !== undefined) {
+                            document.getElementById('cleanupJournal').checked = config.options.journal;
+                        }
+                        if (config.options.log_files !== undefined) {
+                            document.getElementById('cleanupLogFiles').checked = config.options.log_files;
+                        }
+                        if (config.options.temp_files !== undefined) {
+                            document.getElementById('cleanupTempFiles').checked = config.options.temp_files;
+                        }
+                        if (config.options.docker !== undefined) {
+                            document.getElementById('cleanupDocker').checked = config.options.docker;
+                        }
+                        if (config.options.snap !== undefined) {
+                            document.getElementById('cleanupSnap').checked = config.options.snap;
+                        }
+                        if (config.options.system_cache !== undefined) {
+                            document.getElementById('cleanupSystemCache').checked = config.options.system_cache;
+                        }
+                        if (config.options.journal_days) {
+                            document.getElementById('journalRetentionDays').value = config.options.journal_days;
+                        }
+                        if (config.options.log_age_days) {
+                            document.getElementById('logFileAgeDays').value = config.options.log_age_days;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading cleanup config:', error);
             }
         }
         

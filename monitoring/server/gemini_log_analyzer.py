@@ -64,6 +64,28 @@ class GeminiLogAnalyzer:
         """
         Analyze a single error log entry using Gemini AI
         """
+        # Try to reload API key from environment if not set
+        if not self.api_key or self.api_key == "your_gemini_api_key_here" or len(self.api_key) < 20:
+            # Reload from environment in case it was added after initialization
+            self.api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+            
+            # If we now have a valid API key, try to initialize the model
+            if self.api_key and self.api_key != "your_gemini_api_key_here" and len(self.api_key) >= 20:
+                try:
+                    genai.configure(api_key=self.api_key)
+                    model_priority = ["gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.0-flash-lite"]
+                    for model_name in model_priority:
+                        try:
+                            self.model = genai.GenerativeModel(model_name)
+                            self.model_name = model_name
+                            logger.info(f"Gemini model initialized with {model_name} after reloading API key")
+                            break
+                        except Exception:
+                            continue
+                except Exception as e:
+                    logger.error(f"Failed to initialize Gemini model after reloading API key: {e}")
+        
+        # Check again after reload attempt
         if not self.api_key or self.api_key == "your_gemini_api_key_here" or len(self.api_key) < 20:
             return {
                 'status': 'error',
@@ -761,8 +783,22 @@ gemini_analyzer = None
 def initialize_gemini_analyzer(api_key: str = None):
     """Initialize the Gemini log analyzer"""
     global gemini_analyzer
+    
+    # If no API key provided, try to get it from environment
+    if not api_key:
+        api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+    
+    # Create analyzer with API key
     gemini_analyzer = GeminiLogAnalyzer(api_key=api_key)
-    logger.info("Gemini log analyzer initialized")
+    
+    # Log initialization status
+    if gemini_analyzer.api_key and gemini_analyzer.model:
+        logger.info(f"Gemini log analyzer initialized successfully with model: {gemini_analyzer.model_name}")
+    elif gemini_analyzer.api_key:
+        logger.warning(f"Gemini log analyzer initialized with API key but model not available (key length: {len(gemini_analyzer.api_key)})")
+    else:
+        logger.warning("Gemini log analyzer initialized without API key (AI analysis disabled)")
+    
     return gemini_analyzer
 
 

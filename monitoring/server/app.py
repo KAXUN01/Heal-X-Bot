@@ -912,9 +912,16 @@ def initialize_services():
         print("⚠️  Service discovery DISABLED (monitoring system services only)")
         
         # Initialize Gemini AI log analyzer (for system log analysis)
-        gemini_log_analyzer_service = initialize_gemini_analyzer()
+        # Get API key from environment (reload to ensure latest value)
+        api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+        gemini_log_analyzer_service = initialize_gemini_analyzer(api_key=api_key)
         gemini_analyzer = gemini_log_analyzer_service  # Set alias for endpoints
-        print("✅ Gemini AI log analyzer initialized")
+        if gemini_analyzer and gemini_analyzer.model:
+            print("✅ Gemini AI log analyzer initialized with API key")
+        elif api_key:
+            print(f"⚠️  Gemini AI log analyzer initialized but model not available (API key length: {len(api_key)})")
+        else:
+            print("⚠️  Gemini AI log analyzer initialized without API key (AI analysis disabled)")
         
         # Initialize system-wide log collector (monitors Docker, systemd, etc.)
         system_log_collector = initialize_system_log_collector()

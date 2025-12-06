@@ -7,7 +7,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Requ
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator, IPv4Address, IPv6Address
+from pydantic import BaseModel, Field, validator
 from typing import Union
 import psutil
 import subprocess
@@ -99,9 +99,22 @@ env_path_abs = env_path.resolve()
 load_dotenv(dotenv_path=str(env_path_abs), override=True)
 from system_log_collector import initialize_system_log_collector, get_system_log_collector
 from centralized_logger import initialize_centralized_logging, centralized_logger
-from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
 from critical_services_monitor import initialize_critical_services_monitor, get_critical_services_monitor
 from fluent_bit_reader import initialize_fluent_bit_reader, fluent_bit_reader
+
+# Optional Gemini analyzer (may not be available if google.generativeai is not installed)
+try:
+    from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
+    GEMINI_AVAILABLE = True
+except ImportError as e:
+    # Use basic logging since logger may not be initialized yet
+    import logging
+    _temp_logger = logging.getLogger(__name__)
+    _temp_logger.warning(f"Gemini analyzer not available: {e}. AI log analysis features will be disabled.")
+    GEMINI_AVAILABLE = False
+    gemini_analyzer = None
+    def initialize_gemini_analyzer():
+        pass
 
 # Initialize FastAPI app
 app = FastAPI(title="Healing Bot Dashboard API")

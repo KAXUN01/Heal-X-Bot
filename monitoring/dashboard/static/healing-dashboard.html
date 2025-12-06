@@ -6710,6 +6710,15 @@
                     
                     // Calculate pagination
                     const totalPages = Math.ceil(sortedIssues.length / alertsItemsPerPage);
+                    
+                    // Fix: Reset alertsCurrentPage if it exceeds totalPages after filtering
+                    // This prevents silent failures when filters reduce the result set
+                    if (alertsCurrentPage > totalPages && totalPages > 0) {
+                        alertsCurrentPage = totalPages;
+                    } else if (totalPages === 0) {
+                        alertsCurrentPage = 1;
+                    }
+                    
                     const startIndex = (alertsCurrentPage - 1) * alertsItemsPerPage;
                     const endIndex = startIndex + alertsItemsPerPage;
                     const displayedIssues = sortedIssues.slice(startIndex, endIndex);
@@ -6874,7 +6883,14 @@
         function goToAlertsPage(page) {
             if (page < 1) return;
             const totalPages = Math.ceil(alertsFilteredIssues.length / alertsItemsPerPage);
-            if (page > totalPages) return;
+            // Fix: If page exceeds totalPages, reset to last valid page (or page 1 if no pages)
+            if (page > totalPages) {
+                if (totalPages > 0) {
+                    page = totalPages;
+                } else {
+                    page = 1;
+                }
+            }
             loadAlertsTab(page);
         }
 

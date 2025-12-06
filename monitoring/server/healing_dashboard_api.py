@@ -7,7 +7,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Requ
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, root_validator
 from typing import Union
 import psutil
 import subprocess
@@ -67,12 +67,18 @@ class GeminiAnalyzeRequest(BaseModel):
     logs: Optional[List[Dict[str, Any]]] = Field(None, description="Multiple log entries for pattern analysis")
     limit: Optional[int] = Field(10, ge=1, le=100, description="Maximum number of logs to analyze")
     
-    @validator('log_entry', 'logs')
-    def validate_logs(cls, v, values):
+    @root_validator
+    def validate_logs(cls, values):
         """Ensure at least one log entry is provided"""
-        if not v and not values.get('logs'):
+        log_entry = values.get('log_entry')
+        logs = values.get('logs')
+        # Check if at least one is provided and not empty
+        has_log_entry = log_entry is not None and log_entry != {}
+        has_logs = logs is not None and len(logs) > 0 if logs else False
+        
+        if not has_log_entry and not has_logs:
             raise ValueError("Either log_entry or logs must be provided")
-        return v
+        return values
 
 class DiscordConfigRequest(BaseModel):
     """Request model for Discord webhook configuration"""
@@ -6120,9 +6126,7 @@ async def analyze_fault_with_ai(fault_id: int):
                     }
                 )
         
-        # Use the current analyzer
-        gemini_analyzer = current_analyzer
-        
+        # Use the current analyzer directly (no local shadowing of global)
         # Get system metrics for better analysis
         try:
             metrics = get_system_metrics()
@@ -6130,7 +6134,7 @@ async def analyze_fault_with_ai(fault_id: int):
             metrics = None
         
         # Analyze fault with AI
-        analysis_result = gemini_analyzer.analyze_cloud_fault(
+        analysis_result = current_analyzer.analyze_cloud_fault(
             fault,
             container_logs=None,
             system_metrics=metrics

@@ -1100,7 +1100,7 @@
                 <div class="card-subtitle">Requires attention (Click to view)</div>
             </div>
 
-            <div class="card">
+            <div class="card" style="cursor: pointer;" onclick="switchTab('disk', event)" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0, 0, 0, 0.3)'" onmouseout="this.style.transform=''; this.style.boxShadow=''">
                 <div class="card-header">
                     <span class="card-title">Last Cleanup</span>
                     <span style="font-size: 1.5rem;">🧹</span>
@@ -4864,10 +4864,10 @@
                 // Filter to show only running services
                 const runningServices = allServices.filter(s => s.status === 'running' || s.active === true);
                 
-                // Update service count in overview card
+                // Update service count in overview card (show running / total format)
                 const serviceCountElement = document.getElementById('serviceCount');
                 if (serviceCountElement) {
-                    serviceCountElement.textContent = `${runningServices.length}`;
+                    serviceCountElement.textContent = `${runningServices.length} / ${allServices.length}`;
                 }
                 
                 // Debug: log services to console
@@ -9488,26 +9488,27 @@
                             }
                         }
                         
-                        // Update alerts count
+                        // Update alerts count (use same filter as loadAlertsTab - only critical crash errors)
                         const alertsData = await cachedFetch('/api/critical-services/issues', {}, 10000).catch(() => null);
                         if (alertsData && alertsData.status === 'success' && alertsData.issues !== undefined) {
-                            const criticalIssues = alertsData.issues.filter(issue => {
-                                const severity = (issue.severity || issue.level || '').toUpperCase();
-                                const level = (issue.level || '').toUpperCase();
+                            const crashKeywords = ['crash', 'down', 'abort', 'terminated', 'killed', 
+                                                  'unavailable', 'stopped', 'failed to start', 
+                                                  'service failure', 'system failure', 'fatal', 'panic'];
+                            
+                            const criticalCrashErrors = alertsData.issues.filter(issue => {
                                 const priority = issue.priority !== undefined ? issue.priority : 6;
-                                const category = (issue.category || '').toUpperCase();
+                                const message = (issue.message || '').toLowerCase();
                                 
-                                return severity === 'CRITICAL' || 
-                                       severity === 'CRIT' ||
-                                       level === 'CRITICAL' ||
-                                       level === 'CRIT' ||
-                                       priority <= 2 ||
-                                       category === 'CRITICAL';
+                                // Must have priority <= 2 (CRITICAL level: 0=emerg, 1=alert, 2=crit)
+                                if (priority > 2) return false;
+                                
+                                // Must contain crash/down keywords
+                                return crashKeywords.some(keyword => message.includes(keyword));
                             });
                             
                             const alertCountElement = document.getElementById('alertCount');
                             if (alertCountElement) {
-                                alertCountElement.textContent = criticalIssues.length;
+                                alertCountElement.textContent = criticalCrashErrors.length;
                             }
                         } else if (alertsData && alertsData.status === 'success' && (!alertsData.issues || alertsData.issues.length === 0)) {
                             const alertCountElement = document.getElementById('alertCount');
@@ -9664,8 +9665,13 @@
                 cachedFetch('/api/blocked-ips/statistics', {}, 10000).catch(err => {
                     console.warn('Statistics load failed:', err);
                     return null;
+                }),
+                // Load last cleanup data
+                cachedFetch('/api/disk/status', {}, 30000).catch(err => {
+                    console.warn('Disk status load failed:', err);
+                    return null;
                 })
-            ]).then(([configResult, metricsResult, servicesResult, alertsResult, statsResult]) => {
+            ]).then(([configResult, metricsResult, servicesResult, alertsResult, statsResult, diskStatusResult]) => {
                 // Update overview cards with system metrics
                 if (metricsResult && (metricsResult.cpu !== undefined || metricsResult.memory !== undefined || metricsResult.disk !== undefined)) {
                     updateDashboard({
@@ -9685,25 +9691,26 @@
                     }
                 }
                 
-                // Update alerts count
+                // Update alerts count (use same filter as loadAlertsTab - only critical crash errors)
                 if (alertsResult && alertsResult.status === 'success' && alertsResult.issues !== undefined) {
-                    const criticalIssues = alertsResult.issues.filter(issue => {
-                        const severity = (issue.severity || issue.level || '').toUpperCase();
-                        const level = (issue.level || '').toUpperCase();
+                    const crashKeywords = ['crash', 'down', 'abort', 'terminated', 'killed', 
+                                          'unavailable', 'stopped', 'failed to start', 
+                                          'service failure', 'system failure', 'fatal', 'panic'];
+                    
+                    const criticalCrashErrors = alertsResult.issues.filter(issue => {
                         const priority = issue.priority !== undefined ? issue.priority : 6;
-                        const category = (issue.category || '').toUpperCase();
+                        const message = (issue.message || '').toLowerCase();
                         
-                        return severity === 'CRITICAL' || 
-                               severity === 'CRIT' ||
-                               level === 'CRITICAL' ||
-                               level === 'CRIT' ||
-                               priority <= 2 ||
-                               category === 'CRITICAL';
+                        // Must have priority <= 2 (CRITICAL level: 0=emerg, 1=alert, 2=crit)
+                        if (priority > 2) return false;
+                        
+                        // Must contain crash/down keywords
+                        return crashKeywords.some(keyword => message.includes(keyword));
                     });
                     
                     const alertCountElement = document.getElementById('alertCount');
                     if (alertCountElement) {
-                        alertCountElement.textContent = criticalIssues.length;
+                        alertCountElement.textContent = criticalCrashErrors.length;
                     }
                 } else if (alertsResult && alertsResult.status === 'success' && (!alertsResult.issues || alertsResult.issues.length === 0)) {
                     const alertCountElement = document.getElementById('alertCount');
@@ -9716,6 +9723,41 @@
                 if (statsResult) {
                     updateStatisticsFromCache(statsResult);
                 }
+                
+                // Update last cleanup information
+                if (diskStatusResult) {
+                    const lastCleanupElement = document.getElementById('lastCleanup');
+                    if (lastCleanupElement && diskStatusResult.last_cleanup) {
+                        // Parse the timestamp and format it
+                        const cleanupDate = new Date(diskStatusResult.last_cleanup);
+                        const now = new Date();
+                        const diffMs = now - cleanupDate;
+                        const diffMins = Math.floor(diffMs / 60000);
+                        const diffHours = Math.floor(diffMs / 3600000);
+                        const diffDays = Math.floor(diffMs / 86400000);
+                        
+                        let timeAgo = '';
+                        if (diffMins < 1) {
+                            timeAgo = 'Just now';
+                        } else if (diffMins < 60) {
+                            timeAgo = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+                        } else if (diffHours < 24) {
+                            timeAgo = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+                        } else {
+                            timeAgo = `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+                        }
+                        
+                        // Update the display
+                        lastCleanupElement.textContent = timeAgo;
+                        
+                        // Update the subtitle to show freed space if available
+                        const subtitleElement = lastCleanupElement.nextElementSibling;
+                        if (subtitleElement && diskStatusResult.last_freed_space !== null && diskStatusResult.last_freed_space !== undefined) {
+                            subtitleElement.textContent = `Freed ${diskStatusResult.last_freed_space} MB`;
+                        }
+                    }
+                }
+                
                 console.log('✅ Critical data loaded');
             });
             

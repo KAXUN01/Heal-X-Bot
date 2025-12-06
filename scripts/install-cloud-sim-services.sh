@@ -86,7 +86,7 @@ sleep 10
 # Check service health
 echo ""
 echo "🔍 Checking service health..."
-services=("load-balancer:8080" "web-server:8081" "api-server:8082")
+services=("load-balancer:80" "web-server:8081" "api-server:8082")
 
 for service in "${services[@]}"; do
     name=$(echo $service | cut -d: -f1)
@@ -107,7 +107,7 @@ echo ""
 echo "✅ Cloud Simulation Services installed and started!"
 echo ""
 echo "📊 Service Information:"
-echo "   - Load Balancer: http://localhost:8080"
+echo "   - Load Balancer: http://localhost:80"
 echo "   - Web Server: http://localhost:8081"
 echo "   - API Server: http://localhost:8082"
 echo "   - Database: localhost:15432 (host port, container uses 5432)"

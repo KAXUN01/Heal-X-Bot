@@ -41,7 +41,7 @@ class FaultDetector:
         
         # Service ports to check
         self.service_ports = {
-            'load-balancer': 8080,
+            'load-balancer': 80,
             'web-server': 8081,
             'api-server': 8082,
             'database': 5432,
@@ -210,7 +210,7 @@ class FaultDetector:
         """
         try:
             # For HTTP services, try HTTP request
-            if port in [8080, 8081, 8082]:
+            if port in [80, 8081, 8082]:
                 try:
                     response = requests.get(f"http://{host}:{port}/health", timeout=timeout)
                     return response.status_code == 200

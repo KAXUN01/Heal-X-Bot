@@ -320,10 +320,11 @@ command_history = []
 log_buffer = []
 
 # Track notified critical errors to avoid duplicates
-notified_critical_errors = set()  # Set of (timestamp, service, message_hash) tuples
+notified_critical_errors = set()  # Set of (service, message_hash) tuples (stable identifier)
+_critical_error_notification_times = {}  # Dict of (service, message_hash) -> timestamp (for rate limiting)
 
 # Track ignored alerts
-ignored_alerts = set()  # Set of alert IDs (timestamp, service, message_hash)
+ignored_alerts = set()  # Set of alert IDs (service, message_hash) - stable identifier
 
 # Track last sent warnings and time-to-failure for Discord notifications
 _last_sent_warnings = set()  # Set of warning types that were sent
@@ -331,6 +332,18 @@ _last_sent_warning_count = 0  # Last warning count sent
 _last_sent_time_to_failure = None  # Last time-to-failure value sent
 _last_warning_notification_time = None  # Last time warnings were sent
 _last_time_to_failure_notification_time = None  # Last time time-to-failure was sent
+
+# Global alert deduplication cache: (message_hash, alert_type) -> timestamp
+_alert_deduplication_cache = {}  # Dict of (message_hash, alert_type) -> timestamp
+
+# Service operation rate limiting: (service_name, operation) -> timestamp
+_last_service_notifications = {}  # Dict of (service_name, operation) -> timestamp
+
+# IP blocking deduplication: ip -> timestamp
+_last_blocked_ip_notifications = {}  # Dict of ip -> timestamp
+
+# Resource hog killing deduplication: process_name -> timestamp
+_last_killed_process_notifications = {}  # Dict of process_name -> timestamp
 
 # DDoS Detection Storage
 ddos_statistics = {
@@ -481,7 +494,29 @@ def start_service(service_name: str) -> bool:
         if result.returncode == 0:
             logger.info(f"✅ Successfully started {service_name}")
             log_event("info", f"Service {service_name} started successfully")
-            send_discord_alert(f"✅ Service Started: {service_name}")
+            
+            # Rate limiting: only send notification if not sent in last 15 minutes
+            global _last_service_notifications
+            current_time = datetime.now()
+            notification_key = (service_name, "start")
+            
+            should_send = True
+            if notification_key in _last_service_notifications:
+                time_since_last = (current_time - _last_service_notifications[notification_key]).total_seconds() / 60
+                if time_since_last < 15:
+                    should_send = False
+                    logger.debug(f"Service start notification suppressed for {service_name} (sent {time_since_last:.1f} minutes ago)")
+            
+            if should_send:
+                send_discord_alert(f"✅ Service Started: {service_name}", alert_type="service_start", skip_deduplication=True)
+                _last_service_notifications[notification_key] = current_time
+                
+                # Clean up old entries (older than 1 hour)
+                cutoff_time = current_time - timedelta(hours=1)
+                _last_service_notifications = {
+                    k: v for k, v in _last_service_notifications.items()
+                    if v > cutoff_time
+                }
             
             # Verify the service actually started
             time.sleep(1)  # Give it a moment to start
@@ -532,7 +567,30 @@ def stop_service(service_name: str) -> bool:
         if result.returncode == 0:
             logger.info(f"✅ Successfully stopped {service_name}")
             log_event("info", f"Service {service_name} stopped successfully")
-            send_discord_alert(f"⏹️ Service Stopped: {service_name}")
+            
+            # Rate limiting: only send notification if not sent in last 15 minutes
+            global _last_service_notifications
+            current_time = datetime.now()
+            notification_key = (service_name, "stop")
+            
+            should_send = True
+            if notification_key in _last_service_notifications:
+                time_since_last = (current_time - _last_service_notifications[notification_key]).total_seconds() / 60
+                if time_since_last < 15:
+                    should_send = False
+                    logger.debug(f"Service stop notification suppressed for {service_name} (sent {time_since_last:.1f} minutes ago)")
+            
+            if should_send:
+                send_discord_alert(f"⏹️ Service Stopped: {service_name}", alert_type="service_stop", skip_deduplication=True)
+                _last_service_notifications[notification_key] = current_time
+                
+                # Clean up old entries (older than 1 hour)
+                cutoff_time = current_time - timedelta(hours=1)
+                _last_service_notifications = {
+                    k: v for k, v in _last_service_notifications.items()
+                    if v > cutoff_time
+                }
+            
             return True
         else:
             error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
@@ -571,7 +629,29 @@ def restart_service(service_name: str) -> bool:
         if result.returncode == 0:
             logger.info(f"✅ Successfully restarted {service_name}")
             log_event("info", f"Service {service_name} restarted successfully")
-            send_discord_alert(f"✅ Service Restarted: {service_name}")
+            
+            # Rate limiting: only send notification if not sent in last 15 minutes
+            global _last_service_notifications
+            current_time = datetime.now()
+            notification_key = (service_name, "restart")
+            
+            should_send = True
+            if notification_key in _last_service_notifications:
+                time_since_last = (current_time - _last_service_notifications[notification_key]).total_seconds() / 60
+                if time_since_last < 15:
+                    should_send = False
+                    logger.debug(f"Service restart notification suppressed for {service_name} (sent {time_since_last:.1f} minutes ago)")
+            
+            if should_send:
+                send_discord_alert(f"✅ Service Restarted: {service_name}", alert_type="service_restart", skip_deduplication=True)
+                _last_service_notifications[notification_key] = current_time
+                
+                # Clean up old entries (older than 1 hour)
+                cutoff_time = current_time - timedelta(hours=1)
+                _last_service_notifications = {
+                    k: v for k, v in _last_service_notifications.items()
+                    if v > cutoff_time
+                }
             
             # Verify the service actually started
             time.sleep(1)  # Give it a moment to start
@@ -636,7 +716,29 @@ def kill_resource_hog(pid: int) -> bool:
         
         logger.info(f"Killed process {proc_name} (PID: {pid})")
         log_event("warning", f"Killed resource hog: {proc_name} (PID: {pid})")
-        send_discord_alert(f"💀 Killed Resource Hog: {proc_name} (PID: {pid})")
+        
+        # Rate limiting: only send notification if same process name hasn't been killed in last 10 minutes
+        global _last_killed_process_notifications
+        current_time = datetime.now()
+        
+        should_send = True
+        if proc_name in _last_killed_process_notifications:
+            time_since_last = (current_time - _last_killed_process_notifications[proc_name]).total_seconds() / 60
+            if time_since_last < 10:
+                should_send = False
+                logger.debug(f"Resource hog kill notification suppressed for {proc_name} (sent {time_since_last:.1f} minutes ago)")
+        
+        if should_send:
+            send_discord_alert(f"💀 Killed Resource Hog: {proc_name} (PID: {pid})", alert_type="resource_hog_kill", skip_deduplication=True)
+            _last_killed_process_notifications[proc_name] = current_time
+            
+            # Clean up old entries (older than 1 hour)
+            cutoff_time = current_time - timedelta(hours=1)
+            _last_killed_process_notifications = {
+                k: v for k, v in _last_killed_process_notifications.items()
+                if v > cutoff_time
+            }
+        
         return True
     except psutil.NoSuchProcess:
         return False
@@ -829,10 +931,32 @@ def block_ip(ip: str, attack_count: int = 1, threat_level: str = "Medium",
             blocked_ips.add(ip)
             
             logger.warning(f"Blocked IP in database: {ip} (Threat: {threat_level}, Attacks: {attack_count})")
-            if iptables_success:
-                send_discord_alert(f"🚫 Blocked IP: {ip}\nThreat Level: {threat_level}\nAttacks: {attack_count}\nFirewall: Active")
-            else:
-                send_discord_alert(f"🚫 Blocked IP (Database Only): {ip}\nThreat Level: {threat_level}\nAttacks: {attack_count}\nNote: Manual iptables configuration needed")
+            
+            # Rate limiting: only send notification if same IP hasn't been blocked in last 60 minutes
+            global _last_blocked_ip_notifications
+            current_time = datetime.now()
+            
+            should_send = True
+            if ip in _last_blocked_ip_notifications:
+                time_since_last = (current_time - _last_blocked_ip_notifications[ip]).total_seconds() / 60
+                if time_since_last < 60:
+                    should_send = False
+                    logger.debug(f"IP block notification suppressed for {ip} (sent {time_since_last:.1f} minutes ago)")
+            
+            if should_send:
+                if iptables_success:
+                    send_discord_alert(f"🚫 Blocked IP: {ip}\nThreat Level: {threat_level}\nAttacks: {attack_count}\nFirewall: Active", alert_type="ip_block", skip_deduplication=True)
+                else:
+                    send_discord_alert(f"🚫 Blocked IP (Database Only): {ip}\nThreat Level: {threat_level}\nAttacks: {attack_count}\nNote: Manual iptables configuration needed", alert_type="ip_block", skip_deduplication=True)
+                _last_blocked_ip_notifications[ip] = current_time
+                
+                # Clean up old entries (older than 2 hours)
+                cutoff_time = current_time - timedelta(hours=2)
+                _last_blocked_ip_notifications = {
+                    k: v for k, v in _last_blocked_ip_notifications.items()
+                    if v > cutoff_time
+                }
+            
             return True
         else:
             logger.error(f"Failed to store IP {ip} in database")
@@ -1099,11 +1223,53 @@ def update_ddos_statistics(attack_data: Dict[str, Any]):
 # Discord Integration
 # ============================================================================
 
-def send_discord_alert(message: str, severity: str = "info", embed_data: Dict[str, Any] = None):
-    """Send alert to Discord with optional detailed embed data"""
+def send_discord_alert(message: str, severity: str = "info", embed_data: Dict[str, Any] = None, alert_type: str = "general", skip_deduplication: bool = False):
+    """Send alert to Discord with optional detailed embed data
+    
+    Args:
+        message: Alert message text
+        severity: Alert severity (info, success, warning, error, critical)
+        embed_data: Optional detailed embed data
+        alert_type: Type of alert for deduplication (default: "general")
+        skip_deduplication: If True, skip deduplication check (for critical alerts that need to be sent)
+    """
     if not CONFIG["discord_webhook"]:
         logger.warning("Discord webhook not configured. Notification not sent.")
         return False
+    
+    # Global deduplication check (5 minutes for general alerts)
+    if not skip_deduplication:
+        global _alert_deduplication_cache
+        current_time = datetime.now()
+        
+        # Create message hash for deduplication
+        message_content = message
+        if embed_data:
+            # Use title and description from embed_data for hashing
+            message_content = str(embed_data.get("title", "")) + str(embed_data.get("description", ""))
+        
+        message_hash = hashlib.md5(message_content.encode()).hexdigest()[:16]
+        cache_key = (message_hash, alert_type)
+        
+        # Check if we've sent this alert recently
+        if cache_key in _alert_deduplication_cache:
+            last_sent_time = _alert_deduplication_cache[cache_key]
+            time_since_last = (current_time - last_sent_time).total_seconds() / 60  # in minutes
+            
+            # Rate limit: 5 minutes for general alerts
+            if time_since_last < 5:
+                logger.debug(f"Discord alert suppressed (duplicate within {time_since_last:.1f} minutes): {message[:50]}...")
+                return False
+        
+        # Clean up old entries (older than 1 hour) to prevent memory growth
+        cutoff_time = current_time - timedelta(hours=1)
+        _alert_deduplication_cache = {
+            k: v for k, v in _alert_deduplication_cache.items()
+            if v > cutoff_time
+        }
+        
+        # Record this alert
+        _alert_deduplication_cache[cache_key] = current_time
     
     try:
         emoji_map = {
@@ -2524,17 +2690,35 @@ async def get_critical_service_issues(include_test: bool = False):
             priority = issue.get('priority', 6)
             
             if severity in ['CRITICAL', 'CRIT'] or priority <= 2:
-                # Create unique identifier for this error
-                timestamp = issue.get('timestamp', '')
+                # Create stable unique identifier for this error (service + message hash, no timestamp)
                 service = issue.get('service', 'unknown')
                 message = issue.get('message', '')
                 message_hash = hashlib.md5(message.encode()).hexdigest()[:8]
-                error_id = (timestamp, service, message_hash)
+                error_id = (service, message_hash)  # Stable identifier without timestamp
                 
-                # Check if we've already notified about this error
+                current_time = datetime.now()
+                should_notify = False
+                
+                # Check if we've seen this error before
                 if error_id not in notified_critical_errors:
-                    # Mark as notified
+                    # New error - always notify
+                    should_notify = True
                     notified_critical_errors.add(error_id)
+                else:
+                    # Error seen before - check rate limiting (30 minutes)
+                    global _critical_error_notification_times
+                    if error_id in _critical_error_notification_times:
+                        time_since_last = (current_time - _critical_error_notification_times[error_id]).total_seconds() / 60
+                        if time_since_last >= 30:
+                            # 30+ minutes since last notification - notify again
+                            should_notify = True
+                        else:
+                            logger.debug(f"Critical error notification suppressed for {service} (sent {time_since_last:.1f} minutes ago)")
+                    else:
+                        # Error in set but no timestamp recorded - notify to be safe
+                        should_notify = True
+                
+                if should_notify:
                     new_critical_count += 1
                     
                     # Get system metrics for context
@@ -2548,18 +2732,29 @@ async def get_critical_service_issues(include_test: bool = False):
                     service_name = issue.get('service', 'Unknown Service')
                     error_message = issue.get('message', 'No message')
                     logger.info(f"Detailed Discord notification sent for new CRITICAL error: {service_name} - {error_message[:50]}")
+                    
+                    # Record notification time
+                    global _critical_error_notification_times
+                    _critical_error_notification_times[error_id] = current_time
+                    
+                    # Clean up old notification times (older than 2 hours)
+                    cutoff_time = current_time - timedelta(hours=2)
+                    _critical_error_notification_times = {
+                        k: v for k, v in _critical_error_notification_times.items()
+                        if v > cutoff_time
+                    }
         
         # Clean up old notified errors (keep last 1000 to prevent memory growth)
         if len(notified_critical_errors) > 1000:
             # Keep only the most recent 500
             notified_critical_errors.clear()
+            _critical_error_notification_times.clear()
             # Re-add current issues
             for issue in issues[:500]:
-                timestamp = issue.get('timestamp', '')
                 service = issue.get('service', 'unknown')
                 message = issue.get('message', '')
                 message_hash = hashlib.md5(message.encode()).hexdigest()[:8]
-                error_id = (timestamp, service, message_hash)
+                error_id = (service, message_hash)  # Stable identifier
                 notified_critical_errors.add(error_id)
         
         if new_critical_count > 0:
@@ -2568,11 +2763,10 @@ async def get_critical_service_issues(include_test: bool = False):
         # Filter out ignored alerts
         filtered_issues = []
         for issue in issues:
-            timestamp = issue.get('timestamp', '')
             service = issue.get('service', 'unknown')
             message = issue.get('message', '')
             message_hash = hashlib.md5(message.encode()).hexdigest()[:8]
-            alert_id = (timestamp, service, message_hash)
+            alert_id = (service, message_hash)  # Stable identifier
             
             if alert_id not in ignored_alerts:
                 filtered_issues.append(issue)
@@ -2632,12 +2826,12 @@ async def ignore_alert(data: dict = Body(...)):
                 "message": "No issue provided"
             }
         
-        # Create alert ID
-        timestamp = issue.get('timestamp', '')
+        # Create alert ID (stable identifier without timestamp)
         service = issue.get('service', 'unknown')
         message = issue.get('message', '')
         message_hash = hashlib.md5(message.encode()).hexdigest()[:8]
-        alert_id = (timestamp, service, message_hash)
+        alert_id = (service, message_hash)  # Stable identifier
+        timestamp = issue.get('timestamp', '')  # Keep for display purposes
         
         logger.info(f"Ignoring alert: {alert_id}")
         

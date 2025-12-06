@@ -2734,7 +2734,6 @@ async def get_critical_service_issues(include_test: bool = False):
                     logger.info(f"Detailed Discord notification sent for new CRITICAL error: {service_name} - {error_message[:50]}")
                     
                     # Record notification time
-                    global _critical_error_notification_times
                     _critical_error_notification_times[error_id] = current_time
                     
                     # Clean up old notification times (older than 2 hours)

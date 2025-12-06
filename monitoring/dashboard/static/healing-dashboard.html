@@ -4791,7 +4791,7 @@
         `;
         document.head.appendChild(style);
         
-        // Load and display services in the services tab (only non-running services)
+        // Load and display services in the services tab (running and stopped services)
         async function loadServicesList() {
             try {
                 const data = await cachedFetch('/api/services', {}, 10000);
@@ -4822,8 +4822,9 @@
                     return;
                 }
                 
-                // Filter to show only running services
+                // Separate running and stopped services
                 const runningServices = allServices.filter(s => s.status === 'running' || s.active === true);
+                const stoppedServices = allServices.filter(s => !(s.status === 'running' || s.active === true));
                 
                 // Update service count in overview card (show only running count)
                 const serviceCountElement = document.getElementById('serviceCount');
@@ -4832,11 +4833,11 @@
                 }
                 
                 // Debug: log services to console
-                console.log('Services loaded - Running:', runningServices.length);
+                console.log('Services loaded - Running:', runningServices.length, 'Stopped:', stoppedServices.length);
                 
                 let html = '';
                 
-                // Show only running services
+                // Show running services
                 if (runningServices.length > 0) {
                     html += `
                         <div style="margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--border-color);">
@@ -4854,7 +4855,7 @@
                         const typeLabel = serviceType === 'docker' ? '🐳 Docker' : serviceType === 'kubernetes' ? '☸️ Kubernetes' : '⚙️ Systemd';
                         
                         return `
-                            <div class="service-item" style="border-left: 4px solid var(--accent-green);">
+                            <div class="service-item" style="border-left: 4px solid var(--accent-green); margin-bottom: 0.75rem;">
                                 <div style="display: flex; align-items: center; gap: 1rem; flex: 1;">
                                     <span class="service-status ${statusClass}"></span>
                                     <div style="flex: 1;">
@@ -4879,13 +4880,60 @@
                             </div>
                         `;
                     }).join('');
-                } else {
-                    // No running services
+                }
+                
+                // Show stopped services
+                if (stoppedServices.length > 0) {
+                    html += `
+                        <div style="margin-top: 2rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--border-color);">
+                            <h3 style="margin: 0; color: var(--accent-red); font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+                                <span class="service-status stopped"></span>
+                                Stopped Services (${stoppedServices.length})
+                            </h3>
+                        </div>
+                    `;
+                    
+                    html += stoppedServices.map(service => {
+                        const statusClass = 'stopped';
+                        const statusText = service.status || 'Stopped';
+                        const serviceType = service.type || 'systemd';
+                        const typeLabel = serviceType === 'docker' ? '🐳 Docker' : serviceType === 'kubernetes' ? '☸️ Kubernetes' : '⚙️ Systemd';
+                        
+                        return `
+                            <div class="service-item" style="border-left: 4px solid var(--accent-red); margin-bottom: 0.75rem;">
+                                <div style="display: flex; align-items: center; gap: 1rem; flex: 1;">
+                                    <span class="service-status ${statusClass}"></span>
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 1rem; color: var(--text-primary); margin-bottom: 0.25rem;">${escapeHtml(service.name)}</div>
+                                        <div style="font-size: 0.85rem; color: var(--accent-red); display: flex; align-items: center; gap: 0.5rem;">
+                                            <span>●</span>
+                                            <span>${statusText}</span>
+                                            <span style="margin-left: 0.5rem; color: var(--text-secondary);">${typeLabel}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button class="btn btn-success btn-sm" onclick="startService('${service.name}')" 
+                                            style="white-space: nowrap; padding: 0.5rem 1rem;" title="Start Service">
+                                        ▶️ Start
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" onclick="restartService('${service.name}')" 
+                                            style="white-space: nowrap; padding: 0.5rem 1rem;" title="Restart Service">
+                                        🔄 Restart
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+                
+                // Show message if no services at all
+                if (runningServices.length === 0 && stoppedServices.length === 0) {
                     html = `
                         <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
                             <div style="font-size: 3rem; margin-bottom: 1rem;">📋</div>
-                            <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 0.5rem;">No Running Services</div>
-                            <div>No services are currently running</div>
+                            <div style="font-size: 1.2rem; font-weight: bold; margin-bottom: 0.5rem;">No Services Found</div>
+                            <div>No services are configured for monitoring</div>
                         </div>
                     `;
                 }

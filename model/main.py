@@ -6,9 +6,23 @@ import time
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi.responses import Response
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configure logging using standardized configuration
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+try:
+    from monitoring.server.core.logging_config import setup_logger
+    log_dir = Path(__file__).parent.parent / "logs"
+    logger = setup_logger(
+        name=__name__,
+        log_file="Model.log",
+        log_dir=str(log_dir),
+        console_output=True
+    )
+except ImportError:
+    # Fallback to basic logging if core module not available
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
 app = FastAPI(title="DDoS Detection Model API", version="1.0.0")
 

@@ -91,6 +91,22 @@ class BlockedIPsDatabase:
                  reason: str = None, blocked_by: str = "system") -> bool:
         """Block an IP address"""
         try:
+            # Validate IP address format
+            import ipaddress
+            try:
+                ipaddress.ip_address(ip_address)
+            except ValueError:
+                logger.error(f"Invalid IP address format: {ip_address}")
+                return False
+            
+            # Validate input parameters
+            if attack_count < 0:
+                logger.error(f"Invalid attack_count: {attack_count}")
+                return False
+            
+            if threat_level and threat_level not in ['Low', 'Medium', 'High', 'Critical']:
+                logger.warning(f"Unusual threat_level: {threat_level}")
+            
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
@@ -145,6 +161,14 @@ class BlockedIPsDatabase:
                    reason: str = None) -> bool:
         """Unblock an IP address"""
         try:
+            # Validate IP address format
+            import ipaddress
+            try:
+                ipaddress.ip_address(ip_address)
+            except ValueError:
+                logger.error(f"Invalid IP address format: {ip_address}")
+                return False
+            
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
@@ -184,6 +208,14 @@ class BlockedIPsDatabase:
     def is_blocked(self, ip_address: str) -> bool:
         """Check if an IP is currently blocked"""
         try:
+            # Validate IP address format
+            import ipaddress
+            try:
+                ipaddress.ip_address(ip_address)
+            except ValueError:
+                logger.error(f"Invalid IP address format: {ip_address}")
+                return False
+            
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -219,6 +251,14 @@ class BlockedIPsDatabase:
     def get_ip_info(self, ip_address: str) -> Optional[Dict[str, Any]]:
         """Get detailed information about an IP"""
         try:
+            # Validate IP address format
+            import ipaddress
+            try:
+                ipaddress.ip_address(ip_address)
+            except ValueError:
+                logger.error(f"Invalid IP address format: {ip_address}")
+                return None
+            
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -234,6 +274,14 @@ class BlockedIPsDatabase:
     def get_ip_history(self, ip_address: str) -> List[Dict[str, Any]]:
         """Get history of actions for an IP"""
         try:
+            # Validate IP address format
+            import ipaddress
+            try:
+                ipaddress.ip_address(ip_address)
+            except ValueError:
+                logger.error(f"Invalid IP address format: {ip_address}")
+                return []
+            
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -251,6 +299,19 @@ class BlockedIPsDatabase:
     def update_attack_count(self, ip_address: str, increment: int = 1) -> bool:
         """Update attack count for an IP"""
         try:
+            # Validate IP address format
+            import ipaddress
+            try:
+                ipaddress.ip_address(ip_address)
+            except ValueError:
+                logger.error(f"Invalid IP address format: {ip_address}")
+                return False
+            
+            # Validate increment
+            if increment < 0:
+                logger.error(f"Invalid increment value: {increment}")
+                return False
+            
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""

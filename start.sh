@@ -85,20 +85,20 @@ log_error() {
 
 check_python() {
     log_info "Checking Python version..."
-    if ! command -v python3 &> /dev/null; then
+if ! command -v python3 &> /dev/null; then
         log_error "Python 3 is not installed"
-        exit 1
-    fi
-    
-    PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
-    PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
-    PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
-    
-    if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 8 ]); then
+    exit 1
+fi
+
+PYTHON_VERSION=$(python3 --version 2>&1 | awk '{print $2}')
+PYTHON_MAJOR=$(echo $PYTHON_VERSION | cut -d. -f1)
+PYTHON_MINOR=$(echo $PYTHON_VERSION | cut -d. -f2)
+
+if [ "$PYTHON_MAJOR" -lt 3 ] || ([ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 8 ]); then
         log_error "Python 3.8 or higher is required (found: $PYTHON_VERSION)"
-        exit 1
-    fi
-    
+    exit 1
+fi
+
     log_success "Python ${PYTHON_VERSION} detected"
 }
 
@@ -179,9 +179,9 @@ check_ports() {
         for port in "${ports[@]}"; do
             if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null 2>&1; then
                 ports_in_use+=($port)
-            fi
-        done
-        
+    fi
+done
+
         if [ ${#ports_in_use[@]} -gt 0 ]; then
             log_error "Ports still in use: ${ports_in_use[*]}"
             log_error ""
@@ -235,12 +235,12 @@ check_project_structure() {
 
 setup_venv() {
     log_info "Setting up virtual environment..."
-    
-    if [ ! -f "$VENV_DIR/bin/activate" ]; then
+
+if [ ! -f "$VENV_DIR/bin/activate" ]; then
         log_info "Creating virtual environment..."
-        python3 -m venv "$VENV_DIR"
-    fi
-    
+    python3 -m venv "$VENV_DIR"
+fi
+
     source "$VENV_DIR/bin/activate"
     log_success "Virtual environment activated"
     
@@ -261,7 +261,7 @@ setup_venv() {
             python3 -m pip install -r requirements.txt --upgrade 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || {
                 log_error "Failed to install dependencies. Check $LOG_DIR/dependency-install.log"
                 log_error "You may need to manually resolve dependency conflicts"
-                exit 1
+    exit 1
             }
         fi
     fi
@@ -317,8 +317,8 @@ load_resource_profile() {
     if [ ! -f "$RESOURCE_CONFIG" ]; then
         log_warning "Resource config not found: $RESOURCE_CONFIG - using defaults"
         return
-    fi
-    
+fi
+
     # Use Python to parse JSON (more reliable than jq which may not be installed)
     local profile_json=$(python3 -c "
 import json
@@ -431,7 +431,7 @@ start_service() {
     cd "$path"
     nohup python3 -u "$script" >> "$LOG_DIR/${service_name}.log" 2>&1 &
     local pid=$!
-    cd "$SCRIPT_DIR"
+        cd "$SCRIPT_DIR"
     
     # Save PID
     echo "$pid" > "$pid_file"
@@ -730,28 +730,28 @@ main() {
         check_ports
         
         log_info "Starting all services..."
-        echo ""
-        
+echo ""
+
         start_all_services
-        
-        echo ""
-        echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${BLUE}║                    🌐 ACCESS POINTS                          ║${NC}"
-        echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-        echo -e "${GREEN}🛡️  Healing Dashboard:${NC}      http://localhost:5001"
+
+echo ""
+echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}║                    🌐 ACCESS POINTS                          ║${NC}"
+echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${GREEN}🛡️  Healing Dashboard:${NC}      http://localhost:5001"
         echo -e "${GREEN}📈 Monitoring Server:${NC}       http://localhost:5000"
         echo -e "${GREEN}🤖 DDoS Model API:${NC}               http://localhost:8080"
-        echo -e "${GREEN}🔍 Network Analyzer:${NC}        http://localhost:8000"
-        echo -e "${GREEN}🚨 Incident Bot:${NC}            http://localhost:8001"
-        echo ""
-        echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}🔍 Network Analyzer:${NC}        http://localhost:8000"
+echo -e "${GREEN}🚨 Incident Bot:${NC}            http://localhost:8001"
+echo ""
+echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
         echo -e "${BLUE}║         🛡️  ALL SERVICES ARE RUNNING! 🛡️                    ║${NC}"
-        echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
-        echo ""
-        echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}"
-        echo ""
-        
+echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}"
+echo ""
+
         # Keep script running
         wait
     fi

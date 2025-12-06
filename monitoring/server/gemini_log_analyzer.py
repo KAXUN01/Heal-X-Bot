@@ -29,10 +29,29 @@ class GeminiLogAnalyzer:
             try:
                 # Configure the API key
                 genai.configure(api_key=self.api_key)
-                # Initialize the model - using gemini-2.0-flash-lite (Gemini 2.0 Flash-Lite)
-                self.model = genai.GenerativeModel("gemini-2.0-flash-lite")
-                self.model_name = "gemini-2.0-flash-lite"
-                logger.info("Gemini client initialized successfully with gemini-2.0-flash-lite")
+                # Try fastest models first: gemini-1.5-flash is the fastest and most reliable
+                # Fallback to other fast models if needed
+                model_priority = [
+                    "gemini-1.5-flash",      # Fastest, most reliable
+                    "gemini-2.0-flash-exp",  # Experimental fast model
+                    "gemini-2.0-flash-lite"  # Fallback
+                ]
+                
+                model_initialized = False
+                for model_name in model_priority:
+                    try:
+                        self.model = genai.GenerativeModel(model_name)
+                        self.model_name = model_name
+                        logger.info(f"Gemini client initialized successfully with {model_name} (fast model)")
+                        model_initialized = True
+                        break
+                    except Exception as model_error:
+                        logger.debug(f"Failed to initialize {model_name}: {model_error}, trying next...")
+                        continue
+                
+                if not model_initialized:
+                    raise Exception(f"Failed to initialize any Gemini model from: {', '.join(model_priority)}")
+                    
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
                 self.model = None
@@ -453,26 +472,20 @@ Provide a detailed but concise analysis.
         timestamp = log_entry.get('timestamp', '')
         source_file = log_entry.get('source_file', '')
         
-        prompt = f"""
-You are an expert system administrator analyzing system logs. Provide a CONCISE analysis (3-4 sentences per section).
+        # Truncate message if too long (keep only first 300 chars for faster processing)
+        message_short = message[:300] + ('...' if len(message) > 300 else '')
+        
+        prompt = f"""Analyze this log error. Be BRIEF (max 2 sentences per section):
 
 Service: {service}
-Timestamp: {timestamp}
-Log Message: {message}
+Error: {message_short}
 
-Provide a brief analysis in this format:
+Format:
+🔍 WHAT HAPPENED: [1-2 sentences]
+💡 QUICK FIX: [1-2 steps]
+🛡️ PREVENTION: [1 sentence]
 
-🔍 WHAT HAPPENED:
-[2-3 sentences explaining the root cause and what triggered this]
-
-💡 QUICK FIX:
-[2-3 concrete steps to resolve this immediately]
-
-🛡️ PREVENTION:
-[1-2 key recommendations to prevent recurrence]
-
-Keep it short, actionable, and easy to understand. No lengthy explanations.
-"""
+Keep it short and actionable."""
         return prompt
     
     def _create_pattern_analysis_prompt(self, log_entries: List[Dict[str, Any]]) -> str:
@@ -527,6 +540,7 @@ Log #{i}:
     def _call_gemini_api(self, prompt: str) -> Dict[str, Any]:
         """
         Call Google Gemini API with the prompt using the modern SDK
+        Optimized for speed with timeout and token limits
         """
         if not self.model:
             return {
@@ -535,8 +549,56 @@ Log #{i}:
             }
         
         try:
-            # Call Gemini using the modern SDK
-            response = self.model.generate_content(prompt)
+            from google.generativeai.types import GenerationConfig
+            import threading
+            import queue
+            
+            # Configure generation for speed: limit tokens and use faster settings
+            generation_config = GenerationConfig(
+                max_output_tokens=350,  # Limit response length for faster generation
+                temperature=0.1,  # Lower temperature for faster, more deterministic responses
+                top_p=0.7,
+                top_k=15,
+            )
+            
+            # Use threading with queue for timeout
+            result_queue = queue.Queue()
+            
+            def api_call():
+                try:
+                    response = self.model.generate_content(
+                        prompt,
+                        generation_config=generation_config
+                    )
+                    result_queue.put(('success', response))
+                except Exception as e:
+                    result_queue.put(('error', e))
+            
+            # Start API call in a thread
+            thread = threading.Thread(target=api_call)
+            thread.daemon = True
+            thread.start()
+            thread.join(timeout=6)  # 6 second timeout for faster response
+            
+            if thread.is_alive():
+                # Request timed out
+                logger.warning("Gemini API call timed out after 6 seconds")
+                return {
+                    'status': 'error',
+                    'message': 'Analysis timed out. Please try again or analyze a simpler log entry.'
+                }
+            
+            # Get result from queue
+            try:
+                result_type, result = result_queue.get_nowait()
+                if result_type == 'error':
+                    raise result
+                response = result
+            except queue.Empty:
+                return {
+                    'status': 'error',
+                    'message': 'No response received from Gemini API'
+                }
             
             if response and response.text:
                 return {

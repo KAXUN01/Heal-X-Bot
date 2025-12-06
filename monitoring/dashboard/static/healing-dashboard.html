@@ -8125,8 +8125,7 @@
                         updateHealingHistoryTimeline(data.history);
                         updateHealingPerformanceChart(data.history);
                     }
-                    // Update active faults separately (it has its own API call)
-                    updateActiveFaults();
+                    // Active faults are updated separately via periodic refresh or manual refresh
                 } else {
                     // Show no data message
                     if (statusEl) {
@@ -8493,9 +8492,150 @@
             }).join('');
         }
         
+        // Pagination state for active faults
+        let allFaults = [];
+        let currentFaultsPage = 1;
+        const FAULTS_PER_PAGE = 5;
+        let isUpdatingFaults = false;
+        
+        // Function to render faults with pagination
+        function renderFaultsPage() {
+            const container = document.getElementById('activeFaultsList');
+            if (!container) return;
+            
+            if (allFaults.length === 0) {
+                container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--accent-green);"><i class="fas fa-check-circle"></i> No active faults detected - system is healthy</div>';
+                return;
+            }
+            
+            const startIndex = (currentFaultsPage - 1) * FAULTS_PER_PAGE;
+            const endIndex = startIndex + FAULTS_PER_PAGE;
+            const faultsToShow = allFaults.slice(startIndex, endIndex);
+            const totalPages = Math.ceil(allFaults.length / FAULTS_PER_PAGE);
+            
+            let html = faultsToShow.map((fault, index) => {
+                const actualIndex = startIndex + index;
+                const faultId = actualIndex;
+                const severity = (fault.severity || 'medium').toLowerCase();
+                const severityColor = severity === 'critical' ? 'var(--accent-red)' : 
+                                     severity === 'high' ? '#f97316' : 
+                                     severity === 'medium' ? 'var(--accent-yellow)' : 
+                                     'var(--accent-blue)';
+                const severityIcon = severity === 'critical' ? '🔴' : 
+                                    severity === 'high' ? '🟠' : 
+                                    severity === 'medium' ? '🟡' : '🔵';
+                
+                try {
+                    const faultDate = new Date(fault.timestamp);
+                    const timeStr = faultDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    const dateStr = faultDate.toLocaleDateString();
+                    const timestamp = `${dateStr} ${timeStr}`;
+                } catch (e) {
+                    var timestamp = fault.timestamp || 'Unknown time';
+                }
+                
+                return `
+                    <div class="fault-card" data-fault-id="${faultId}" data-fault-data='${JSON.stringify(fault)}' style="padding: 1rem; margin-bottom: 0.75rem; border-left: 4px solid ${severityColor}; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                                    <span style="font-size: 1.2rem;">${severityIcon}</span>
+                                    <strong style="color: ${severityColor}; text-transform: uppercase;">${(fault.type || 'unknown').replace(/_/g, ' ')}</strong>
+                                    <span class="status-badge" style="background: ${severityColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">
+                                        ${severity.toUpperCase()}
+                                    </span>
+                                    <span id="fault-${faultId}-status" class="healing-status-badge" style="display: none; margin-left: 0.5rem; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;"></span>
+                                </div>
+                                <div style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.9rem;">
+                                    <strong>Service/Resource:</strong> ${fault.service || fault.resource || 'Unknown'}
+                                </div>
+                                ${fault.reason ? `
+                                    <div style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.85rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                                        <strong>Reason:</strong> ${fault.reason}
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <span style="color: var(--text-secondary); font-size: 0.8rem; white-space: nowrap; margin-left: 1rem;">
+                                ${timestamp}
+                            </span>
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
+                            <button class="btn btn-secondary" onclick="analyzeFaultWithAI(${faultId}, ${actualIndex})" id="fault-${faultId}-analyze-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                <i class="fas fa-brain"></i> Analyze
+                            </button>
+                            <button class="btn btn-primary" onclick="autoHealFault(${faultId})" id="fault-${faultId}-heal-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                <i class="fas fa-magic"></i> Auto-Heal
+                            </button>
+                            <button class="btn btn-secondary" onclick="viewHealingSteps(${faultId})" id="fault-${faultId}-steps-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                <i class="fas fa-list-ol"></i> View Healing Steps
+                            </button>
+                            <button class="btn btn-secondary" onclick="toggleManualInstructions(${faultId})" id="fault-${faultId}-manual-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                <i class="fas fa-book"></i> Manual Instructions
+                            </button>
+                        </div>
+                        
+                        <!-- AI Analysis Panel (initially hidden) -->
+                        <div id="fault-${faultId}-analysis" class="ai-analysis-panel" style="display: none; margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 4px;">
+                            <div id="fault-${faultId}-analysis-content">
+                                <div style="text-align: center; color: var(--text-secondary);">
+                                    Click "Analyze" button to analyze this fault with AI
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Manual Instructions Panel (collapsible) -->
+                        <div id="fault-${faultId}-manual" class="manual-instructions-panel" style="display: none; margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 4px; border-left: 3px solid var(--accent-yellow);">
+                            <div id="fault-${faultId}-manual-content">
+                                <div style="text-align: center; color: var(--text-secondary);">
+                                    Click "Manual Instructions" button to view steps
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Add pagination controls
+            if (totalPages > 1) {
+                html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <button class="btn btn-secondary" onclick="changeFaultsPage(${currentFaultsPage - 1})" ${currentFaultsPage === 1 ? 'disabled' : ''} style="padding: 0.5rem 1rem; font-size: 0.85rem; min-height: 44px;">
+                            <i class="fas fa-chevron-left"></i> Previous
+                        </button>
+                        <span style="color: var(--text-secondary);">
+                            Page ${currentFaultsPage} of ${totalPages} (${allFaults.length} total faults)
+                        </span>
+                        <button class="btn btn-secondary" onclick="changeFaultsPage(${currentFaultsPage + 1})" ${currentFaultsPage === totalPages ? 'disabled' : ''} style="padding: 0.5rem 1rem; font-size: 0.85rem; min-height: 44px;">
+                            Next <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        // Function to change faults page
+        function changeFaultsPage(page) {
+            const totalPages = Math.ceil(allFaults.length / FAULTS_PER_PAGE);
+            if (page < 1 || page > totalPages) return;
+            currentFaultsPage = page;
+            renderFaultsPage();
+        }
+        
         async function updateActiveFaults() {
+            // Prevent concurrent calls
+            if (isUpdatingFaults) {
+                console.log('Faults update already in progress, skipping...');
+                return;
+            }
+            
+            isUpdatingFaults = true;
             const container = document.getElementById('activeFaultsList');
             if (!container) {
+                isUpdatingFaults = false;
                 console.warn('Active faults container not found');
                 return;
             }
@@ -8507,12 +8647,13 @@
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 10000);
                 
-                const response = await fetch('/api/cloud/faults?limit=20', { signal: controller.signal });
+                const response = await fetch('/api/cloud/faults?limit=100', { signal: controller.signal });
                 clearTimeout(timeoutId);
                 
                 if (!response.ok) {
                     if (response.status === 404 || response.status === 503) {
                         container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);"><i class="fas fa-info-circle"></i> Fault detection service unavailable. Please check backend configuration.</div>';
+                        isUpdatingFaults = false;
                         return;
                     }
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -8522,100 +8663,38 @@
                 
                 if (!data.success) {
                     container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-secondary);"><i class="fas fa-info-circle"></i> ${data.error || 'Unable to load faults'}</div>`;
+                    isUpdatingFaults = false;
                     return;
                 }
                 
                 if (!data.faults || data.faults.length === 0) {
-                    container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--accent-green);"><i class="fas fa-check-circle"></i> No active faults detected - system is healthy</div>';
+                    allFaults = [];
+                    currentFaultsPage = 1;
+                    renderFaultsPage();
+                    isUpdatingFaults = false;
                     return;
                 }
                 
-                container.innerHTML = data.faults.map((fault, index) => {
-                    const faultId = index;
-                    const severity = (fault.severity || 'medium').toLowerCase();
-                    const severityColor = severity === 'critical' ? 'var(--accent-red)' : 
-                                         severity === 'high' ? '#f97316' : 
-                                         severity === 'medium' ? 'var(--accent-yellow)' : 
-                                         'var(--accent-blue)';
-                    const severityIcon = severity === 'critical' ? '🔴' : 
-                                        severity === 'high' ? '🟠' : 
-                                        severity === 'medium' ? '🟡' : '🔵';
-                    
-                    try {
-                        const faultDate = new Date(fault.timestamp);
-                        const timeStr = faultDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                        const dateStr = faultDate.toLocaleDateString();
-                        const timestamp = `${dateStr} ${timeStr}`;
-                    } catch (e) {
-                        var timestamp = fault.timestamp || 'Unknown time';
-                    }
-                    
-                    return `
-                        <div class="fault-card" data-fault-id="${faultId}" data-fault-data='${JSON.stringify(fault)}' style="padding: 1rem; margin-bottom: 0.75rem; border-left: 4px solid ${severityColor}; background: rgba(0,0,0,0.2); border-radius: 4px;">
-                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-                                <div style="flex: 1;">
-                                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
-                                        <span style="font-size: 1.2rem;">${severityIcon}</span>
-                                        <strong style="color: ${severityColor}; text-transform: uppercase;">${(fault.type || 'unknown').replace(/_/g, ' ')}</strong>
-                                        <span class="status-badge" style="background: ${severityColor}; color: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; margin-left: 0.5rem;">
-                                            ${severity.toUpperCase()}
-                                        </span>
-                                        <span id="fault-${faultId}-status" class="healing-status-badge" style="display: none; margin-left: 0.5rem; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem;"></span>
-                                    </div>
-                                    <div style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.9rem;">
-                                        <strong>Service/Resource:</strong> ${fault.service || fault.resource || 'Unknown'}
-                                    </div>
-                                    ${fault.reason ? `
-                                        <div style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.85rem; padding: 0.5rem; background: rgba(0,0,0,0.2); border-radius: 4px;">
-                                            <strong>Reason:</strong> ${fault.reason}
-                                        </div>
-                                    ` : ''}
-                                </div>
-                                <span style="color: var(--text-secondary); font-size: 0.8rem; white-space: nowrap; margin-left: 1rem;">
-                                    ${timestamp}
-                                </span>
-                            </div>
-                            
-                            <!-- Action Buttons -->
-                            <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
-                                <button class="btn btn-primary" onclick="autoHealFault(${faultId})" id="fault-${faultId}-heal-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
-                                    <i class="fas fa-magic"></i> Auto-Heal
-                                </button>
-                                <button class="btn btn-secondary" onclick="viewHealingSteps(${faultId})" id="fault-${faultId}-steps-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
-                                    <i class="fas fa-list-ol"></i> View Healing Steps
-                                </button>
-                                <button class="btn btn-secondary" onclick="toggleManualInstructions(${faultId})" id="fault-${faultId}-manual-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
-                                    <i class="fas fa-book"></i> Manual Instructions
-                                </button>
-                            </div>
-                            
-                            <!-- AI Analysis Panel (initially hidden, auto-expanded for critical) -->
-                            <div id="fault-${faultId}-analysis" class="ai-analysis-panel" style="display: ${severity === 'critical' ? 'block' : 'none'}; margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 4px;">
-                                <div id="fault-${faultId}-analysis-content">
-                                    <div style="text-align: center; color: var(--text-secondary);">
-                                        <i class="fas fa-spinner fa-spin"></i> Analyzing fault with AI...
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Manual Instructions Panel (collapsible) -->
-                            <div id="fault-${faultId}-manual" class="manual-instructions-panel" style="display: none; margin-top: 1rem; padding: 1rem; background: rgba(0,0,0,0.3); border-radius: 4px; border-left: 3px solid var(--accent-yellow);">
-                                <div id="fault-${faultId}-manual-content">
-                                    <div style="text-align: center; color: var(--text-secondary);">
-                                        Click "Manual Instructions" button to view steps
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }).join('');
+                // Remove duplicates based on unique key
+                const seenFaults = new Set();
+                const uniqueFaults = [];
                 
-                // Automatically trigger AI analysis for each fault
-                data.faults.forEach((fault, index) => {
-                    setTimeout(() => {
-                        analyzeFaultWithAI(index, fault);
-                    }, index * 200); // Stagger requests to avoid overwhelming the API
+                data.faults.forEach(fault => {
+                    // Create unique key: type + service + timestamp (rounded to nearest minute to catch near-duplicates)
+                    const faultTimestamp = fault.timestamp ? new Date(fault.timestamp).getTime() : 0;
+                    const roundedTimestamp = Math.floor(faultTimestamp / 60000) * 60000; // Round to nearest minute
+                    const uniqueKey = `${fault.type || 'unknown'}_${fault.service || fault.resource || 'unknown'}_${roundedTimestamp}`;
+                    
+                    if (!seenFaults.has(uniqueKey)) {
+                        seenFaults.add(uniqueKey);
+                        uniqueFaults.push(fault);
+                    }
                 });
+                
+                allFaults = uniqueFaults;
+                currentFaultsPage = 1; // Reset to first page when new data loads
+                renderFaultsPage();
+                
             } catch (error) {
                 console.error('Error loading active faults:', error);
                 
@@ -8626,13 +8705,25 @@
                 } else {
                     container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--accent-red);"><i class="fas fa-exclamation-circle"></i> Error loading faults: ${error.message}</div>`;
                 }
+            } finally {
+                isUpdatingFaults = false;
             }
         }
+        
+        // Make changeFaultsPage globally accessible
+        window.changeFaultsPage = changeFaultsPage;
         
         // Store AI analysis results for each fault
         const faultAnalysisCache = new Map();
         
-        async function analyzeFaultWithAI(faultId, faultData) {
+        async function analyzeFaultWithAI(faultId, faultIndex) {
+            // Get fault data from allFaults array
+            const faultData = allFaults[faultIndex];
+            if (!faultData) {
+                console.warn(`Fault data not found for index ${faultIndex}`);
+                return;
+            }
+            
             const analysisPanel = document.getElementById(`fault-${faultId}-analysis`);
             const analysisContent = document.getElementById(`fault-${faultId}-analysis-content`);
             
@@ -8641,16 +8732,19 @@
                 return;
             }
             
-            // Show loading state
-            analysisContent.innerHTML = '<div style="text-align: center; color: var(--text-secondary);"><i class="fas fa-spinner fa-spin"></i> Analyzing fault with AI...</div>';
+            // Show the analysis panel and loading state
             analysisPanel.style.display = 'block';
+            analysisContent.innerHTML = '<div style="text-align: center; color: var(--text-secondary);"><i class="fas fa-spinner fa-spin"></i> Analyzing fault with AI...</div>';
             
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
                 
-                const response = await fetch(`/api/cloud/faults/${faultId}/analyze`, {
+                // Send fault data for analysis
+                const response = await fetch(`/api/cloud/faults/${faultIndex}/analyze`, {
                     method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(faultData),
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId);

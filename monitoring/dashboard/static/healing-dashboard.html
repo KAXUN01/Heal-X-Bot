@@ -6276,6 +6276,131 @@
             }
         }
 
+        /**
+         * Sanitize log entry to protect user privacy before sending to LLM
+         * Replaces sensitive data with generic patterns while preserving structure
+         */
+        function sanitizeLogEntry(logEntry) {
+            if (!logEntry || typeof logEntry !== 'object') {
+                return logEntry;
+            }
+
+            // Create a deep copy to avoid modifying the original
+            const sanitized = JSON.parse(JSON.stringify(logEntry));
+
+            // Helper function to sanitize a string value
+            function sanitizeString(text) {
+                if (!text || typeof text !== 'string') {
+                    return text;
+                }
+
+                let sanitized = text;
+
+                // 1. Sanitize IP addresses - replace with generic patterns
+                // IPv4 addresses
+                sanitized = sanitized.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, (match) => {
+                    const parts = match.split('.');
+                    const firstOctet = parseInt(parts[0]);
+                    const secondOctet = parseInt(parts[1]);
+                    // Private IP ranges: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+                    if (firstOctet === 10) {
+                        return '10.x.x.x';
+                    } else if (firstOctet === 172 && secondOctet >= 16 && secondOctet <= 31) {
+                        return '172.16.x.x';
+                    } else if (firstOctet === 192 && secondOctet === 168) {
+                        return '192.168.x.x';
+                    } else {
+                        // Public IPs - mask more aggressively
+                        return 'x.x.x.x';
+                    }
+                });
+
+                // IPv6 addresses (simplified)
+                sanitized = sanitized.replace(/\b([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}\b/g, '[IPv6_ADDRESS]');
+
+                // 2. Sanitize email addresses - replace with user@[domain]
+                sanitized = sanitized.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, (match) => {
+                    const parts = match.split('@');
+                    if (parts.length === 2) {
+                        return `user@[${parts[1]}]`;
+                    }
+                    return 'user@[domain]';
+                });
+
+                // 3. Mask passwords, secrets, and tokens
+                // Common patterns: password=, pwd=, secret=, token=, api_key=, auth=
+                sanitized = sanitized.replace(/\b(password|pwd|passwd|secret|token|api[_-]?key|auth[_-]?token|access[_-]?token|bearer)\s*[=:]\s*['"]?([^\s'"]{4,})['"]?/gi, (match, key, value) => {
+                    return `${key}=[REDACTED]`;
+                });
+
+                // 4. Replace API keys - long alphanumeric strings (32+ chars) that look like keys
+                // Only match if it's a standalone token-like string (not part of a longer message)
+                sanitized = sanitized.replace(/\b([A-Za-z0-9_-]{32,})\b/g, (match, key) => {
+                    // Skip if it looks like a hash, already sanitized, or is part of a URL/path
+                    if (match.includes('REDACTED') || match.includes('x.x') || match.includes('[domain]') || 
+                        match.includes('/') || match.includes('http') || match.length > 200) {
+                        return match;
+                    }
+                    // Only replace if it looks like an API key (alphanumeric with possible dashes/underscores)
+                    // and is not obviously part of a sentence (has spaces around it or is at start/end)
+                    if (/^[A-Za-z0-9_-]+$/.test(match) && match.length >= 32 && match.length <= 200) {
+                        // Additional check: if it contains mostly letters/numbers (not just random chars)
+                        const alphanumericRatio = (match.match(/[A-Za-z0-9]/g) || []).length / match.length;
+                        if (alphanumericRatio > 0.8) {
+                            return '[API_KEY]';
+                        }
+                    }
+                    return match;
+                });
+
+                // 5. Sanitize file paths - replace usernames in paths
+                // /home/username/ -> /home/[user]/
+                sanitized = sanitized.replace(/\/home\/([^/\s]+)/g, '/home/[user]');
+                // /var/log/service -> /var/log/[service]
+                sanitized = sanitized.replace(/\/var\/log\/([^/\s]+)/g, '/var/log/[service]');
+                // /opt/app/user -> /opt/app/[user]
+                sanitized = sanitized.replace(/\/opt\/[^/\s]+\/([^/\s]+)/g, '/opt/[app]/[user]');
+                // Generic user directories
+                sanitized = sanitized.replace(/\/Users\/([^/\s]+)/g, '/Users/[user]');
+                sanitized = sanitized.replace(/\/home\/[^/\s]+\/([^/\s]+)/g, '/home/[user]/[path]');
+
+                // 6. Replace usernames in various contexts
+                // Common patterns: user: username, logged in as username, etc.
+                sanitized = sanitized.replace(/\b(user|username|login|account)\s*[=:]\s*['"]?([a-zA-Z0-9._-]{2,})['"]?/gi, (match, key, value) => {
+                    return `${key}=[username]`;
+                });
+
+                // 7. Sanitize database connection strings
+                sanitized = sanitized.replace(/(mysql|postgresql|mongodb):\/\/([^:]+):([^@]+)@/gi, (match, db, user, pass) => {
+                    return `${db}://[user]:[REDACTED]@`;
+                });
+
+                // 8. Sanitize URLs with credentials
+                sanitized = sanitized.replace(/https?:\/\/([^:]+):([^@]+)@/g, 'http://[user]:[REDACTED]@');
+
+                return sanitized;
+            }
+
+            // Sanitize all string fields in the log entry
+            if (sanitized.message) {
+                sanitized.message = sanitizeString(sanitized.message);
+            }
+            if (sanitized.source_file) {
+                sanitized.source_file = sanitizeString(sanitized.source_file);
+            }
+            if (sanitized.service) {
+                sanitized.service = sanitizeString(sanitized.service);
+            }
+            if (sanitized.tag) {
+                sanitized.tag = sanitizeString(sanitized.tag);
+            }
+            if (sanitized.content) {
+                sanitized.content = sanitizeString(sanitized.content);
+            }
+
+            return sanitized;
+        }
+
         async function analyzeLogWithAI(logEntry) {
             // Detect which tab is active and use the appropriate panel
             const alertsTab = document.getElementById('alerts');
@@ -6331,14 +6456,17 @@
                     throw new Error('Log entry has no message to analyze');
                 }
                 
-                console.log('Sending analysis request:', analysisPayload);
+                // Sanitize sensitive data before sending to LLM for privacy protection
+                const sanitizedPayload = sanitizeLogEntry(analysisPayload);
+                
+                console.log('Sending analysis request (sanitized for privacy):', sanitizedPayload);
                 
                 const response = await fetch('/api/gemini/analyze-log', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(analysisPayload)
+                    body: JSON.stringify({ log_entry: sanitizedPayload })
                 });
 
                 if (!response.ok) {

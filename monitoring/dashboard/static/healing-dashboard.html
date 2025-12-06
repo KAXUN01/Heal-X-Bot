@@ -3679,8 +3679,9 @@
                 showNotification('🎭 Demo mode enabled - Will use test scenarios', 'info');
                 // Start polling for demo metrics
                 startDemoMetricsPolling();
-                // Try to fetch metrics immediately
-                setTimeout(() => refreshPredictiveMaintenance(), 500);
+                // Try to fetch metrics after polling has had time to complete
+                // Polling runs immediately, so give it 1.5 seconds to fetch
+                setTimeout(() => refreshPredictiveMaintenance(), 1500);
             } else {
                 showNotification('📊 Demo mode disabled - Using real system metrics', 'info');
                 // Stop polling
@@ -3759,9 +3760,15 @@
                         if (data.metrics && Object.keys(data.metrics).length > 0) {
                             lastDemoMetrics = data.metrics;
                             pollAttempts = 0; // Reset counter on success
+                            console.log('✅ Demo metrics polled successfully:', Object.keys(lastDemoMetrics));
                             // Only refresh if demo mode is already enabled by user
                             if (demoMode) {
                                 refreshPredictiveMaintenance();
+                            }
+                        } else if (demoMode) {
+                            // Log when in demo mode but no metrics available
+                            if (pollAttempts === 1 || pollAttempts % 5 === 0) {
+                                console.log('⏳ Waiting for demo metrics... (attempt ' + pollAttempts + ')');
                             }
                         }
                     }
@@ -3779,8 +3786,8 @@
             // Poll immediately
             pollDemoMetrics();
             
-            // Then poll every 5 seconds (reduced from 1 second)
-            demoMetricsCheckInterval = setInterval(pollDemoMetrics, 5000);
+            // Then poll every 1 second for better responsiveness
+            demoMetricsCheckInterval = setInterval(pollDemoMetrics, 1000);
         }
         
         function stopDemoMetricsPolling() {
@@ -3833,10 +3840,18 @@
                         if (!demoMode) {
                             console.log('ℹ️ Demo metrics available, but demo mode is disabled. Check the "Demo Mode" checkbox to use them.');
                         }
+                    } else if (demoMode) {
+                        // In demo mode, if no metrics returned, log but don't clear lastDemoMetrics
+                        // This preserves the last known demo metrics from polling
+                        console.log('⚠️ No demo metrics in API response, but preserving last known metrics');
                     }
                 }
             } catch (e) {
                 console.log('⚠️ Could not fetch demo metrics:', e);
+                // In demo mode, preserve lastDemoMetrics even if fetch fails
+                if (demoMode && lastDemoMetrics) {
+                    console.log('ℹ️ Using last known demo metrics due to fetch error');
+                }
             }
             
                 // Use demo metrics if available AND demo mode is manually enabled
@@ -3856,7 +3871,11 @@
                 } else {
                     // Fetch failure risk (uses current system metrics)
                     if (demoMode) {
-                        console.log('⚠️ Demo mode ON but no demo metrics available, using system metrics');
+                        console.log('⚠️ Demo mode ON but no demo metrics available yet');
+                        console.log('💡 Make sure the demo script is running: python3 scripts/demo-predictive-model.py');
+                        console.log('📊 Falling back to system metrics temporarily...');
+                        // Show notification to user
+                        showNotification('⚠️ Demo mode enabled but no demo metrics received yet. Make sure the demo script is running.', 'warning');
                     } else {
                         console.log('📡 Fetching /api/predict-failure-risk (system metrics)...');
                     }

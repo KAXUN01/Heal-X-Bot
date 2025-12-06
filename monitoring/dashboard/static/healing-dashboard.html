@@ -1088,7 +1088,7 @@
                     <span style="font-size: 1.5rem;">⚙️</span>
                 </div>
                 <div class="card-value" id="serviceCount">0</div>
-                <div class="card-subtitle">Active / Total (Click to view)</div>
+                <div class="card-subtitle">Currently Running (Click to view)</div>
             </div>
 
             <div class="card" style="cursor: pointer;" onclick="switchTab('alerts')" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 12px rgba(0, 0, 0, 0.3)'" onmouseout="this.style.transform=''; this.style.boxShadow=''">
@@ -4864,10 +4864,10 @@
                 // Filter to show only running services
                 const runningServices = allServices.filter(s => s.status === 'running' || s.active === true);
                 
-                // Update service count in overview card (show running / total format)
+                // Update service count in overview card (show only running count)
                 const serviceCountElement = document.getElementById('serviceCount');
                 if (serviceCountElement) {
-                    serviceCountElement.textContent = `${runningServices.length} / ${allServices.length}`;
+                    serviceCountElement.textContent = `${runningServices.length}`;
                 }
                 
                 // Debug: log services to console
@@ -7104,14 +7104,12 @@
             const endIndex = Math.min(startIndex + anomaliesPageSize, sortedIssues.length);
             const pageIssues = sortedIssues.slice(startIndex, endIndex);
             
-            // Debug: Log if nginx issues are in the sorted list
-            const nginxInSorted = sortedIssues.filter(i => i.service && i.service.toLowerCase().includes('nginx'));
-            if (nginxInSorted.length > 0) {
-                console.log(`✅ Found ${nginxInSorted.length} nginx issues in sorted list (will show ${Math.min(nginxInSorted.length, anomaliesPageSize)} on page ${anomaliesCurrentPage})`);
-                console.log(`✅ First ${Math.min(3, nginxInSorted.length)} nginx issues:`, 
-                    nginxInSorted.slice(0, 3).map(i => ({service: i.service, message: i.message?.substring(0, 50)})));
-            } else {
-                console.warn(`⚠️  No nginx issues found in sorted list (total issues: ${sortedIssues.length})`);
+            // Debug: Log if nginx issues are in the sorted list (only in debug mode)
+            if (console.debug) {
+                const nginxInSorted = sortedIssues.filter(i => i.service && i.service.toLowerCase().includes('nginx'));
+                if (nginxInSorted.length > 0) {
+                    console.debug(`Found ${nginxInSorted.length} nginx issues in sorted list`);
+                }
             }
 
             // Display issues for current page
@@ -9500,7 +9498,7 @@
                             const runningServices = allServices.filter(s => s.status === 'running' || s.active === true);
                             const serviceCountElement = document.getElementById('serviceCount');
                             if (serviceCountElement) {
-                                serviceCountElement.textContent = `${runningServices.length} / ${allServices.length}`;
+                                serviceCountElement.textContent = `${runningServices.length}`;
                             }
                         }
                         
@@ -9703,7 +9701,7 @@
                     const runningServices = allServices.filter(s => s.status === 'running' || s.active === true);
                     const serviceCountElement = document.getElementById('serviceCount');
                     if (serviceCountElement) {
-                        serviceCountElement.textContent = `${runningServices.length} / ${allServices.length}`;
+                        serviceCountElement.textContent = `${runningServices.length}`;
                     }
                 }
                 

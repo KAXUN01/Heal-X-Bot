@@ -6286,7 +6286,18 @@
             }
 
             // Create a deep copy to avoid modifying the original
-            const sanitized = JSON.parse(JSON.stringify(logEntry));
+            let sanitized;
+            try {
+                sanitized = JSON.parse(JSON.stringify(logEntry));
+            } catch (e) {
+                console.error('Error copying log entry:', e);
+                return logEntry; // Return original if copy fails
+            }
+            
+            // Ensure we have a valid object
+            if (!sanitized || typeof sanitized !== 'object') {
+                return logEntry;
+            }
 
             // Helper function to sanitize a string value
             function sanitizeString(text) {
@@ -6383,7 +6394,14 @@
 
             // Sanitize all string fields in the log entry
             if (sanitized.message) {
-                sanitized.message = sanitizeString(sanitized.message);
+                const sanitizedMessage = sanitizeString(sanitized.message);
+                // Ensure message is not empty after sanitization
+                if (sanitizedMessage && sanitizedMessage.trim().length > 0) {
+                    sanitized.message = sanitizedMessage;
+                } else if (sanitized.message && sanitized.message.trim().length > 0) {
+                    // If sanitization removed everything, keep original but log a warning
+                    console.warn('Sanitization removed all content from message, keeping original');
+                }
             }
             if (sanitized.source_file) {
                 sanitized.source_file = sanitizeString(sanitized.source_file);
@@ -6396,6 +6414,14 @@
             }
             if (sanitized.content) {
                 sanitized.content = sanitizeString(sanitized.content);
+            }
+
+            // Ensure required fields are present
+            if (!sanitized.message && logEntry.message) {
+                sanitized.message = sanitizeString(logEntry.message);
+            }
+            if (!sanitized.service && logEntry.service) {
+                sanitized.service = sanitizeString(logEntry.service || 'unknown');
             }
 
             return sanitized;
@@ -6459,24 +6485,77 @@
                 // Sanitize sensitive data before sending to LLM for privacy protection
                 const sanitizedPayload = sanitizeLogEntry(analysisPayload);
                 
+                // Ensure sanitized payload still has required fields
+                if (!sanitizedPayload) {
+                    throw new Error('Sanitization failed. Please try again.');
+                }
+                
+                // Fallback to original message if sanitization removed everything
+                if (!sanitizedPayload.message || sanitizedPayload.message.trim() === '') {
+                    if (analysisPayload.message && analysisPayload.message.trim() !== '') {
+                        console.warn('Sanitization removed message content, using original message');
+                        sanitizedPayload.message = analysisPayload.message;
+                    } else {
+                        throw new Error('Log entry has no message to analyze');
+                    }
+                }
+                
+                // Ensure other required fields are present
+                if (!sanitizedPayload.service) {
+                    sanitizedPayload.service = analysisPayload.service || 'unknown';
+                }
+                if (!sanitizedPayload.level) {
+                    sanitizedPayload.level = analysisPayload.level || 'INFO';
+                }
+                
                 console.log('Sending analysis request (sanitized for privacy):', sanitizedPayload);
+                
+                const requestBody = { log_entry: sanitizedPayload };
+                console.log('Request body:', JSON.stringify(requestBody, null, 2));
                 
                 const response = await fetch('/api/gemini/analyze-log', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ log_entry: sanitizedPayload })
+                    body: JSON.stringify(requestBody)
                 });
 
                 if (!response.ok) {
-                    const errorText = await response.text();
+                    let errorText;
+                    try {
+                        errorText = await response.text();
+                        // Try to parse as JSON for better error messages
+                        try {
+                            const errorJson = JSON.parse(errorText);
+                            if (errorJson.detail) {
+                                errorText = Array.isArray(errorJson.detail) 
+                                    ? errorJson.detail.map(e => e.msg || e.message || JSON.stringify(e)).join('; ')
+                                    : errorJson.detail;
+                            } else if (errorJson.message) {
+                                errorText = errorJson.message;
+                            }
+                        } catch (e) {
+                            // Not JSON, use as-is
+                        }
+                    } catch (e) {
+                        errorText = `HTTP ${response.status}: ${response.statusText}`;
+                    }
                     console.error('API Error Response:', errorText);
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}. ${errorText.substring(0, 200)}`);
+                    console.error('Response status:', response.status);
+                    throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 300)}`);
                 }
 
-                const result = await response.json();
-                console.log('Analysis result:', result);
+                let result;
+                try {
+                    result = await response.json();
+                    console.log('Analysis result:', result);
+                } catch (e) {
+                    console.error('Error parsing JSON response:', e);
+                    const text = await response.text();
+                    console.error('Response text:', text);
+                    throw new Error('Invalid JSON response from server');
+                }
 
                 if (result.status === 'success') {
                     // Pass the panel and log entry to displayAIAnalysis

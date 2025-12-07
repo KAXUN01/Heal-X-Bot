@@ -52,15 +52,15 @@ class ServiceManager:
         logger.info("Initializing monitoring services...")
         
         try:
-            # Initialize Gemini AI log analyzer
+            # Initialize Groq AI log analyzer
             try:
-                from gemini_log_analyzer import initialize_gemini_analyzer
-                gemini_analyzer = initialize_gemini_analyzer()
-                self.register_service('gemini_analyzer', gemini_analyzer)
-                logger.info("✅ Gemini AI log analyzer initialized")
+                from groq_log_analyzer import initialize_groq_analyzer
+                groq_analyzer = initialize_groq_analyzer()
+                self.register_service('groq_analyzer', groq_analyzer)
+                logger.info("✅ Groq AI log analyzer initialized")
             except Exception as e:
-                logger.warning(f"⚠️  Gemini analyzer not available: {e}")
-                gemini_analyzer = None
+                logger.warning(f"⚠️  Groq analyzer not available: {e}")
+                groq_analyzer = None
             
             # Initialize system-wide log collector
             try:
@@ -113,7 +113,7 @@ class ServiceManager:
                 
                 # Initialize root cause analyzer
                 root_cause_analyzer = initialize_root_cause_analyzer(
-                    gemini_analyzer=gemini_analyzer
+                    groq_analyzer=groq_analyzer
                 )
                 self.register_service('root_cause_analyzer', root_cause_analyzer)
                 
@@ -131,7 +131,7 @@ class ServiceManager:
             try:
                 from ..healing import initialize_auto_healer
                 auto_healer = initialize_auto_healer(
-                    gemini_analyzer=gemini_analyzer,
+                    groq_analyzer=groq_analyzer,
                     system_log_collector=system_log_collector,
                     critical_services_monitor=critical_services_monitor,
                     container_healer=container_healer,

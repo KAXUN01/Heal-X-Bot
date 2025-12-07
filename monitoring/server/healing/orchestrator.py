@@ -40,13 +40,13 @@ class AutoHealer:
     - Logs all healing actions
     """
     
-    def __init__(self, gemini_analyzer=None, system_log_collector=None, 
+    def __init__(self, groq_analyzer=None, system_log_collector=None, 
                  critical_services_monitor=None, container_healer=None,
                  root_cause_analyzer=None, discord_notifier=None, event_emitter=None):
         """Initialize AutoHealer
         
         Args:
-            gemini_analyzer: Gemini AI analyzer instance
+            groq_analyzer: Groq AI analyzer instance
             system_log_collector: System log collector instance
             critical_services_monitor: Critical services monitor instance
             container_healer: Container healer instance
@@ -54,7 +54,7 @@ class AutoHealer:
             discord_notifier: Discord notification function
             event_emitter: Event emitter instance
         """
-        self.gemini_analyzer = gemini_analyzer
+        self.groq_analyzer = groq_analyzer
         self.system_log_collector = system_log_collector
         self.critical_services_monitor = critical_services_monitor
         self.container_healer = container_healer
@@ -264,12 +264,12 @@ class AutoHealer:
         
         try:
             # Step 1: Analyze error with AI
-            if not self.gemini_analyzer:
+            if not self.groq_analyzer:
                 healing_result['error_message'] = 'Gemini analyzer not available'
                 self.history.record(healing_result)
                 return healing_result
             
-            analysis = self.gemini_analyzer.analyze_log(error)
+            analysis = self.groq_analyzer.analyze_error_log(error)
             if not analysis:
                 healing_result['error_message'] = 'AI analysis failed'
                 self.history.record(healing_result)
@@ -646,13 +646,13 @@ class AutoHealer:
         return self.history.get_statistics()
 
 
-def initialize_auto_healer(gemini_analyzer=None, system_log_collector=None, 
+def initialize_auto_healer(groq_analyzer=None, system_log_collector=None, 
                           critical_services_monitor=None, container_healer=None,
                           root_cause_analyzer=None, discord_notifier=None, event_emitter=None):
     """Initialize the auto-healer (singleton pattern)
     
     Args:
-        gemini_analyzer: Gemini AI analyzer instance
+        groq_analyzer: Groq AI analyzer instance
         system_log_collector: System log collector instance
         critical_services_monitor: Critical services monitor instance
         container_healer: Container healer instance
@@ -667,7 +667,7 @@ def initialize_auto_healer(gemini_analyzer=None, system_log_collector=None,
     
     if _auto_healer_instance is None:
         _auto_healer_instance = AutoHealer(
-            gemini_analyzer=gemini_analyzer,
+            groq_analyzer=groq_analyzer,
             system_log_collector=system_log_collector,
             critical_services_monitor=critical_services_monitor,
             container_healer=container_healer,

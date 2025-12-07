@@ -27,9 +27,9 @@ try:
 except ImportError:
     from service_discovery import ServiceDiscovery
 try:
-    from .gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
+    from .groq_log_analyzer import initialize_groq_analyzer, groq_analyzer
 except ImportError:
-    from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
+    from groq_log_analyzer import initialize_groq_analyzer, groq_analyzer
 try:
     from .system_log_collector import initialize_system_log_collector, get_system_log_collector
 except ImportError:
@@ -62,10 +62,10 @@ env_path = Path(__file__).parent.parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 # Verify critical environment variables
-if not os.getenv('GEMINI_API_KEY') and not os.getenv('GOOGLE_API_KEY'):
-    print("⚠️  WARNING: GEMINI_API_KEY not found in .env file")
+if not os.getenv('GROQ_API_KEY'):
+    print("⚠️  WARNING: GROQ_API_KEY not found in .env file")
     print("   AI log analysis will not work without this key")
-    print("   Please add GEMINI_API_KEY to your .env file")
+    print("   Please add GROQ_API_KEY to your .env file")
 
 app = Flask(__name__)
 # Set Flask configuration to avoid KeyError (must be set before Bootstrap)
@@ -90,8 +90,8 @@ log_monitoring_service = None
 centralized_logging_service = None
 centralized_logger = None  # Alias for endpoints
 service_discovery = None
-gemini_log_analyzer_service = None
-gemini_analyzer = None  # Alias for endpoints
+groq_log_analyzer_service = None
+groq_analyzer = None  # Alias for endpoints
 log_monitor = None  # Alias for endpoints
 system_log_collector = None  # System-wide log collector
 critical_services_monitor = None  # Critical services monitor
@@ -758,10 +758,10 @@ def get_discovery_summary():
 def analyze_single_log():
     """Analyze a single log entry using Gemini AI"""
     try:
-        if not gemini_analyzer:
+        if not groq_analyzer:
             return jsonify({
                 'status': 'error',
-                'message': 'Gemini analyzer not initialized. Check GEMINI_API_KEY'
+                'message': 'Groq analyzer not initialized. Check GROQ_API_KEY'
             }), 503
         
         log_entry = request.json
@@ -773,7 +773,7 @@ def analyze_single_log():
             }), 400
         
         # Analyze the log
-        analysis = gemini_analyzer.analyze_error_log(log_entry)
+        analysis = groq_analyzer.analyze_error_log(log_entry)
         
         return jsonify(analysis)
     
@@ -787,10 +787,10 @@ def analyze_single_log():
 def analyze_log_pattern():
     """Analyze multiple logs for patterns using Gemini AI"""
     try:
-        if not gemini_analyzer:
+        if not groq_analyzer:
             return jsonify({
                 'status': 'error',
-                'message': 'Gemini analyzer not initialized'
+                'message': 'Groq analyzer not initialized'
             }), 503
         
         data = request.json
@@ -804,7 +804,7 @@ def analyze_log_pattern():
             }), 400
         
         # Analyze patterns
-        analysis = gemini_analyzer.analyze_multiple_logs(log_entries, limit=limit)
+        analysis = groq_analyzer.analyze_multiple_logs(log_entries, limit=limit)
         
         return jsonify(analysis)
     
@@ -818,10 +818,10 @@ def analyze_log_pattern():
 def analyze_service_health(service_name):
     """Analyze overall health of a service using Gemini AI"""
     try:
-        if not gemini_analyzer:
+        if not groq_analyzer:
             return jsonify({
                 'status': 'error',
-                'message': 'Gemini analyzer not initialized'
+                'message': 'Groq analyzer not initialized'
             }), 503
         
         if not centralized_logger:
@@ -841,7 +841,7 @@ def analyze_service_health(service_name):
             }), 404
         
         # Analyze service health
-        analysis = gemini_analyzer.analyze_service_health(service_name, logs)
+        analysis = groq_analyzer.analyze_service_health(service_name, logs)
         
         return jsonify(analysis)
     
@@ -855,7 +855,7 @@ def analyze_service_health(service_name):
 def quick_analyze_recent_errors():
     """Quick analysis of recent errors from centralized logs"""
     try:
-        if not gemini_analyzer or not centralized_logger:
+        if not groq_analyzer or not centralized_logger:
             return jsonify({
                 'status': 'error',
                 'message': 'Services not initialized'
@@ -879,7 +879,7 @@ def quick_analyze_recent_errors():
             })
         
         # Analyze top errors
-        analysis = gemini_analyzer.analyze_multiple_logs(error_logs[:10])
+        analysis = groq_analyzer.analyze_multiple_logs(error_logs[:10])
         
         return jsonify(analysis)
     
@@ -892,7 +892,7 @@ def quick_analyze_recent_errors():
 def initialize_services():
     """Initialize all monitoring services"""
     global log_monitoring_service, centralized_logging_service, centralized_logger
-    global service_discovery, gemini_log_analyzer_service, gemini_analyzer, log_monitor
+    global service_discovery, groq_log_analyzer_service, groq_analyzer, log_monitor
     global system_log_collector, critical_services_monitor, auto_healer
     
     try:
@@ -911,17 +911,17 @@ def initialize_services():
         # service_discovery.discover_all_services()
         print("⚠️  Service discovery DISABLED (monitoring system services only)")
         
-        # Initialize Gemini AI log analyzer (for system log analysis)
+        # Initialize Groq AI log analyzer (for system log analysis)
         # Get API key from environment (reload to ensure latest value)
-        api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
-        gemini_log_analyzer_service = initialize_gemini_analyzer(api_key=api_key)
-        gemini_analyzer = gemini_log_analyzer_service  # Set alias for endpoints
-        if gemini_analyzer and gemini_analyzer.model:
-            print("✅ Gemini AI log analyzer initialized with API key")
+        api_key = os.getenv('GROQ_API_KEY')
+        groq_log_analyzer_service = initialize_groq_analyzer(api_key=api_key)
+        groq_analyzer = groq_log_analyzer_service  # Set alias for endpoints
+        if groq_analyzer and groq_analyzer.client:
+            print("✅ Groq AI log analyzer initialized with API key")
         elif api_key:
-            print(f"⚠️  Gemini AI log analyzer initialized but model not available (API key length: {len(api_key)})")
+            print(f"⚠️  Groq AI log analyzer initialized but client not available (API key length: {len(api_key)})")
         else:
-            print("⚠️  Gemini AI log analyzer initialized without API key (AI analysis disabled)")
+            print("⚠️  Groq AI log analyzer initialized without API key (AI analysis disabled)")
         
         # Initialize system-wide log collector (monitors Docker, systemd, etc.)
         system_log_collector = initialize_system_log_collector()
@@ -959,7 +959,7 @@ def initialize_services():
             
             # Initialize root cause analyzer
             root_cause_analyzer = initialize_root_cause_analyzer(
-                gemini_analyzer=gemini_analyzer
+                groq_analyzer=groq_analyzer
             )
             
             # Initialize fault detector
@@ -971,7 +971,7 @@ def initialize_services():
             
             # Initialize AI-powered auto-healer with cloud capabilities
             auto_healer = initialize_auto_healer(
-                gemini_analyzer=gemini_analyzer,
+                groq_analyzer=groq_analyzer,
                 system_log_collector=system_log_collector,
                 critical_services_monitor=critical_services_monitor,
                 container_healer=container_healer,
@@ -988,7 +988,7 @@ def initialize_services():
             print(f"⚠️  Cloud simulation components not available: {e}")
             # Fallback to basic auto-healer
             auto_healer = initialize_auto_healer(
-                gemini_analyzer=gemini_analyzer,
+                groq_analyzer=groq_analyzer,
                 system_log_collector=system_log_collector,
                 critical_services_monitor=critical_services_monitor
             )
@@ -996,7 +996,7 @@ def initialize_services():
             auto_healer.start_monitoring(interval_seconds=60)
         
         print(f"\n📊 Active Services:")
-        print(f"   - gemini_analyzer: {gemini_analyzer is not None} (AI analysis)")
+        print(f"   - groq_analyzer: {groq_analyzer is not None} (AI analysis)")
         print(f"   - system_log_collector: {system_log_collector is not None} (General system monitoring)")
         print(f"   - critical_services_monitor: {critical_services_monitor is not None} (Critical services)")
         print(f"   - auto_healer: {auto_healer is not None} (AI-powered self-healing)")

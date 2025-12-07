@@ -277,16 +277,20 @@ fi
     }
     python3 -m pip install --upgrade "numpy<2" "typing-extensions>=4.12.0" googleapis-common-protos -q 2>/dev/null || true
     
-    # Verify protobuf version and test import
+    # Verify protobuf version and test compatibility
     PROTOBUF_VERSION=$(python3 -m pip show protobuf 2>/dev/null | grep Version | awk '{print $2}' || echo "unknown")
     log_info "Protobuf version: $PROTOBUF_VERSION"
     
-    # Test protobuf import
-    if python3 -c "from google.protobuf import runtime_version" 2>/dev/null; then
-        log_success "Protobuf is compatible with TensorFlow"
+    # Verify protobuf is importable and version is correct
+    if [ "$PROTOBUF_VERSION" = "4.25.3" ] && python3 -c "import google.protobuf" 2>/dev/null; then
+        # Test TensorFlow import if available (optional check)
+        if python3 -c "import tensorflow as tf" 2>/dev/null; then
+            log_success "Protobuf 4.25.3 is compatible with TensorFlow"
+        else
+            log_success "Protobuf 4.25.3 installed successfully (TensorFlow will be checked when imported)"
+        fi
     else
-        log_warning "Protobuf runtime_version not available - TensorFlow may have issues"
-        log_info "Trying to fix by reinstalling protobuf..."
+        log_warning "Protobuf version mismatch or import failed - attempting reinstall..."
         python3 -m pip install --force-reinstall --no-deps "protobuf==4.25.3" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || true
     fi
     

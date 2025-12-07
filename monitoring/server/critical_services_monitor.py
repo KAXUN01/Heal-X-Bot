@@ -26,7 +26,6 @@ class CriticalServicesMonitor:
                 'systemd-journald': 'System logging daemon - core logging',
                 'systemd-logind': 'Login manager - handles user sessions',
                 'dbus': 'Message bus - inter-process communication',
-                'nginx': 'Web server - HTTP/HTTPS service',
             },
             'IMPORTANT': {
                 'cron': 'Task scheduler - runs scheduled jobs',
@@ -334,24 +333,13 @@ class CriticalServicesMonitor:
                             
                             # PRIORITY 5: Check for common service names in message or identifiers
                             if not matched_service:
-                                if ('nginx' in message or 'nginx' in syslog_lower or 
-                                    'nginx' in service_lower or 'nginx' in unit_lower):
-                                    matched_service = 'nginx'
-                                    matched_category = 'CRITICAL'
-                                elif ('docker' in message or 'docker' in syslog_lower or 
+                                if ('docker' in message or 'docker' in syslog_lower or 
                                       'docker' in service_lower or 'docker' in unit_lower):
                                     matched_service = 'docker'
                                     matched_category = 'CRITICAL'
                                 elif ('apache' in message or 'httpd' in message or 
                                       'apache' in syslog_lower or 'httpd' in syslog_lower):
                                     matched_service = 'apache'
-                                    matched_category = 'IMPORTANT'
-                                elif ('mysql' in message or 'mariadb' in message or 
-                                      'mysql' in syslog_lower or 'mariadb' in syslog_lower):
-                                    matched_service = 'mysql'
-                                    matched_category = 'IMPORTANT'
-                                elif ('postgres' in message or 'postgres' in syslog_lower):
-                                    matched_service = 'postgresql'
                                     matched_category = 'IMPORTANT'
                             
                             # PRIORITY 6: Fallback - skip "sudo" logs unless they mention a service
@@ -736,24 +724,13 @@ class CriticalServicesMonitor:
                             
                             # PRIORITY 5: Check for common service names
                             if not matched_service:
-                                if ('nginx' in message_lower or 'nginx' in syslog_lower or 
-                                    'nginx' in service_lower or 'nginx' in unit_lower):
-                                    matched_service = 'nginx'
-                                    matched_category = 'CRITICAL'
-                                elif ('docker' in message_lower or 'docker' in syslog_lower or 
+                                if ('docker' in message_lower or 'docker' in syslog_lower or 
                                       'docker' in service_lower or 'docker' in unit_lower):
                                     matched_service = 'docker'
                                     matched_category = 'CRITICAL'
                                 elif ('apache' in message_lower or 'httpd' in message_lower or 
                                       'apache' in syslog_lower or 'httpd' in syslog_lower):
                                     matched_service = 'apache'
-                                    matched_category = 'IMPORTANT'
-                                elif ('mysql' in message_lower or 'mariadb' in message_lower or 
-                                      'mysql' in syslog_lower or 'mariadb' in syslog_lower):
-                                    matched_service = 'mysql'
-                                    matched_category = 'IMPORTANT'
-                                elif ('postgres' in message_lower or 'postgres' in syslog_lower):
-                                    matched_service = 'postgresql'
                                     matched_category = 'IMPORTANT'
                             
                             # PRIORITY 6: Fallback - skip "sudo" logs unless they mention a service

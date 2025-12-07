@@ -344,7 +344,7 @@ class AutoHealer:
         
         # Service restart
         if any(keyword in solution_text.lower() for keyword in ['restart', 'reload', 'systemctl']):
-            if 'systemd' in service or any(svc in service for svc in ['docker', 'apache', 'nginx', 'cron']):
+            if 'systemd' in service or any(svc in service for svc in ['docker', 'apache', 'cron']):
                 commands.append({
                     'type': 'restart_service',
                     'service': service,

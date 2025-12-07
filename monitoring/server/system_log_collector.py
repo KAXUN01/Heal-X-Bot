@@ -26,7 +26,6 @@ class SystemLogCollector:
             'kern': {'enabled': True, 'parser': self.parse_kern_log},
             'systemd': {'enabled': True, 'parser': self.parse_systemd_journal},
             'apache': {'enabled': True, 'parser': self.parse_apache_logs},
-            'nginx': {'enabled': True, 'parser': self.parse_nginx_logs},
         }
         
         self.collected_logs = []

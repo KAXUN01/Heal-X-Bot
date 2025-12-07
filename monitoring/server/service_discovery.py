@@ -275,8 +275,8 @@ class ServiceDiscovery:
         
         # Common service names to look for
         target_services = [
-            'nginx', 'apache', 'httpd', 'apache2',
-            'mysql', 'mariadb', 'postgresql', 'postgres', 'mongodb',
+            'apache', 'httpd', 'apache2',
+            'mongodb',
             'redis', 'memcached',
             'docker', 'containerd',
             'elasticsearch', 'kibana', 'logstash'
@@ -317,9 +317,6 @@ class ServiceDiscovery:
             common_log_dirs = [
                 '/var/log',
                 '/var/log/apache2',
-                '/var/log/nginx',
-                '/var/log/mysql',
-                '/var/log/postgresql',
             ]
             
             # Also explicitly add common system log files

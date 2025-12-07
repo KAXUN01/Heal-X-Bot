@@ -330,7 +330,7 @@ def load_config():
     "memory_threshold": 85.0,
     "disk_threshold": 80.0,
         "discord_webhook": discord_webhook,
-    "services_to_monitor": ["nginx", "mysql", "ssh", "docker", "postgresql"],
+    "services_to_monitor": ["ssh", "docker"],
     "model_service_url": os.getenv("MODEL_SERVICE_URL", "http://localhost:8080"),
         "notification_cooldown_minutes": notification_cooldown_minutes,
         "notification_severity_cooldowns": severity_cooldowns,

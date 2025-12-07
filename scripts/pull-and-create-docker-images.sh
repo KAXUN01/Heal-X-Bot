@@ -1,4 +1,7 @@
 #!/bin/bash
+# DEPRECATED: This script creates nginx, mysql, and postgresql containers
+# These services have been removed from the monitoring system.
+# DO NOT USE - This script is kept for reference only.
 # Pull and create Docker containers for nginx, mysql, and postgresql
 
 set -e

@@ -14,7 +14,7 @@ class SystemHealingActions:
     """System-level healing actions"""
     
     # Safe services that can be restarted
-    SAFE_SERVICES = ['docker', 'apache2', 'nginx', 'systemd-resolved', 'cron', 'ssh']
+    SAFE_SERVICES = ['docker', 'apache2', 'systemd-resolved', 'cron', 'ssh']
     
     # Safe directories for permission fixes
     SAFE_DIRS = ['/usr/local/bin', '/var/log', '/opt', '/home']

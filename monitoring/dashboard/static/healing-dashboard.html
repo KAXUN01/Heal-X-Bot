@@ -2300,7 +2300,33 @@
 
         <!-- Autonomous Self-Healing System Tab -->
         <div id="auto-healing" class="tab-content">
-            <h2 style="margin-bottom: 1.5rem; font-size: 1.75rem; font-weight: 600;">🤖 Autonomous Self-Healing</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                <h2 style="margin: 0; font-size: 1.75rem; font-weight: 600;">🤖 Autonomous Self-Healing</h2>
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.5rem 1rem; background: var(--bg-secondary); border-radius: 0.375rem; border: 1px solid var(--border-color); user-select: none;">
+                    <input type="checkbox" id="autoHealingDemoToggle" onchange="toggleAutoHealingDemo()" style="cursor: pointer; width: 18px; height: 18px;">
+                    <span style="font-weight: 500; color: var(--text-primary);">
+                        <i class="fas fa-play-circle"></i> Demo Mode
+                    </span>
+                </label>
+            </div>
+            
+            <!-- Demo Status Panel -->
+            <div id="demoStatusPanel" style="display: none; margin-bottom: 1.5rem;" class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <h3 style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">
+                        <i class="fas fa-vial"></i> Demo Status
+                    </h3>
+                    <button class="btn btn-secondary" onclick="stopAutoHealingDemo()" style="padding: 0.25rem 0.75rem; font-size: 0.875rem; min-height: 32px;">
+                        <i class="fas fa-stop"></i> Stop
+                    </button>
+                </div>
+                <div id="demoStatusContent" style="color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Initializing demo...</span>
+                    </div>
+                </div>
+            </div>
             
             <!-- Active Faults -->
             <div class="card" style="margin-bottom: 1.5rem;">
@@ -3206,6 +3232,12 @@
         function switchTab(tabName, event) {
             // Fix event handling - event may not be passed
             const targetTab = event?.target || document.querySelector(`.tab[onclick*="${tabName}"]`);
+            
+            // Clean up auto-healing controllers if switching away from auto-healing tab
+            const currentActiveTab = document.querySelector('.tab-content.active');
+            if (currentActiveTab && currentActiveTab.id === 'auto-healing' && tabName !== 'auto-healing') {
+                cleanupAutoHealingControllers();
+            }
             
             // Update tab UI first (immediate visual feedback)
             document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
@@ -8264,7 +8296,37 @@
         
         let healingPerformanceChart = null;
         
+        // Track active AbortControllers to clean them up when switching tabs
+        const activeAbortControllers = new Map();
+        
+        // Cleanup function for abort controllers when tab is switched away
+        function cleanupAutoHealingControllers() {
+            for (const [key, controller] of activeAbortControllers.entries()) {
+                if (!controller.signal.aborted) {
+                    controller.abort();
+                }
+                activeAbortControllers.delete(key);
+            }
+        }
+        
+        // Helper function to check if auto-healing tab is active
+        function isAutoHealingTabActive() {
+            const autoHealingTab = document.getElementById('auto-healing');
+            return autoHealingTab && autoHealingTab.classList.contains('active');
+        }
+        
         async function updateAutoHealingDashboard() {
+            // Check if tab is still active before starting
+            if (!isAutoHealingTabActive()) {
+                return;
+            }
+            
+            // Clean up any existing controller for this function
+            const existingController = activeAbortControllers.get('updateAutoHealingDashboard');
+            if (existingController && !existingController.signal.aborted) {
+                existingController.abort();
+            }
+            
             // Show loading state
             const statusEl = document.getElementById('autoHealingStatus');
             if (statusEl) {
@@ -8274,6 +8336,7 @@
             
             try {
                 const controller = new AbortController();
+                activeAbortControllers.set('updateAutoHealingDashboard', controller);
                 const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased timeout to 10s
                 
                 // Fetch healing history and statistics
@@ -8282,6 +8345,12 @@
                 });
                 
                 clearTimeout(timeoutId);
+                activeAbortControllers.delete('updateAutoHealingDashboard');
+                
+                // Check if tab is still active before processing response
+                if (!isAutoHealingTabActive()) {
+                    return;
+                }
                 
                 if (!response.ok) {
                     if (response.status === 404 || response.status === 503) {
@@ -8300,6 +8369,11 @@
                 }
                 
                 const data = await response.json();
+                
+                // Check again before updating UI
+                if (!isAutoHealingTabActive()) {
+                    return;
+                }
                 
                 if (data.success) {
                     // Update all components with data
@@ -8324,32 +8398,56 @@
                     }
                 }
             } catch (error) {
-                console.error('Error updating auto-healing dashboard:', error);
+                activeAbortControllers.delete('updateAutoHealingDashboard');
+                
+                // Only log errors if tab is still active (suppress expected AbortErrors when tab switched away)
+                if (!isAutoHealingTabActive() && error.name === 'AbortError') {
+                    return; // Suppress expected AbortError when tab is not active
+                }
                 
                 if (error.name === 'AbortError') {
-                    if (statusEl) {
-                        statusEl.innerHTML = '<i class="fas fa-clock"></i> Timeout';
-                        statusEl.style.color = 'var(--accent-yellow)';
+                    // Only show UI feedback if tab is active
+                    if (isAutoHealingTabActive()) {
+                        if (statusEl) {
+                            statusEl.innerHTML = '<i class="fas fa-clock"></i> Timeout';
+                            statusEl.style.color = 'var(--accent-yellow)';
+                        }
+                        showNotification('Request timeout - service may be slow to respond', 'warning');
                     }
-                    showNotification('Request timeout - service may be slow to respond', 'warning');
                 } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-                    if (statusEl) {
-                        statusEl.innerHTML = '<i class="fas fa-unlink"></i> Offline';
-                        statusEl.style.color = 'var(--accent-red)';
+                    if (isAutoHealingTabActive()) {
+                        if (statusEl) {
+                            statusEl.innerHTML = '<i class="fas fa-unlink"></i> Offline';
+                            statusEl.style.color = 'var(--accent-red)';
+                        }
+                        showNotification('Unable to connect to auto-healing service', 'error');
                     }
-                    showNotification('Unable to connect to auto-healing service', 'error');
                 } else {
-                    if (statusEl) {
-                        statusEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> Error';
-                        statusEl.style.color = 'var(--accent-red)';
+                    console.error('Error updating auto-healing dashboard:', error);
+                    if (isAutoHealingTabActive()) {
+                        if (statusEl) {
+                            statusEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> Error';
+                            statusEl.style.color = 'var(--accent-red)';
+                        }
+                        showNotification(`Error loading dashboard: ${error.message}`, 'error');
                     }
-                    showNotification(`Error loading dashboard: ${error.message}`, 'error');
                 }
             }
         }
         
         // Load auto-healing configuration
         async function loadAutoHealingConfig() {
+            // Check if tab is still active before starting
+            if (!isAutoHealingTabActive()) {
+                return;
+            }
+            
+            // Clean up any existing controller for this function
+            const existingController = activeAbortControllers.get('loadAutoHealingConfig');
+            if (existingController && !existingController.signal.aborted) {
+                existingController.abort();
+            }
+            
             const configContainer = document.getElementById('autoHealingConfig');
             const loadingIndicator = document.getElementById('autoHealingConfigLoading');
             const configForm = document.getElementById('autoHealingConfigForm');
@@ -8360,19 +8458,28 @@
             
             try {
                 const controller = new AbortController();
+                activeAbortControllers.set('loadAutoHealingConfig', controller);
                 const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased timeout
                 
                 const response = await fetch('/api/auto-healer/status', {
                     signal: controller.signal
                 });
                 clearTimeout(timeoutId);
+                activeAbortControllers.delete('loadAutoHealingConfig');
+                
+                // Check if tab is still active before processing response
+                if (!isAutoHealingTabActive()) {
+                    return;
+                }
                 
                 if (!response.ok) {
                     if (response.status === 404 || response.status === 503) {
                         // Show form even if service unavailable, with default values
                         if (loadingIndicator) loadingIndicator.style.display = 'none';
                         if (configForm) configForm.style.display = 'flex';
-                        showNotification('Auto-healer service unavailable - using default values', 'warning');
+                        if (isAutoHealingTabActive()) {
+                            showNotification('Auto-healer service unavailable - using default values', 'warning');
+                        }
                         
                         // Set default values
                         const enabledCheckbox = document.getElementById('healingEnabled');
@@ -8391,6 +8498,11 @@
                 }
                 
                 const data = await response.json();
+                
+                // Check again before updating UI
+                if (!isAutoHealingTabActive()) {
+                    return;
+                }
                 
                 // Hide loading, show form
                 if (loadingIndicator) loadingIndicator.style.display = 'none';
@@ -8433,7 +8545,9 @@
                     // Show form even on error, with default values
                     if (loadingIndicator) loadingIndicator.style.display = 'none';
                     if (configForm) configForm.style.display = 'flex';
-                    showNotification(`Failed to load configuration: ${data.message || 'Unknown error'} - using defaults`, 'error');
+                    if (isAutoHealingTabActive()) {
+                        showNotification(`Failed to load configuration: ${data.message || 'Unknown error'} - using defaults`, 'error');
+                    }
                     
                     // Set default values
                     const enabledCheckbox = document.getElementById('healingEnabled');
@@ -8447,16 +8561,26 @@
                     if (maxAttemptsInput) maxAttemptsInput.value = 3;
                 }
             } catch (error) {
-                console.error('Error loading auto-healing configuration:', error);
+                activeAbortControllers.delete('loadAutoHealingConfig');
+                
+                // Only log errors if tab is still active (suppress expected AbortErrors when tab switched away)
+                if (!isAutoHealingTabActive() && error.name === 'AbortError') {
+                    return; // Suppress expected AbortError when tab is not active
+                }
                 
                 // Always show form, even on error
                 if (loadingIndicator) loadingIndicator.style.display = 'none';
                 if (configForm) configForm.style.display = 'flex';
                 
                 if (error.name === 'AbortError') {
-                    showNotification('Configuration load timeout - using default values', 'warning');
+                    if (isAutoHealingTabActive()) {
+                        showNotification('Configuration load timeout - using default values', 'warning');
+                    }
                 } else {
-                    showNotification('Failed to load configuration - using default values', 'error');
+                    console.error('Error loading auto-healing configuration:', error);
+                    if (isAutoHealingTabActive()) {
+                        showNotification('Failed to load configuration - using default values', 'error');
+                    }
                 }
                 
                 // Set default values on error
@@ -8529,6 +8653,262 @@
                 showNotification('Failed to save auto-healing configuration', 'error');
             }
         }
+        
+        // ============================================================================
+        // Auto-Healing Demo Mode Functions
+        // ============================================================================
+        
+        let autoHealingDemoActive = false;
+        let autoHealingDemoInterval = null;
+        
+        function toggleAutoHealingDemo() {
+            const checkbox = document.getElementById('autoHealingDemoToggle');
+            const statusPanel = document.getElementById('demoStatusPanel');
+            
+            if (checkbox && checkbox.checked) {
+                // Start demo mode
+                autoHealingDemoActive = true;
+                if (statusPanel) statusPanel.style.display = 'block';
+                runAutoHealingDemo();
+            } else {
+                // Stop demo mode
+                stopAutoHealingDemo();
+            }
+        }
+        
+        function stopAutoHealingDemo() {
+            autoHealingDemoActive = false;
+            const checkbox = document.getElementById('autoHealingDemoToggle');
+            const statusPanel = document.getElementById('demoStatusPanel');
+            
+            if (checkbox) checkbox.checked = false;
+            if (statusPanel) statusPanel.style.display = 'none';
+            
+            if (autoHealingDemoInterval) {
+                clearInterval(autoHealingDemoInterval);
+                autoHealingDemoInterval = null;
+            }
+            
+            updateDemoStatus('Demo stopped by user', 'info');
+        }
+        
+        function updateDemoStatus(message, type = 'info') {
+            const statusContent = document.getElementById('demoStatusContent');
+            if (!statusContent) return;
+            
+            const icons = {
+                'info': 'fa-info-circle',
+                'success': 'fa-check-circle',
+                'warning': 'fa-exclamation-triangle',
+                'error': 'fa-times-circle',
+                'loading': 'fa-spinner fa-spin'
+            };
+            
+            const colors = {
+                'info': 'var(--accent-blue)',
+                'success': 'var(--accent-green)',
+                'warning': 'var(--accent-yellow)',
+                'error': 'var(--accent-red)',
+                'loading': 'var(--accent-blue)'
+            };
+            
+            const icon = icons[type] || icons.info;
+            const color = colors[type] || colors.info;
+            
+            statusContent.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 0.5rem; color: ${color};">
+                    <i class="fas ${icon}"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+        }
+        
+        async function runAutoHealingDemo() {
+            if (!autoHealingDemoActive) return;
+            
+            try {
+                updateDemoStatus('Step 1: Checking cloud simulation availability...', 'loading');
+                
+                // Check if cloud simulation is available
+                let cloudAvailable = false;
+                try {
+                    const healthController = new AbortController();
+                    const healthTimeout = setTimeout(() => healthController.abort(), 5000);
+                    const healthCheck = await fetch('/api/cloud/faults?limit=1', { 
+                        signal: healthController.signal 
+                    });
+                    clearTimeout(healthTimeout);
+                    cloudAvailable = healthCheck.ok;
+                } catch (e) {
+                    cloudAvailable = false;
+                }
+                
+                if (!cloudAvailable) {
+                    updateDemoStatus('❌ Cloud simulation service is not available. Please start it first.', 'error');
+                    showNotification('Cloud simulation service unavailable. Start it with: docker compose -f config/docker-compose-cloud-sim.yml up -d', 'error');
+                    stopAutoHealingDemo();
+                    return;
+                }
+                
+                updateDemoStatus('Step 2: Injecting service crash fault...', 'loading');
+                showNotification('🎬 Demo: Injecting service crash fault', 'info');
+                
+                // Inject service crash fault
+                const injectResponse = await fetch('/api/cloud/faults/inject', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        type: 'crash',
+                        container: 'cloud-sim-api-server'
+                    })
+                });
+                
+                if (!injectResponse.ok) {
+                    throw new Error('Failed to inject fault');
+                }
+                
+                const injectData = await injectResponse.json();
+                if (!injectData.success) {
+                    throw new Error(injectData.error || 'Failed to inject fault');
+                }
+                
+                updateDemoStatus('✅ Fault injected successfully. Waiting for detection...', 'success');
+                showNotification('✅ Demo: Fault injected - waiting for detection', 'success');
+                
+                // Wait for fault detection (poll every 2 seconds, max 60 seconds)
+                updateDemoStatus('Step 3: Waiting for fault detection (this may take up to 60 seconds)...', 'loading');
+                let faultDetected = false;
+                let detectedFault = null;
+                const maxWaitTime = 60000; // 60 seconds
+                const pollInterval = 2000; // 2 seconds
+                const startTime = Date.now();
+                
+                while (Date.now() - startTime < maxWaitTime && !faultDetected && autoHealingDemoActive) {
+                    await new Promise(resolve => setTimeout(resolve, pollInterval));
+                    
+                    try {
+                        const faultsResponse = await fetch('/api/cloud/faults?limit=10');
+                        if (faultsResponse.ok) {
+                            const faultsData = await faultsResponse.json();
+                            if (faultsData.success && faultsData.faults && faultsData.faults.length > 0) {
+                                // Check for recent crash fault
+                                const recentFault = faultsData.faults.find(f => 
+                                    f.type === 'service_crash' && 
+                                    (Date.now() - new Date(f.detected_at).getTime()) < 120000 // Last 2 minutes
+                                );
+                                if (recentFault) {
+                                    faultDetected = true;
+                                    detectedFault = recentFault;
+                                    break;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Continue polling
+                    }
+                    
+                    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    updateDemoStatus(`Step 3: Waiting for fault detection... (${elapsed}s elapsed)`, 'loading');
+                }
+                
+                if (!faultDetected || !detectedFault) {
+                    updateDemoStatus('⚠️ Fault was not detected within timeout period. The system may need more time.', 'warning');
+                    showNotification('Demo: Fault detection timeout - system may still be processing', 'warning');
+                    // Continue anyway to show what we can
+                } else {
+                    updateDemoStatus('✅ Fault detected! AI analysis will be triggered automatically...', 'success');
+                    showNotification('✅ Demo: Fault detected - AI analysis in progress', 'success');
+                    
+                    // Refresh active faults to show the detected fault
+                    if (typeof updateActiveFaults === 'function') {
+                        updateActiveFaults();
+                    }
+                }
+                
+                updateDemoStatus('Step 4: Monitoring healing process...', 'loading');
+                showNotification('Demo: Monitoring automatic healing process', 'info');
+                
+                // Wait for healing to complete (poll every 3 seconds, max 120 seconds)
+                let healingComplete = false;
+                const healingMaxWait = 120000; // 120 seconds
+                const healingStartTime = Date.now();
+                
+                while (Date.now() - healingStartTime < healingMaxWait && !healingComplete && autoHealingDemoActive) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    
+                    try {
+                        const healingResponse = await fetch('/api/cloud/healing/history?limit=5');
+                        if (healingResponse.ok) {
+                            const healingData = await healingResponse.json();
+                            if (healingData.success && healingData.history && healingData.history.length > 0) {
+                                // Check for recent healing actions
+                                const recentHealing = healingData.history.find(h => 
+                                    (Date.now() - new Date(h.timestamp).getTime()) < 180000 // Last 3 minutes
+                                );
+                                if (recentHealing) {
+                                    if (recentHealing.status === 'success' || recentHealing.status === 'failed') {
+                                        healingComplete = true;
+                                        
+                                        // Refresh dashboard
+                                        if (typeof updateAutoHealingDashboard === 'function') {
+                                            updateAutoHealingDashboard();
+                                        }
+                                        if (typeof updateActiveFaults === 'function') {
+                                            updateActiveFaults();
+                                        }
+                                        
+                                        if (recentHealing.status === 'success') {
+                                            updateDemoStatus('✅ Demo complete! Healing was successful.', 'success');
+                                            showNotification('🎉 Demo: Healing completed successfully!', 'success');
+                                        } else {
+                                            updateDemoStatus('⚠️ Demo complete. Healing was attempted but may have failed.', 'warning');
+                                            showNotification('Demo: Healing attempted - check results', 'warning');
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Continue polling
+                    }
+                    
+                    const elapsed = Math.floor((Date.now() - healingStartTime) / 1000);
+                    updateDemoStatus(`Step 4: Monitoring healing process... (${elapsed}s elapsed)`, 'loading');
+                }
+                
+                if (!healingComplete && autoHealingDemoActive) {
+                    updateDemoStatus('⚠️ Demo timeout. Healing may still be in progress. Check the dashboard for updates.', 'warning');
+                    showNotification('Demo: Timeout reached - check dashboard for final status', 'warning');
+                }
+                
+                // Refresh dashboard one final time
+                if (typeof updateAutoHealingDashboard === 'function') {
+                    updateAutoHealingDashboard();
+                }
+                if (typeof updateActiveFaults === 'function') {
+                    updateActiveFaults();
+                }
+                
+                // Auto-disable demo mode after completion
+                setTimeout(() => {
+                    if (autoHealingDemoActive) {
+                        stopAutoHealingDemo();
+                        showNotification('Demo mode completed and disabled', 'info');
+                    }
+                }, 5000);
+                
+            } catch (error) {
+                console.error('Demo error:', error);
+                updateDemoStatus(`❌ Demo error: ${error.message}`, 'error');
+                showNotification(`Demo error: ${error.message}`, 'error');
+                stopAutoHealingDemo();
+            }
+        }
+        
+        // Make demo functions globally accessible
+        window.toggleAutoHealingDemo = toggleAutoHealingDemo;
+        window.stopAutoHealingDemo = stopAutoHealingDemo;
         
         // Helper function to update status badges
         function updateStatusBadge(element, enabled, text = null) {

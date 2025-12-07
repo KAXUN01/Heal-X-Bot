@@ -297,6 +297,17 @@ def initialize_log_services():
 # Initialize on startup
 initialize_log_services()
 
+# Import scaling modules (after logger is initialized)
+try:
+    from scaling import ScalingMonitor, ScalingManager, ScalingHistory
+    SCALING_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Scaling modules not available: {e}")
+    SCALING_AVAILABLE = False
+    ScalingMonitor = None
+    ScalingManager = None
+    ScalingHistory = None
+
 # Global configuration
 def load_config():
     """Load configuration from environment variables"""
@@ -355,6 +366,114 @@ if CONFIG["discord_webhook"]:
     logger.info(f"✅ Discord webhook loaded: {webhook_display}")
 else:
     logger.warning("⚠️  Discord webhook not configured. Set DISCORD_WEBHOOK in .env file to enable notifications.")
+
+# Initialize scaling modules
+scaling_manager = None
+scaling_monitor = None
+if SCALING_AVAILABLE:
+    try:
+        # Load scaling config from resource_config.json
+        import json
+        resource_config_path = Path(__file__).parent.parent.parent / 'config' / 'resource_config.json'
+        scaling_config = {}
+        if resource_config_path.exists():
+            with open(resource_config_path, 'r') as f:
+                resource_config = json.load(f)
+                scaling_config = resource_config.get('scaling', {})
+        
+        # Initialize scaling history
+        scaling_history = ScalingHistory()
+        
+        # Initialize scaling manager
+        scaling_manager = ScalingManager(history=scaling_history)
+        
+        # Initialize scaling monitor with callback
+        def on_critical_condition(metrics: Dict[str, Any]):
+            """Callback when critical condition is detected"""
+            try:
+                # Get default template from config
+                default_template = scaling_config.get('default_template', 'high')
+                
+                # Create scaling suggestion
+                reason = (
+                    f"Critical health condition detected: "
+                    f"CPU={metrics['cpu_percent']:.1f}%, "
+                    f"Memory={metrics['memory_percent']:.1f}% "
+                    f"for {metrics['duration_minutes']:.1f} minutes"
+                )
+                suggestion = scaling_manager.create_scaling_suggestion(
+                    template_id=default_template,
+                    reason=reason,
+                    metrics=metrics
+                )
+                
+                # Send Discord notification
+                embed_data = {
+                    'title': '🚨 Critical Health - Scaling Suggestion',
+                    'description': f"**Template:** {suggestion['template_name']}\n**Reason:** {reason}",
+                    'color': 15158332,  # Red
+                    'fields': [
+                        {
+                            'name': 'Current CPU',
+                            'value': f"{metrics['cpu_percent']:.1f}%",
+                            'inline': True
+                        },
+                        {
+                            'name': 'Current Memory',
+                            'value': f"{metrics['memory_percent']:.1f}%",
+                            'inline': True
+                        },
+                        {
+                            'name': 'Duration',
+                            'value': f"{metrics['duration_minutes']:.1f} minutes",
+                            'inline': True
+                        },
+                        {
+                            'name': 'Suggestion ID',
+                            'value': suggestion['id'],
+                            'inline': False
+                        }
+                    ],
+                    'footer': {
+                        'text': 'Please review and approve in dashboard'
+                    }
+                }
+                send_discord_alert(
+                    f"🚨 Critical Health Detected - Scaling Suggestion Created",
+                    'critical',
+                    embed_data,
+                    alert_type='scaling_suggestion',
+                    skip_deduplication=True
+                )
+                
+                logger.info(f"Created scaling suggestion: {suggestion['id']}")
+            except Exception as e:
+                logger.error(f"Error creating scaling suggestion: {e}", exc_info=True)
+        
+        cpu_threshold = scaling_config.get('cpu_threshold', 90.0)
+        memory_threshold = scaling_config.get('memory_threshold', 95.0)
+        critical_duration = scaling_config.get('critical_duration_minutes', 5)
+        check_interval = scaling_config.get('check_interval_seconds', 30)
+        
+        scaling_monitor = ScalingMonitor(
+            cpu_threshold=cpu_threshold,
+            memory_threshold=memory_threshold,
+            critical_duration_minutes=critical_duration,
+            check_interval_seconds=check_interval,
+            on_critical_callback=on_critical_condition
+        )
+        
+        # Start monitoring if enabled
+        if scaling_config.get('enabled', True):
+            scaling_monitor.start_monitoring()
+            logger.info("✅ Scaling monitor started")
+        else:
+            logger.info("⚠️  Scaling monitor disabled in config")
+            
+    except Exception as e:
+        logger.error(f"Error initializing scaling modules: {e}", exc_info=True)
+        scaling_manager = None
+        scaling_monitor = None
 
 # Service status cache
 service_cache = {}
@@ -4748,6 +4867,244 @@ async def update_config(data: dict):
         send_discord_alert("▶️ Auto-restart enabled - service auto-start process active")
     
     return {"success": True, "config": CONFIG}
+
+# ============================================================================
+# Scaling API Endpoints
+# ============================================================================
+
+# Pydantic models for scaling requests
+class ScalingTemplateRequest(BaseModel):
+    """Request model for creating/updating scaling templates"""
+    id: Optional[str] = Field(None, description="Template ID (required for update)")
+    name: str = Field(..., min_length=1, description="Template name")
+    description: Optional[str] = Field(None, description="Template description")
+    cpu_cores: int = Field(..., gt=0, description="CPU cores")
+    memory_gb: int = Field(..., gt=0, description="Memory in GB")
+    services: Dict[str, Dict[str, str]] = Field(..., description="Service resource allocations")
+
+class ScalingApprovalRequest(BaseModel):
+    """Request model for approving/rejecting scaling suggestions"""
+    suggestion_id: str = Field(..., description="Suggestion ID")
+    action: str = Field(..., pattern="^(approve|reject)$", description="Action: approve or reject")
+    reason: Optional[str] = Field(None, description="Optional reason for rejection")
+
+class ManualScalingRequest(BaseModel):
+    """Request model for manual scaling"""
+    template_id: str = Field(..., description="Template ID to use for scaling")
+
+@app.get("/api/scaling/status")
+async def get_scaling_status():
+    """Get current scaling status and pending suggestions"""
+    if not SCALING_AVAILABLE or not scaling_manager or not scaling_monitor:
+        return {
+            "available": False,
+            "error": "Scaling modules not available"
+        }
+    
+    try:
+        monitor_status = scaling_monitor.get_current_status()
+        manager_status = scaling_manager.get_scaling_status()
+        
+        return {
+            "available": True,
+            "monitor": monitor_status,
+            "manager": manager_status,
+            "pending_suggestions": manager_status.get('pending_suggestions_list', [])
+        }
+    except Exception as e:
+        logger.error(f"Error getting scaling status: {e}", exc_info=True)
+        return {
+            "available": True,
+            "error": str(e)
+        }
+
+@app.get("/api/scaling/templates")
+async def get_scaling_templates():
+    """Get all scaling templates"""
+    if not SCALING_AVAILABLE or not scaling_manager:
+        raise HTTPException(status_code=503, detail="Scaling modules not available")
+    
+    try:
+        templates = scaling_manager.get_templates()
+        return {"templates": templates}
+    except Exception as e:
+        logger.error(f"Error getting templates: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/scaling/templates")
+async def create_scaling_template(template: ScalingTemplateRequest):
+    """Create a new scaling template"""
+    if not SCALING_AVAILABLE or not scaling_manager:
+        raise HTTPException(status_code=503, detail="Scaling modules not available")
+    
+    try:
+        template_dict = template.dict()
+        if not template_dict.get('id'):
+            # Generate ID from name
+            template_dict['id'] = template.name.lower().replace(' ', '-')
+        
+        created_template = scaling_manager.create_template(template_dict)
+        
+        # Send Discord notification
+        send_discord_alert(
+            f"📝 Scaling Template Created: {created_template['name']}",
+            "info",
+            alert_type="scaling_template",
+            skip_deduplication=True
+        )
+        
+        return {"success": True, "template": created_template}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error creating template: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/scaling/templates/{template_id}")
+async def update_scaling_template(template_id: str, updates: dict):
+    """Update a scaling template"""
+    if not SCALING_AVAILABLE or not scaling_manager:
+        raise HTTPException(status_code=503, detail="Scaling modules not available")
+    
+    try:
+        updated_template = scaling_manager.update_template(template_id, updates)
+        
+        # Send Discord notification
+        send_discord_alert(
+            f"📝 Scaling Template Updated: {updated_template['name']}",
+            "info",
+            alert_type="scaling_template",
+            skip_deduplication=True
+        )
+        
+        return {"success": True, "template": updated_template}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error updating template: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/scaling/templates/{template_id}")
+async def delete_scaling_template(template_id: str):
+    """Delete a scaling template"""
+    if not SCALING_AVAILABLE or not scaling_manager:
+        raise HTTPException(status_code=503, detail="Scaling modules not available")
+    
+    try:
+        success = scaling_manager.delete_template(template_id)
+        if success:
+            send_discord_alert(
+                f"🗑️ Scaling Template Deleted: {template_id}",
+                "info",
+                alert_type="scaling_template",
+                skip_deduplication=True
+            )
+        return {"success": success}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error deleting template: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/scaling/approve")
+async def approve_scaling(request: ScalingApprovalRequest):
+    """Approve or reject a scaling suggestion"""
+    if not SCALING_AVAILABLE or not scaling_manager:
+        raise HTTPException(status_code=503, detail="Scaling modules not available")
+    
+    try:
+        if request.action == "approve":
+            result = scaling_manager.approve_suggestion(request.suggestion_id)
+            
+            # Send Discord notification
+            embed_data = {
+                'title': '✅ Scaling Approved and Executed',
+                'description': f"**Template:** {result.get('template_name', 'Unknown')}\n**Status:** {'Success' if result.get('success') else 'Failed'}",
+                'color': 3066993 if result.get('success') else 15158332,
+                'fields': [
+                    {
+                        'name': 'Services Updated',
+                        'value': str(result.get('services_updated', {})),
+                        'inline': False
+                    }
+                ]
+            }
+            send_discord_alert(
+                f"✅ Scaling Approved: {result.get('template_name', 'Unknown')}",
+                'success' if result.get('success') else 'error',
+                embed_data,
+                alert_type='scaling_approval',
+                skip_deduplication=True
+            )
+            
+            return {"success": True, "result": result}
+        else:
+            scaling_manager.reject_suggestion(request.suggestion_id, request.reason)
+            
+            # Send Discord notification
+            send_discord_alert(
+                f"❌ Scaling Suggestion Rejected",
+                "warning",
+                alert_type="scaling_rejection",
+                skip_deduplication=True
+            )
+            
+            return {"success": True, "message": "Suggestion rejected"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error processing scaling approval: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/scaling/manual")
+async def manual_scaling(request: ManualScalingRequest):
+    """Manually scale using a template"""
+    if not SCALING_AVAILABLE or not scaling_manager:
+        raise HTTPException(status_code=503, detail="Scaling modules not available")
+    
+    try:
+        result = scaling_manager.execute_scaling(request.template_id, triggered_by='manual')
+        
+        # Send Discord notification
+        embed_data = {
+            'title': '🔧 Manual Scaling Executed',
+            'description': f"**Template:** {result.get('template_name', 'Unknown')}\n**Status:** {'Success' if result.get('success') else 'Failed'}",
+            'color': 3066993 if result.get('success') else 15158332,
+            'fields': [
+                {
+                    'name': 'Services Updated',
+                    'value': str(result.get('services_updated', {})),
+                    'inline': False
+                }
+            ]
+        }
+        send_discord_alert(
+            f"🔧 Manual Scaling: {result.get('template_name', 'Unknown')}",
+            'success' if result.get('success') else 'error',
+            embed_data,
+            alert_type='manual_scaling',
+            skip_deduplication=True
+        )
+        
+        return {"success": result.get('success', False), "result": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error executing manual scaling: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/scaling/history")
+async def get_scaling_history(limit: Optional[int] = 50, event_type: Optional[str] = None):
+    """Get scaling history"""
+    if not SCALING_AVAILABLE or not scaling_manager:
+        raise HTTPException(status_code=503, detail="Scaling modules not available")
+    
+    try:
+        history = scaling_manager.history.get_history(limit=limit, event_type=event_type)
+        return {"history": history}
+    except Exception as e:
+        logger.error(f"Error getting scaling history: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
 # DDoS Detection & ML Model Endpoints

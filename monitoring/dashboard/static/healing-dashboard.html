@@ -1255,6 +1255,7 @@
             <button class="tab" onclick="switchTab('logs', event)">📝 Logs & AI</button>
             <button class="tab" onclick="switchTab('predictive', event)">🔮 Predictive Maintenance</button>
             <button class="tab" onclick="switchTab('cli', event)">⚡ CLI Terminal</button>
+            <button class="tab" onclick="switchTab('auto-scaling', event)">📈 Auto Scaling</button>
             <button class="tab" onclick="switchTab('auto-healing', event)">🤖 Autonomous Self-Healing & Cloud Simulation</button>
         </div>
 
@@ -2190,6 +2191,113 @@
             </div>
         </div>
 
+        <!-- Auto Scaling Tab -->
+        <div id="auto-scaling" class="tab-content">
+            <div style="margin-bottom: 2rem;">
+                <h2 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                    📈 Automatic Scaling
+                </h2>
+                <p style="color: var(--text-secondary); margin: 0;">Monitor resources and scale automatically with admin approval</p>
+            </div>
+
+            <!-- Current Resource Status -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-bottom: 1rem;">Current Resource Status</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                    <div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span>CPU Usage</span>
+                            <span id="scaling-cpu-percent" style="font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="scaling-cpu-progress" style="width: 0%; background: var(--accent-blue);"></div>
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                            Threshold: <span id="scaling-cpu-threshold">90%</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span>Memory Usage</span>
+                            <span id="scaling-memory-percent" style="font-weight: 600;">0%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="scaling-memory-progress" style="width: 0%; background: var(--accent-purple);"></div>
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                            Threshold: <span id="scaling-memory-threshold">95%</span>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span id="scaling-status-indicator" style="width: 12px; height: 12px; border-radius: 50%; background: var(--accent-green);"></span>
+                        <span id="scaling-status-text">Monitoring active</span>
+                    </div>
+                    <div id="scaling-critical-duration" style="margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-secondary);"></div>
+                </div>
+            </div>
+
+            <!-- Pending Scaling Suggestions -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3>Pending Scaling Suggestions</h3>
+                    <button class="btn btn-primary" onclick="loadScalingStatus()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div id="scaling-suggestions-list">
+                    <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No pending suggestions</p>
+                </div>
+            </div>
+
+            <!-- Manual Scaling -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <h3 style="margin-bottom: 1rem;">Manual Scaling</h3>
+                <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: end;">
+                    <div>
+                        <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Select Template</label>
+                        <select id="manual-scaling-template" style="width: 100%; padding: 0.75rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary);">
+                            <option value="">Loading templates...</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary" onclick="executeManualScaling()" id="manual-scaling-btn">
+                        <i class="fas fa-arrow-up"></i> Scale Now
+                    </button>
+                </div>
+                <div id="manual-scaling-preview" style="margin-top: 1rem; padding: 1rem; background: var(--bg-tertiary); border-radius: 8px; display: none;">
+                    <h4 style="margin-bottom: 0.5rem;">Preview Changes</h4>
+                    <div id="manual-scaling-preview-content"></div>
+                </div>
+            </div>
+
+            <!-- Scaling Templates Management -->
+            <div class="card" style="margin-bottom: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3>Scaling Templates</h3>
+                    <button class="btn btn-primary" onclick="showCreateTemplateModal()">
+                        <i class="fas fa-plus"></i> Create Template
+                    </button>
+                </div>
+                <div id="scaling-templates-list">
+                    <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading templates...</p>
+                </div>
+            </div>
+
+            <!-- Scaling History -->
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3>Scaling History</h3>
+                    <button class="btn btn-primary" onclick="loadScalingHistory()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div id="scaling-history-list" style="max-height: 500px; overflow-y: auto;">
+                    <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading history...</p>
+                </div>
+            </div>
+        </div>
+
         <!-- Autonomous Self-Healing System Tab -->
         <div id="auto-healing" class="tab-content">
             <h2 style="margin-bottom: 1.5rem; font-size: 1.75rem; font-weight: 600;">🤖 Autonomous Self-Healing</h2>
@@ -3075,6 +3183,17 @@
                     case 'cli':
                         // Initialize CLI terminal
                         initCLI();
+                        break;
+                        
+                    case 'auto-scaling':
+                        // Load scaling data
+                        await Promise.all([
+                            loadScalingStatus().catch(err => console.warn('Scaling status load failed:', err)),
+                            loadScalingTemplates().catch(err => console.warn('Scaling templates load failed:', err)),
+                            loadScalingHistory().catch(err => console.warn('Scaling history load failed:', err))
+                        ]);
+                        // Start periodic updates for scaling status
+                        startScalingStatusUpdates();
                         break;
                 }
                 
@@ -9916,6 +10035,291 @@
             
             console.log('✅ Dashboard critical path loaded successfully');
         });
+
+        // ============================================================================
+        // Scaling Functions
+        // ============================================================================
+        let scalingStatusInterval = null;
+
+        async function loadScalingStatus() {
+            try {
+                const response = await fetch('/api/scaling/status');
+                const data = await response.json();
+                
+                if (!data.available) {
+                    document.getElementById('scaling-suggestions-list').innerHTML = 
+                        '<p style="color: var(--accent-red); text-align: center; padding: 2rem;">Scaling modules not available</p>';
+                    return;
+                }
+                
+                // Update resource status
+                if (data.monitor) {
+                    const cpu = data.monitor.cpu_percent || 0;
+                    const memory = data.monitor.memory_percent || 0;
+                    const isCritical = data.monitor.is_critical || false;
+                    
+                    document.getElementById('scaling-cpu-percent').textContent = cpu.toFixed(1) + '%';
+                    document.getElementById('scaling-cpu-progress').style.width = cpu + '%';
+                    document.getElementById('scaling-memory-percent').textContent = memory.toFixed(1) + '%';
+                    document.getElementById('scaling-memory-progress').style.width = memory + '%';
+                    
+                    // Update status indicator
+                    const indicator = document.getElementById('scaling-status-indicator');
+                    const statusText = document.getElementById('scaling-status-text');
+                    const durationEl = document.getElementById('scaling-critical-duration');
+                    
+                    if (isCritical) {
+                        indicator.style.background = 'var(--accent-red)';
+                        statusText.textContent = 'Critical condition detected';
+                        const duration = data.monitor.critical_duration_seconds || 0;
+                        durationEl.textContent = `Critical for ${(duration / 60).toFixed(1)} minutes`;
+                        durationEl.style.color = 'var(--accent-red)';
+                    } else {
+                        indicator.style.background = 'var(--accent-green)';
+                        statusText.textContent = 'Monitoring active - System healthy';
+                        durationEl.textContent = '';
+                    }
+                }
+                
+                // Update pending suggestions
+                const suggestions = data.pending_suggestions || [];
+                const suggestionsList = document.getElementById('scaling-suggestions-list');
+                
+                if (suggestions.length === 0) {
+                    suggestionsList.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No pending suggestions</p>';
+                } else {
+                    suggestionsList.innerHTML = suggestions.map(s => `
+                        <div style="padding: 1.5rem; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid var(--accent-yellow);">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                                <div>
+                                    <h4 style="margin: 0 0 0.5rem 0;">${s.template_name}</h4>
+                                    <p style="color: var(--text-secondary); margin: 0; font-size: 0.9rem;">${s.reason}</p>
+                                </div>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button class="btn btn-primary" onclick="approveScaling('${s.id}')" style="padding: 0.5rem 1rem;">
+                                        <i class="fas fa-check"></i> Approve
+                                    </button>
+                                    <button class="btn btn-danger" onclick="rejectScaling('${s.id}')" style="padding: 0.5rem 1rem;">
+                                        <i class="fas fa-times"></i> Reject
+                                    </button>
+                                </div>
+                            </div>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                                <div>CPU: ${s.metrics?.cpu_percent?.toFixed(1) || 0}% | Memory: ${s.metrics?.memory_percent?.toFixed(1) || 0}%</div>
+                                <div style="margin-top: 0.25rem;">Created: ${new Date(s.created_at).toLocaleString()}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Error loading scaling status:', error);
+                showNotification('Error loading scaling status', 'error');
+            }
+        }
+
+        async function loadScalingTemplates() {
+            try {
+                const response = await fetch('/api/scaling/templates');
+                const data = await response.json();
+                const templates = data.templates || [];
+                
+                // Update templates list
+                const templatesList = document.getElementById('scaling-templates-list');
+                if (templates.length === 0) {
+                    templatesList.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No templates found</p>';
+                } else {
+                    templatesList.innerHTML = templates.map(t => `
+                        <div style="padding: 1.5rem; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: start;">
+                                <div style="flex: 1;">
+                                    <h4 style="margin: 0 0 0.5rem 0;">${t.name}</h4>
+                                    <p style="color: var(--text-secondary); margin: 0 0 1rem 0; font-size: 0.9rem;">${t.description || ''}</p>
+                                    <div style="display: flex; gap: 2rem; font-size: 0.85rem;">
+                                        <div><strong>CPU:</strong> ${t.cpu_cores} cores</div>
+                                        <div><strong>Memory:</strong> ${t.memory_gb} GB</div>
+                                    </div>
+                                    <div style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">
+                                        <strong>Services:</strong> ${Object.keys(t.services || {}).join(', ')}
+                                    </div>
+                                </div>
+                                <button class="btn btn-danger" onclick="deleteTemplate('${t.id}')" style="padding: 0.5rem 1rem; margin-left: 1rem;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                
+                // Update manual scaling dropdown
+                const select = document.getElementById('manual-scaling-template');
+                select.innerHTML = '<option value="">Select template...</option>' + 
+                    templates.map(t => `<option value="${t.id}">${t.name} (${t.cpu_cores} CPU, ${t.memory_gb}GB RAM)</option>`).join('');
+            } catch (error) {
+                console.error('Error loading templates:', error);
+                showNotification('Error loading templates', 'error');
+            }
+        }
+
+        async function loadScalingHistory() {
+            try {
+                const response = await fetch('/api/scaling/history?limit=50');
+                const data = await response.json();
+                const history = data.history || [];
+                
+                const historyList = document.getElementById('scaling-history-list');
+                if (history.length === 0) {
+                    historyList.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No history available</p>';
+                } else {
+                    historyList.innerHTML = history.map(h => {
+                        const statusColor = h.status === 'completed' ? 'var(--accent-green)' : 
+                                          h.status === 'failed' ? 'var(--accent-red)' : 
+                                          h.status === 'rejected' ? 'var(--accent-yellow)' : 'var(--text-secondary)';
+                        return `
+                            <div style="padding: 1rem; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 0.5rem; border-left: 4px solid ${statusColor};">
+                                <div style="display: flex; justify-content: space-between; align-items: start;">
+                                    <div>
+                                        <div style="font-weight: 600; margin-bottom: 0.25rem;">${h.type} - ${h.status}</div>
+                                        <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                                            ${h.template_name || 'N/A'} | ${h.triggered_by} | ${new Date(h.timestamp).toLocaleString()}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+                showNotification('Error loading history', 'error');
+            }
+        }
+
+        async function approveScaling(suggestionId) {
+            if (!confirm('Are you sure you want to approve this scaling suggestion?')) return;
+            
+            try {
+                const response = await fetch('/api/scaling/approve', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({suggestion_id: suggestionId, action: 'approve'})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Scaling approved and executed', 'success');
+                    loadScalingStatus();
+                    loadScalingHistory();
+                } else {
+                    showNotification('Error approving scaling', 'error');
+                }
+            } catch (error) {
+                console.error('Error approving scaling:', error);
+                showNotification('Error approving scaling', 'error');
+            }
+        }
+
+        async function rejectScaling(suggestionId) {
+            const reason = prompt('Enter rejection reason (optional):');
+            
+            try {
+                const response = await fetch('/api/scaling/approve', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({suggestion_id: suggestionId, action: 'reject', reason: reason || null})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Scaling suggestion rejected', 'info');
+                    loadScalingStatus();
+                    loadScalingHistory();
+                } else {
+                    showNotification('Error rejecting scaling', 'error');
+                }
+            } catch (error) {
+                console.error('Error rejecting scaling:', error);
+                showNotification('Error rejecting scaling', 'error');
+            }
+        }
+
+        async function executeManualScaling() {
+            const templateId = document.getElementById('manual-scaling-template').value;
+            if (!templateId) {
+                showNotification('Please select a template', 'warning');
+                return;
+            }
+            
+            if (!confirm('Are you sure you want to scale using this template? This will modify docker-compose.yml and restart containers.')) return;
+            
+            try {
+                const response = await fetch('/api/scaling/manual', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({template_id: templateId})
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Manual scaling executed successfully', 'success');
+                    loadScalingHistory();
+                } else {
+                    showNotification('Error executing manual scaling: ' + (data.result?.error || 'Unknown error'), 'error');
+                }
+            } catch (error) {
+                console.error('Error executing manual scaling:', error);
+                showNotification('Error executing manual scaling', 'error');
+            }
+        }
+
+        async function deleteTemplate(templateId) {
+            if (!confirm('Are you sure you want to delete this template?')) return;
+            
+            try {
+                const response = await fetch(`/api/scaling/templates/${templateId}`, {
+                    method: 'DELETE'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showNotification('Template deleted', 'success');
+                    loadScalingTemplates();
+                } else {
+                    showNotification('Error deleting template', 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting template:', error);
+                showNotification('Error deleting template', 'error');
+            }
+        }
+
+        function showCreateTemplateModal() {
+            showNotification('Template creation feature coming soon', 'info');
+        }
+
+        function startScalingStatusUpdates() {
+            // Clear existing interval
+            if (scalingStatusInterval) {
+                clearInterval(scalingStatusInterval);
+            }
+            
+            // Update every 5 seconds
+            scalingStatusInterval = setInterval(() => {
+                const autoScalingTab = document.getElementById('auto-scaling');
+                if (autoScalingTab && autoScalingTab.classList.contains('active')) {
+                    loadScalingStatus();
+                }
+            }, 5000);
+        }
+
+        // Make functions globally accessible
+        window.loadScalingStatus = loadScalingStatus;
+        window.loadScalingTemplates = loadScalingTemplates;
+        window.loadScalingHistory = loadScalingHistory;
+        window.approveScaling = approveScaling;
+        window.rejectScaling = rejectScaling;
+        window.executeManualScaling = executeManualScaling;
+        window.deleteTemplate = deleteTemplate;
+        window.showCreateTemplateModal = showCreateTemplateModal;
     </script>
 </body>
 </html>

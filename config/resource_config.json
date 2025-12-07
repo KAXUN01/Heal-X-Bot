@@ -80,13 +80,23 @@
     }
   },
   "default_profile": "medium",
+  "scaling": {
+    "enabled": true,
+    "cpu_threshold": 90.0,
+    "memory_threshold": 95.0,
+    "critical_duration_minutes": 5,
+    "check_interval_seconds": 30,
+    "suggestion_cooldown_minutes": 30,
+    "default_template": "high"
+  },
   "notes": [
     "Select a profile based on your system's available resources",
     "low: < 2GB RAM, minimal CPU - runs only essential services",
     "medium: 2-4GB RAM, moderate CPU - balanced performance (recommended)",
     "high: > 4GB RAM, high CPU - maximum monitoring frequency",
     "Profile can be set via RESOURCE_PROFILE environment variable",
-    "Individual settings can be overridden in log_config.json"
+    "Individual settings can be overridden in log_config.json",
+    "Scaling configuration: CPU > 90% AND Memory > 95% for 5 minutes triggers scaling suggestion"
   ]
 }
 

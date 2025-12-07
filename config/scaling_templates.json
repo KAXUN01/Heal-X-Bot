@@ -1,0 +1,57 @@
+{
+  "last_updated": "2025-01-19T00:00:00",
+  "templates": [
+    {
+      "id": "low",
+      "name": "Low Resources",
+      "description": "Minimal resource allocation for resource-constrained systems",
+      "cpu_cores": 1,
+      "memory_gb": 2,
+      "services": {
+        "model": {
+          "cpus": "0.5",
+          "memory": "1G"
+        },
+        "server": {
+          "cpus": "0.5",
+          "memory": "512M"
+        }
+      }
+    },
+    {
+      "id": "medium",
+      "name": "Medium Resources",
+      "description": "Balanced resource allocation (recommended)",
+      "cpu_cores": 2,
+      "memory_gb": 4,
+      "services": {
+        "model": {
+          "cpus": "1",
+          "memory": "2G"
+        },
+        "server": {
+          "cpus": "1",
+          "memory": "1G"
+        }
+      }
+    },
+    {
+      "id": "high",
+      "name": "High Resources",
+      "description": "Maximum resource allocation for high-performance systems",
+      "cpu_cores": 4,
+      "memory_gb": 8,
+      "services": {
+        "model": {
+          "cpus": "2",
+          "memory": "4G"
+        },
+        "server": {
+          "cpus": "1",
+          "memory": "2G"
+        }
+      }
+    }
+  ]
+}
+

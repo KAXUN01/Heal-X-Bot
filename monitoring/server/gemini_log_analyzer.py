@@ -29,9 +29,10 @@ class GeminiLogAnalyzer:
             try:
                 # Configure the API key
                 genai.configure(api_key=self.api_key)
-                # Try fastest models first: gemini-2.5-flash is the latest and most capable
+                # Try fastest models first: gemini-2.5-flash-lite-preview-09-2025 is the user's preferred model
                 # Fallback to other fast models if needed
                 model_priority = [
+                    "gemini-2.5-flash-lite-preview-09-2025",  # User's preferred model
                     "gemini-2.5-flash",      # Latest and most capable model
                     "gemini-1.5-flash",      # Reliable fallback
                     "gemini-2.0-flash-exp",  # Experimental fast model
@@ -39,6 +40,7 @@ class GeminiLogAnalyzer:
                 ]
                 
                 model_initialized = False
+                last_error = None
                 for model_name in model_priority:
                     try:
                         self.model = genai.GenerativeModel(model_name)
@@ -47,11 +49,16 @@ class GeminiLogAnalyzer:
                         model_initialized = True
                         break
                     except Exception as model_error:
+                        last_error = model_error
                         logger.debug(f"Failed to initialize {model_name}: {model_error}, trying next...")
                         continue
                 
                 if not model_initialized:
-                    raise Exception(f"Failed to initialize any Gemini model from: {', '.join(model_priority)}")
+                    error_msg = f"Failed to initialize any Gemini model from: {', '.join(model_priority)}"
+                    if last_error:
+                        error_msg += f"\nLast error: {str(last_error)}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
                     
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
@@ -74,24 +81,34 @@ class GeminiLogAnalyzer:
             if self.api_key and self.api_key != "your_gemini_api_key_here" and len(self.api_key) >= 20:
                 try:
                     genai.configure(api_key=self.api_key)
-                    model_priority = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.0-flash-lite"]
+                    model_priority = ["gemini-2.5-flash-lite-preview-09-2025", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.0-flash-lite"]
+                    model_initialized = False
+                    last_error = None
                     for model_name in model_priority:
                         try:
                             self.model = genai.GenerativeModel(model_name)
                             self.model_name = model_name
                             logger.info(f"Gemini model initialized with {model_name} after reloading API key")
+                            model_initialized = True
                             break
-                        except Exception:
+                        except Exception as model_error:
+                            last_error = model_error
+                            logger.debug(f"Failed to initialize {model_name} after reload: {model_error}, trying next...")
                             continue
+                    if not model_initialized:
+                        logger.error(f"Failed to initialize any model after reloading API key. Last error: {last_error}")
                 except Exception as e:
                     logger.error(f"Failed to initialize Gemini model after reloading API key: {e}")
         
         # Check again after reload attempt
         if not self.api_key or self.api_key == "your_gemini_api_key_here" or len(self.api_key) < 20:
+            api_key_info = f"API key length: {len(self.api_key) if self.api_key else 0} characters"
+            if self.api_key and self.api_key != "your_gemini_api_key_here":
+                api_key_info += f" (starts with: {self.api_key[:10]}...)"
             return {
                 'status': 'error',
                 'message': 'Gemini API key not configured or invalid',
-                'analysis': 'Please set a valid GEMINI_API_KEY in your .env file.\n\n' +
+                'analysis': f'Please set a valid GEMINI_API_KEY in your .env file.\n\n{api_key_info}\n\n' +
                            'Get your FREE API key:\n' +
                            '1. Visit: https://aistudio.google.com/app/apikey\n' +
                            '2. Click "Create API Key"\n' +
@@ -103,10 +120,23 @@ class GeminiLogAnalyzer:
             }
         
         if not self.model:
+            # Provide more helpful error message
+            error_msg = 'Gemini model not initialized. '
+            if self.api_key:
+                error_msg += f'API key is set ({len(self.api_key)} chars), but model initialization failed.\n\n'
+                error_msg += 'Possible causes:\n'
+                error_msg += '1. API key is invalid or expired\n'
+                error_msg += '2. Model name is incorrect (trying: gemini-2.5-flash-lite-preview-09-2025, gemini-2.5-flash, etc.)\n'
+                error_msg += '3. No internet connectivity\n'
+                error_msg += '4. API key doesn\'t have access to the requested models\n\n'
+                error_msg += 'Please check your API key and restart the server.'
+            else:
+                error_msg += 'Please set a valid GEMINI_API_KEY in your .env file and restart the server.'
+            
             return {
                 'status': 'error',
                 'message': 'Gemini model not initialized. Check API key configuration.',
-                'analysis': 'Please set a valid GEMINI_API_KEY in your .env file and restart the server.'
+                'analysis': error_msg
             }
         
         # Check cache first

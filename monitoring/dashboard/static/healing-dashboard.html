@@ -8750,26 +8750,92 @@
                     return;
                 }
                 
+                updateDemoStatus('Step 2: Checking container status...', 'loading');
+                
+                // First check if container exists and is running
+                try {
+                    const containerCheck = await fetch('/api/cloud/services');
+                    if (containerCheck.ok) {
+                        const servicesData = await containerCheck.json();
+                        if (servicesData.success && servicesData.services) {
+                            const apiServer = servicesData.services.find(s => s.name === 'cloud-sim-api-server');
+                            if (!apiServer) {
+                                throw new Error('Container cloud-sim-api-server not found. Make sure cloud simulation is running.');
+                            }
+                            if (apiServer.status !== 'running') {
+                                throw new Error(`Container cloud-sim-api-server is ${apiServer.status}. Please start it first.`);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // If container check fails, continue anyway - the inject endpoint will handle it
+                    console.warn('Container check failed:', e);
+                }
+                
                 updateDemoStatus('Step 2: Injecting service crash fault...', 'loading');
                 showNotification('🎬 Demo: Injecting service crash fault', 'info');
                 
                 // Inject service crash fault
-                const injectResponse = await fetch('/api/cloud/faults/inject', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        type: 'crash',
-                        container: 'cloud-sim-api-server'
-                    })
-                });
-                
-                if (!injectResponse.ok) {
-                    throw new Error('Failed to inject fault');
+                let injectResponse;
+                try {
+                    injectResponse = await fetch('/api/cloud/faults/inject', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            type: 'crash',
+                            container: 'cloud-sim-api-server'
+                        })
+                    });
+                } catch (networkError) {
+                    throw new Error(`Network error: ${networkError.message}. Make sure the dashboard API is running.`);
                 }
                 
-                const injectData = await injectResponse.json();
-                if (!injectData.success) {
-                    throw new Error(injectData.error || 'Failed to inject fault');
+                let injectData;
+                try {
+                    const responseText = await injectResponse.text();
+                    if (!responseText) {
+                        throw new Error(`Empty response from server (HTTP ${injectResponse.status})`);
+                    }
+                    try {
+                        injectData = JSON.parse(responseText);
+                    } catch (parseError) {
+                        throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}`);
+                    }
+                } catch (e) {
+                    if (e.message.includes('Invalid JSON') || e.message.includes('Empty response')) {
+                        throw e;
+                    }
+                    throw new Error(`Failed to parse response: ${e.message}`);
+                }
+                
+                if (!injectResponse.ok) {
+                    const statusText = injectResponse.statusText || 'Unknown error';
+                    const errorMsg = injectData?.error || injectData?.message || statusText;
+                    const statusCode = injectResponse.status;
+                    
+                    let userFriendlyMsg = `HTTP ${statusCode}: ${errorMsg}`;
+                    if (statusCode === 404) {
+                        userFriendlyMsg += '. The fault injection endpoint may not be available.';
+                    } else if (statusCode === 503) {
+                        userFriendlyMsg += '. Cloud simulation service may not be running.';
+                    } else if (statusCode === 500) {
+                        userFriendlyMsg += '. Server error occurred. Check container status.';
+                    }
+                    
+                    throw new Error(userFriendlyMsg);
+                }
+                
+                if (!injectData || !injectData.success) {
+                    const errorMsg = injectData?.error || injectData?.message || 'Unknown error from server';
+                    let userFriendlyMsg = `Fault injection failed: ${errorMsg}`;
+                    
+                    if (errorMsg.includes('not found') || errorMsg.includes('does not exist')) {
+                        userFriendlyMsg += ' Make sure the cloud-sim-api-server container is running.';
+                    } else if (errorMsg.includes('already') || errorMsg.includes('duplicate')) {
+                        userFriendlyMsg += ' A fault may already be active.';
+                    }
+                    
+                    throw new Error(userFriendlyMsg);
                 }
                 
                 updateDemoStatus('✅ Fault injected successfully. Waiting for detection...', 'success');

@@ -57,7 +57,11 @@ except ImportError:
                 sys.path.insert(0, str(Path(__file__).parent))
                 from healing import initialize_auto_healer, get_auto_healer
 
-# Load environment variables from .env file
+            healing_path = Path(__file__).parent / 'healing'
+            if healing_path.exists():
+                sys.path.insert(0, str(Path(__file__).parent))
+                from healing import initialize_auto_healer, get_auto_healer
+
 env_path = Path(__file__).parent.parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
@@ -81,7 +85,7 @@ bootstrap = Bootstrap(app)
 cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5001,http://localhost:3000,http://127.0.0.1:5001,http://127.0.0.1:3000').split(',')
 cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
 # Allow all origins only in development mode
-if os.getenv('FLASK_ENV', '').lower() == 'development' or os.getenv('CORS_ALLOW_ALL', 'false').lower() == 'true':
+if os.getenv('FLASK_ENV', '').lower() == 'development' and os.getenv('CORS_ALLOW_ALL', 'false').lower() == 'true':
     cors_origins = ['*']
 CORS(app, resources={r"/api/*": {"origins": cors_origins}})
 
@@ -216,6 +220,10 @@ def cpu_intensive():
     thread.start()
     return "Started CPU load for 60 seconds!"
 
+    thread = threading.Thread(target=burn_cpu)
+    thread.start()
+    return "Started CPU load for 60 seconds!"
+
 # ========== Log Monitoring Endpoints ==========
 
 @app.route("/api/logs/recent")
@@ -230,9 +238,10 @@ def get_recent_log_issues():
             'count': len(issues)
         })
     except Exception as e:
+        app.logger.error(f"Error getting recent logs: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/logs/statistics")
@@ -248,9 +257,10 @@ def get_log_statistics():
             'health_score': health_score
         })
     except Exception as e:
+        app.logger.error(f"Error getting log statistics: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/logs/critical")
@@ -270,9 +280,10 @@ def get_critical_log_issues():
             'count': len(critical_issues)
         })
     except Exception as e:
+        app.logger.error(f"Error getting critical log issues: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/logs/anomalies")
@@ -305,9 +316,10 @@ def get_log_anomalies():
             'count': len(anomalies)
         })
     except Exception as e:
+        app.logger.error(f"Error getting log anomalies: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e),
+            'message': 'An internal error occurred',
             'anomalies': [],
             'count': 0
         }), 200
@@ -339,9 +351,10 @@ def get_system_logs():
             'count': len(logs)
         })
     except Exception as e:
+        app.logger.error(f"Error getting system logs: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e),
+            'message': 'An internal error occurred',
             'logs': []
         }), 500
 
@@ -364,9 +377,10 @@ def get_system_log_statistics():
             'statistics': stats
         })
     except Exception as e:
+        app.logger.error(f"Error getting system log statistics: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/system-logs/sources")
@@ -394,9 +408,10 @@ def get_system_log_sources():
             'sources': sources
         })
     except Exception as e:
+        app.logger.error(f"Error getting system log sources: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 # Critical Services Monitor Endpoints
@@ -420,9 +435,10 @@ def get_critical_services_list():
             'services': service_list
         })
     except Exception as e:
+        app.logger.error(f"Error getting critical services list: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/critical-services/logs")
@@ -457,9 +473,10 @@ def get_critical_services_logs():
             'count': len(logs)
         })
     except Exception as e:
+        app.logger.error(f"Error getting critical services logs: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e),
+            'message': 'An internal error occurred',
             'logs': []
         }), 500
 
@@ -483,9 +500,10 @@ def get_critical_service_issues():
             'count': len(issues)
         })
     except Exception as e:
+        app.logger.error(f"Error getting critical service issues: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e),
+            'message': 'An internal error occurred',
             'issues': []
         }), 500
 
@@ -508,9 +526,10 @@ def get_critical_services_statistics():
             'statistics': stats
         })
     except Exception as e:
+        app.logger.error(f"Error getting critical services statistics: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/logs/health")
@@ -537,9 +556,10 @@ def get_system_health():
             'recent_issues_count': recent_issues
         })
     except Exception as e:
+        app.logger.error(f"Error getting system health: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/logs/resolve/<timestamp>", methods=['POST'])
@@ -552,9 +572,10 @@ def resolve_issue(timestamp):
             'message': 'Issue marked as resolved'
         })
     except Exception as e:
+        app.logger.error(f"Error resolving issue: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/health")
@@ -637,9 +658,10 @@ def search_central_logs():
             'count': len(logs)
         })
     except Exception as e:
+        app.logger.error(f"Error searching central logs: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/central-logs/by-service/<service>")
@@ -662,9 +684,10 @@ def get_logs_by_service(service):
             'count': len(logs)
         })
     except Exception as e:
+        app.logger.error(f"Error getting logs by service: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/central-logs/services")
@@ -685,9 +708,10 @@ def get_monitored_services():
             'count': len(services)
         })
     except Exception as e:
+        app.logger.error(f"Error getting monitored services: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 # ========== Service Discovery Endpoints ==========
@@ -706,9 +730,10 @@ def discover_services():
             'services': results
         })
     except Exception as e:
+        app.logger.error(f"Error discovering services: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/discovery/log-locations")
@@ -726,9 +751,10 @@ def get_log_locations():
             'total_log_files': sum(len(logs) for logs in log_locations.values())
         })
     except Exception as e:
+        app.logger.error(f"Error getting log locations: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/discovery/summary")
@@ -747,9 +773,10 @@ def get_discovery_summary():
             'summary': summary
         })
     except Exception as e:
+        app.logger.error(f"Error getting discovery summary: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 # ========== Gemini AI Log Analysis Endpoints ==========
@@ -778,9 +805,10 @@ def analyze_single_log():
         return jsonify(analysis)
     
     except Exception as e:
+        app.logger.error(f"Error analyzing log: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/gemini/analyze-pattern", methods=['POST'])
@@ -809,9 +837,10 @@ def analyze_log_pattern():
         return jsonify(analysis)
     
     except Exception as e:
+        app.logger.error(f"Error analyzing log pattern: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/gemini/analyze-service/<service_name>")
@@ -846,9 +875,10 @@ def analyze_service_health(service_name):
         return jsonify(analysis)
     
     except Exception as e:
+        app.logger.error(f"Error analyzing service health: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/gemini/quick-analyze")
@@ -884,9 +914,10 @@ def quick_analyze_recent_errors():
         return jsonify(analysis)
     
     except Exception as e:
+        app.logger.error(f"Error in quick analysis: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 def initialize_services():
@@ -1059,10 +1090,10 @@ def inject_test_error():
         })
         
     except Exception as e:
-        logger.error(f"Error injecting test error: {e}")
+        app.logger.error(f"Error injecting test error: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 # Auto-Healing API Endpoints
@@ -1090,9 +1121,10 @@ def get_auto_healer_status():
             }
         })
     except Exception as e:
+        app.logger.error(f"Error getting auto-healer status: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/auto-healer/history")
@@ -1116,9 +1148,10 @@ def get_healing_history():
             'history': history
         })
     except Exception as e:
+        app.logger.error(f"Error getting healing history: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/auto-healer/statistics")
@@ -1140,9 +1173,10 @@ def get_healing_statistics():
             'statistics': stats
         })
     except Exception as e:
+        app.logger.error(f"Error getting healing statistics: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/auto-healer/heal", methods=['POST'])
@@ -1173,9 +1207,10 @@ def manual_heal_error():
             'healing_result': result
         })
     except Exception as e:
+        app.logger.error(f"Error in manual healing: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/auto-healer/config", methods=['PUT', 'POST'])
@@ -1217,9 +1252,10 @@ def update_auto_healer_config():
             'message': str(e)
         }), 400
     except Exception as e:
+        app.logger.error(f"Error updating auto-healer config: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 if __name__ == "__main__":

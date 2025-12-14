@@ -219,7 +219,8 @@ class AutoHealer:
             age_seconds = (datetime.now() - error_time).total_seconds()
             if age_seconds > 300:  # 5 minutes
                 return False
-        except:
+        except Exception as e:
+            logger.warning(f"Error parsing timestamp in _should_heal: {e}")
             pass
         
         # Check if we've already tried healing this error
@@ -451,12 +452,6 @@ class AutoHealer:
         logger.info(f"Timestamp: {start_time.isoformat()}")
         logger.info("="*70)
         
-        print(f"\n{'='*70}")
-        print(f"🔧 HEALING PROCESS STARTED")
-        print(f"{'='*70}")
-        print(f"Fault: {fault_type.upper()}")
-        print(f"Service: {service}")
-        print(f"{'='*70}\n")
         
         healing_result = {
             'timestamp': start_time.isoformat(),
@@ -483,11 +478,6 @@ class AutoHealer:
                 logger.info(f"   Confidence: {confidence:.0%}")
                 logger.info(f"   Classification: {analysis.get('fault_classification', 'Unknown')}")
                 
-                print(f"📊 Root Cause Analysis:")
-                print(f"   Cause: {root_cause}")
-                print(f"   Confidence: {confidence:.0%}")
-                if analysis.get('recommended_actions'):
-                    print(f"   Recommended Actions: {len(analysis.get('recommended_actions', []))} actions identified")
                 
                 # Send Discord notification for healing attempt
                 if self.discord_notifier:
@@ -499,7 +489,7 @@ class AutoHealer:
             
             # Step 2: Determine healing action based on fault type
             logger.info(f"📋 STEP 2: DETERMINING HEALING ACTION")
-            print(f"📋 Determining healing action for {fault_type}...")
+            logger.info(f"📋 STEP 2: DETERMINING HEALING ACTION")
             healing_action = None
             
             if fault_type == 'service_crash':
@@ -537,14 +527,15 @@ class AutoHealer:
                 logger.info(f"   Action: {healing_action.get('type', 'unknown')}")
                 logger.info(f"   Description: {healing_action.get('description', 'No description')}")
                 
-                print(f"⚙️  Executing healing action: {healing_action.get('description', 'Unknown action')}")
+                logger.info(f"   Action: {healing_action.get('type', 'unknown')}")
+                logger.info(f"   Description: {healing_action.get('description', 'No description')}")
                 
                 action_result = self._execute_healing_action(healing_action, fault)
                 healing_result['actions'].append(action_result.to_dict())
                 
                 if action_result.success:
                     logger.info(f"   ✅ Action executed successfully")
-                    print(f"   ✅ Action successful: {action_result.output or 'No output'}")
+                    logger.info(f"   ✅ Action executed successfully: {action_result.output or 'No output'}")
                     
                     # Step 4: Verify healing
                     time.sleep(3)  # Wait for changes to take effect
@@ -563,13 +554,6 @@ class AutoHealer:
                         logger.info(f"Verification: {verification.get('details', 'Verified')}")
                         logger.info("="*70)
                         
-                        print(f"\n{'='*70}")
-                        print(f"✅ HEALING SUCCESSFUL!")
-                        print(f"{'='*70}")
-                        print(f"Fault: {fault_type}")
-                        print(f"Service: {service}")
-                        print(f"Verification: {verification.get('details', 'Verified')}")
-                        print(f"{'='*70}\n")
                         
                         # Send success Discord notification
                         if self.discord_notifier:
@@ -585,11 +569,6 @@ class AutoHealer:
                         logger.warning(f"Reason: {verification.get('details', 'Verification failed')}")
                         logger.warning("="*70)
                         
-                        print(f"\n{'='*70}")
-                        print(f"❌ HEALING VERIFICATION FAILED")
-                        print(f"{'='*70}")
-                        print(f"Reason: {verification.get('details', 'Verification failed')}")
-                        print(f"{'='*70}\n")
                         
                         # Generate manual instructions
                         from ..core.config import get_config

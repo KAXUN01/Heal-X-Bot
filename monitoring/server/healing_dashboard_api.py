@@ -36,6 +36,21 @@ from dotenv import load_dotenv
 from blocked_ips_db import BlockedIPsDatabase
 from healing.notification_manager import NotificationManager
 
+# Import DDoS Simulator
+try:
+    from scripts.demo.ddos_simulation import DDoSSimulator
+except ImportError:
+    # Try absolute path add to sys.path
+    import sys
+    scripts_path = Path(__file__).parent.parent.parent / 'scripts'
+    if str(scripts_path) not in sys.path:
+        sys.path.insert(0, str(scripts_path))
+    try:
+        from demo.ddos_simulation import DDoSSimulator
+    except ImportError:
+        print("⚠️ Could not import DDoSSimulator")
+        DDoSSimulator = None
+
 # Pydantic models for request validation
 class BlockIPRequest(BaseModel):
     """Request model for blocking an IP address"""
@@ -510,6 +525,57 @@ _last_blocked_ip_notifications = {}  # Dict of ip -> timestamp
 
 # Resource hog killing deduplication: process_name -> timestamp
 _last_killed_process_notifications = {}  # Dict of process_name -> timestamp
+
+# ML Performance Stats (Global)
+ml_statistics = {
+    "accuracy": 0.98,
+    "precision": 0.95,
+    "recall": 0.92,
+    "f1_score": 0.93,
+    "prediction_time_ms": 5.2,
+    "throughput": 192.3
+}
+
+# DDoS Simulator Instance
+ddos_simulator = None
+
+@app.post("/api/demo/ddos/start")
+async def start_ddos_demo():
+    """Start the DDoS simulation"""
+    global ddos_simulator
+    if not ddos_simulator and DDoSSimulator:
+        # Pass the global ddos_statistics AND ml_statistics dict to the simulator
+        ddos_simulator = DDoSSimulator(
+            metrics_registry=None, 
+            stats_dict=ddos_statistics,
+            ml_stats_dict=ml_statistics
+        )
+    
+    if ddos_simulator:
+        msg = ddos_simulator.start_simulation()
+        return {"status": "success", "message": msg}
+    else:
+        return {"status": "error", "message": "DDoSSimulator not available"}
+
+@app.post("/api/demo/ddos/stop")
+async def stop_ddos_demo():
+    """Stop the DDoS simulation"""
+    global ddos_simulator
+    if ddos_simulator:
+        msg = ddos_simulator.stop_simulation()
+        return {"status": "success", "message": msg}
+    else:
+        return {"status": "success", "message": "Simulation not initialized"}
+
+@app.get("/api/demo/ddos/status")
+async def get_ddos_demo_status():
+    """Get DDoS simulation status"""
+    global ddos_simulator
+    is_running = False
+    if ddos_simulator:
+        is_running = ddos_simulator.is_running()
+        
+    return {"status": "success", "running": is_running}
 
 # DDoS Detection Storage
 ddos_statistics = {
@@ -1782,6 +1848,12 @@ def run_disk_cleanup(cleanup_options: Dict[str, Any] = None) -> Dict[str, Any]:
 
 def fetch_ml_metrics() -> Dict[str, Any]:
     """Fetch ML model performance metrics"""
+    global ddos_simulator, ml_statistics
+    
+    # If simulation is running, return simulated metrics
+    if ddos_simulator and ddos_simulator.is_running():
+        return ml_statistics
+
     try:
         # Try to fetch from model service (with short timeout to avoid blocking)
         response = requests.get(

@@ -1959,7 +1959,8 @@
                             <div style="font-size: 0.75rem; color: var(--text-secondary);">Delete log files older than
                                 <input type="number" id="logFileAgeDays" value="7" min="1" max="90"
                                     style="width: 50px; padding: 0.25rem; border: 1px solid var(--border-color); border-radius: 0.25rem;">
-                                days</div>
+                                days
+                            </div>
                         </div>
                     </label>
                     <label
@@ -2313,27 +2314,17 @@
                         </table>
                     </div>
 
-                    <!-- Pagination -->
+                    <!-- Pagination / Load More -->
                     <div id="logsPagination"
                         style="padding: 1.25rem; border-top: 1px solid var(--border-color); display: none; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, rgba(59, 130, 246, 0.01) 100%);">
                         <div style="font-size: 0.875rem; color: var(--text-primary); font-weight: 500;">
-                            <i class="fas fa-list" style="margin-right: 0.5rem; color: var(--accent-blue);"></i>
-                            Showing <span id="logsPageInfo" style="font-weight: 600; color: var(--accent-blue);">0-0 of
-                                0</span> logs
+                            Showing <span id="logsPageInfo"
+                                style="font-weight: 600; color: var(--accent-blue);">0</span> logs
                         </div>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <button id="logsPrevBtn" class="btn" onclick="changeLogsPage(-1)"
-                                style="padding: 0.625rem 1.25rem; font-size: 0.875rem; border-radius: 0.375rem; transition: all 0.2s;"
-                                disabled>
-                                <i class="fas fa-chevron-left"></i> Previous
-                            </button>
-                            <div id="logsPageNumbers" style="display: flex; gap: 0.375rem; align-items: center;"></div>
-                            <button id="logsNextBtn" class="btn" onclick="changeLogsPage(1)"
-                                style="padding: 0.625rem 1.25rem; font-size: 0.875rem; border-radius: 0.375rem; transition: all 0.2s;"
-                                disabled>
-                                Next <i class="fas fa-chevron-right"></i>
-                            </button>
-                        </div>
+                        <button id="loadMoreLogsBtn" class="btn" onclick="loadMoreLogs()"
+                            style="padding: 0.625rem 1.25rem; font-size: 0.875rem; border-radius: 0.375rem; transition: all 0.2s; background: var(--accent-blue); color: white; border: none; cursor: pointer; display: none;">
+                            <i class="fas fa-download" style="margin-right: 0.5rem;"></i> Load More
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2801,6 +2792,12 @@
         let blockedIpsPage = 1;
         let blockedIpsPageSize = 10;
         let blockedIpsData = [];
+
+        // Server-side logs pagination
+        let centralLogsPage = 1;
+        let centralLogsPageSize = 50;
+        let centralLogsLoading = false;
+        let hasMoreLogs = true;
 
         // Pagination helper functions
         function createPaginationControls(currentPage, totalPages, onPageChange) {
@@ -6271,13 +6268,28 @@
             }
         }
 
-        // Load all system-wide logs from centralized logger
-        async function refreshSystemLogs() {
+        // Load System Logs with Pagination
+        async function refreshSystemLogs(append = false) {
             const btn = document.getElementById('refreshLogsBtn');
-            if (btn) {
+            const loadMoreBtn = document.getElementById('loadMoreLogsBtn');
+
+            if (btn && !append) {
                 const icon = btn.querySelector('i');
                 if (icon) icon.classList.add('fa-spin');
                 btn.disabled = true;
+            }
+
+            if (append) {
+                if (loadMoreBtn) {
+                    loadMoreBtn.disabled = true;
+                    loadMoreBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+                }
+            } else {
+                // Reset pagination if refreshing
+                centralLogsPage = 1;
+                allSystemLogs = [];
+                hasMoreLogs = true;
+                // document.getElementById('system-logs-body').innerHTML = ''; // Don't clear immediately to avoid flicker
             }
 
             try {
@@ -6285,43 +6297,49 @@
 
                 // Fetch from appropriate source
                 if (currentLogSource === 'fluent-bit') {
-                    // Get service, level, and tag filters from UI
+                    // Fluent bit doesn't support pagination yet, limited to 100 for safety
                     const serviceFilter = document.getElementById('serviceFilter')?.value || '';
                     const levelFilter = document.getElementById('logLevelFilter')?.value || '';
 
-                    let url = '/api/fluent-bit/recent?limit=5000';
+                    let url = '/api/fluent-bit/recent?limit=100';
                     if (serviceFilter && serviceFilter !== 'all') url += `&service=${encodeURIComponent(serviceFilter)}`;
                     if (levelFilter && levelFilter !== 'all') url += `&level=${encodeURIComponent(levelFilter)}`;
 
                     response = await fetch(url);
                     data = await response.json();
 
-                    if (data.status === 'success' && data.logs && data.logs.length > 0) {
-                        // Store Fluent Bit logs with all fields needed for AI analysis
-                        allSystemLogs = data.logs.map(log => ({
-                            timestamp: log.timestamp,
-                            level: log.level || 'INFO',
-                            message: log.message || '',
-                            service: log.service || 'unknown',
-                            source: 'fluent-bit',
-                            source_file: log.source_file || log.tag || 'unknown',
-                            tag: log.tag || 'unknown',
-                            priority: log.priority || 6,
-                            // Ensure all fields are present for AI analysis
-                            raw: log.raw || log
-                        }));
-                    } else if (data.status === 'error') {
-                        // API returned an error
+                    if (data.status === 'success') {
+                        // Fluent bit is simpler, just replace logs
+                        if (data.logs) {
+                            allSystemLogs = data.logs.map(log => ({
+                                timestamp: log.timestamp,
+                                level: log.level || 'INFO',
+                                message: log.message || '',
+                                service: log.service || 'unknown',
+                                source: 'fluent-bit',
+                                source_file: log.source_file || log.tag || 'unknown',
+                                tag: log.tag || 'unknown',
+                                priority: log.priority || 6,
+                                raw: log.raw || log
+                            }));
+                        } else {
+                            allSystemLogs = [];
+                        }
+                        hasMoreLogs = false; // No pagination for fluent-bit yet
+                    } else {
                         throw new Error(data.message || 'Fluent Bit API error');
                     }
                 } else {
-                    // Fetch from centralized logger
-                    response = await fetch('/api/central-logs/recent?limit=5000');
+                    // Centralized logger with PAGINATION
+                    let url = `/api/central-logs/recent?limit=${centralLogsPageSize}&page=${centralLogsPage}`;
+                    response = await fetch(url);
                     data = await response.json();
 
-                    if (data.status === 'success' && data.logs && data.logs.length > 0) {
-                        // Store all logs
-                        allSystemLogs = data.logs.map(log => ({
+                    if (data.status === 'success') {
+                        const newLogs = data.logs || [];
+
+                        // Map logs
+                        const mappedLogs = newLogs.map(log => ({
                             timestamp: log.timestamp,
                             level: log.level || 'INFO',
                             message: log.message || '',
@@ -6330,91 +6348,101 @@
                             source_file: log.source_file || log.source || 'unknown',
                             priority: log.priority || 6
                         }));
+
+                        if (append) {
+                            allSystemLogs.push(...mappedLogs);
+                        } else {
+                            allSystemLogs = mappedLogs;
+                        }
+
+                        // Check if we have more logs
+                        if (newLogs.length < centralLogsPageSize) {
+                            hasMoreLogs = false;
+                        } else {
+                            hasMoreLogs = true;
+                        }
+
                     } else if (data.status === 'error') {
-                        // API returned an error
                         throw new Error(data.message || 'Centralized logger API error');
                     }
                 }
 
-                if (data && data.status === 'success' && data.logs && data.logs.length > 0) {
+                // Sorting
+                allSystemLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-                    // Sort by timestamp (newest first)
-                    allSystemLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                console.log(`Loaded ${allSystemLogs.length} logs (Page ${centralLogsPage})`);
 
-                    console.log(`Loaded ${allSystemLogs.length} system-wide logs`);
+                // Update stats
+                updateLogStats();
 
-                    // Update stats
-                    updateLogStats();
+                // Load services if first load
+                if (!append) await loadServices();
 
-                    // Load services list
-                    await loadServices();
+                // Apply filters and display
+                filterLogs();
 
-                    // Apply filters and display
-                    filterLogs();
-                } else {
-                    // Show helpful message based on source
-                    let message = 'No system logs available';
-                    let helpText = 'Try adjusting your filters or refresh to load new logs';
-
-                    if (data) {
-                        if (currentLogSource === 'fluent-bit') {
-                            if (data.message) {
-                                message = data.message.includes('not running') ? 'Fluent Bit Not Running' :
-                                    data.message.includes('no logs') ? 'Fluent Bit Running - No Logs Yet' :
-                                        'Fluent Bit Status';
-                                helpText = data.message;
-
-                                // Add suggestion if available
-                                if (data.suggestion) {
-                                    helpText += '\n\n💡 ' + data.suggestion;
-                                }
-
-                                // Add Docker error info if available
-                                if (data.docker_error) {
-                                    helpText += '\n\n⚠️ ' + data.docker_error;
-                                    helpText += '\n\nTo fix: sudo usermod -aG docker $USER (then logout/login)';
-                                }
-
-                                // Add log file path if available
-                                if (data.log_file_path) {
-                                    helpText += '\n\n📁 Log file location: ' + data.log_file_path;
-                                }
-                            } else if (data.status === 'success' && (!data.logs || data.logs.length === 0)) {
-                                message = 'Fluent Bit is running but no logs yet';
-                                helpText = 'Fluent Bit may still be starting or no logs have been processed. Logs will appear here once they are collected.';
-                                if (data.suggestion) {
-                                    helpText += '\n\n💡 ' + data.suggestion;
-                                }
-                            } else {
-                                message = 'Fluent Bit connection failed';
-                                helpText = 'Make sure Docker is running and Fluent Bit container is started. Run: ./scripts/start-fluent-bit.sh';
-                            }
-                        } else {
-                            if (data.message) {
-                                helpText = data.message;
-                            }
-                        }
-                    }
-                    displayNoLogs(message, helpText);
+                // Update Load More button
+                if (loadMoreBtn) {
+                    loadMoreBtn.disabled = false;
+                    loadMoreBtn.innerHTML = '<i class="fas fa-download" style="margin-right: 0.5rem;"></i> Load More';
+                    loadMoreBtn.style.display = hasMoreLogs && currentLogSource !== 'fluent-bit' ? 'inline-block' : 'none';
                 }
+
+                // Ensure pagination container is visible if we have logs
+                const paginationContainer = document.getElementById('logsPagination');
+                if (paginationContainer) {
+                    paginationContainer.style.display = allSystemLogs.length > 0 ? 'flex' : 'none';
+                }
+
             } catch (error) {
-                console.error('Error loading system logs:', error);
-                let errorMsg = `Error: ${error.message}`;
-                let helpMsg = 'Check the browser console for details. Make sure the API server is running.';
-
-                if (currentLogSource === 'fluent-bit' && error.message.includes('fetch')) {
-                    errorMsg = 'Failed to connect to Fluent Bit API';
-                    helpMsg = 'Make sure Docker is running and Fluent Bit container is started. Run: ./scripts/start-fluent-bit.sh';
+                console.error('Error refreshing logs:', error);
+                const tableBody = document.getElementById('system-logs-body');
+                if (tableBody && !append) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-error);">
+                                <i class="fas fa-exclamation-triangle" style="margin-bottom: 0.5rem; font-size: 1.5rem;"></i>
+                                <br>
+                                Error loading logs: ${error.message}
+                            </td>
+                        </tr>
+                    `;
                 }
-
-                displayNoLogs(errorMsg, helpMsg);
+                if (loadMoreBtn) {
+                    loadMoreBtn.disabled = false;
+                    loadMoreBtn.innerHTML = '<i class="fas fa-redo"></i> Retry';
+                }
             } finally {
                 if (btn) {
+                    btn.disabled = false;
                     const icon = btn.querySelector('i');
                     if (icon) icon.classList.remove('fa-spin');
-                    btn.disabled = false;
                 }
             }
+        }
+
+        async function loadMoreLogs() {
+            if (!hasMoreLogs) return;
+            centralLogsPage++;
+            await refreshSystemLogs(true);
+        }
+        console.error('Error loading system logs:', error);
+        let errorMsg = `Error: ${error.message}`;
+        let helpMsg = 'Check the browser console for details. Make sure the API server is running.';
+
+        if (currentLogSource === 'fluent-bit' && error.message.includes('fetch')) {
+            errorMsg = 'Failed to connect to Fluent Bit API';
+            helpMsg = 'Make sure Docker is running and Fluent Bit container is started. Run: ./scripts/start-fluent-bit.sh';
+        }
+
+        displayNoLogs(errorMsg, helpMsg);
+            } finally {
+            if (btn) {
+                const icon = btn.querySelector('i');
+                if (icon) icon.classList.remove('fa-spin');
+                btn.disabled = false;
+            }
+        }
         }
 
         function displayNoLogs(message, helpText = 'Try adjusting your filters or refresh to load new logs') {
@@ -6456,17 +6484,15 @@
             }
         }
 
-        // Filter logs based on search and filters
+        // Filter and Display Logs
         function filterLogs() {
             const searchText = (document.getElementById('logSearchInput')?.value || '').toLowerCase();
             const serviceFilter = document.getElementById('serviceFilter')?.value || '';
             const levelFilter = document.getElementById('logLevelFilter')?.value || '';
             const sourceFilter = document.getElementById('logSourceFilter')?.value || '';
-            const perPageSelect = document.getElementById('logsPerPage');
 
-            if (perPageSelect) {
-                logsPerPage = parseInt(perPageSelect.value) || 10;
-            }
+            // Client-side pagination logic removed in favor of Load More
+            // logsPerPage = ...
 
             // Apply all filters
             filteredSystemLogs = allSystemLogs.filter(log => {
@@ -6519,22 +6545,27 @@
             displayLogs();
         }
 
-        // Display logs in table with pagination
+        // Display logs in table
         function displayLogs() {
             const tbody = document.getElementById('logsTableBody');
             if (!tbody) return;
 
             if (filteredSystemLogs.length === 0) {
                 displayNoLogs('No logs match the current filters');
-                document.getElementById('logsPagination').style.display = 'none';
+                // Don't hide pagination container if we have loaded logs but filtered them all out?
+                // Actually if we have 0 logs total, hide it.
+                if (allSystemLogs.length === 0) {
+                    const pag = document.getElementById('logsPagination');
+                    if (pag) pag.style.display = 'none';
+                }
                 return;
+            } else {
+                const pag = document.getElementById('logsPagination');
+                if (pag) pag.style.display = 'flex';
             }
 
-            // Calculate pagination
-            const totalPages = Math.ceil(filteredSystemLogs.length / logsPerPage);
-            const startIndex = (logsCurrentPage - 1) * logsPerPage;
-            const endIndex = Math.min(startIndex + logsPerPage, filteredSystemLogs.length);
-            const pageLogs = filteredSystemLogs.slice(startIndex, endIndex);
+            // No client-side pagination slicing - show all filtered logs
+            const pageLogs = filteredSystemLogs;
 
             // Build table rows with alternating colors and better styling
             let html = '';
@@ -6647,49 +6678,35 @@
 
             tbody.innerHTML = html;
 
-            // Update pagination
-            updateLogsPagination(totalPages, startIndex + 1, endIndex, filteredSystemLogs.length);
+            // Update pagination info
+            updateLogsPagination();
         }
 
-        function updateLogsPagination(totalPages, start, end, total) {
+        function updateLogsPagination() {
             const pagination = document.getElementById('logsPagination');
             if (!pagination) return;
 
-            if (totalPages <= 1) {
-                pagination.style.display = 'none';
-                return;
+            const info = document.getElementById('logsPageInfo');
+            if (info) {
+                info.textContent = filteredSystemLogs.length;
             }
+        }
 
-            pagination.style.display = 'flex';
-            document.getElementById('logsPageInfo').textContent = `${start}-${end} of ${total}`;
+        if (endPage - startPage < maxVisible - 1) {
+            startPage = Math.max(1, endPage - maxVisible + 1);
+        }
 
-            // Update buttons
-            document.getElementById('logsPrevBtn').disabled = logsCurrentPage === 1;
-            document.getElementById('logsNextBtn').disabled = logsCurrentPage >= totalPages;
-
-            // Update page numbers
-            const pageNumbers = document.getElementById('logsPageNumbers');
-            if (pageNumbers) {
-                let html = '';
-                const maxVisible = 5;
-                let startPage = Math.max(1, logsCurrentPage - Math.floor(maxVisible / 2));
-                let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-
-                if (endPage - startPage < maxVisible - 1) {
-                    startPage = Math.max(1, endPage - maxVisible + 1);
-                }
-
-                for (let i = startPage; i <= endPage; i++) {
-                    const isActive = i === logsCurrentPage;
-                    html += `
+        for (let i = startPage; i <= endPage; i++) {
+            const isActive = i === logsCurrentPage;
+            html += `
                         <button class="btn ${isActive ? 'btn-primary' : ''}" 
                                 onclick="logsCurrentPage=${i}; displayLogs();" 
                                 style="padding: 0.5rem 0.875rem; font-size: 0.875rem; min-width: 2.75rem; font-weight: ${isActive ? '700' : '500'}; border-radius: 0.375rem; transition: all 0.2s; ${isActive ? 'box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);' : ''}">
                             ${i}
                         </button>
                     `;
-                }
-                pageNumbers.innerHTML = html;
+        }
+        pageNumbers.innerHTML = html;
             }
         }
 

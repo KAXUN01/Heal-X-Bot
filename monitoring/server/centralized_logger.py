@@ -673,7 +673,8 @@ class CentralizedLogger:
                             else:
                                 extracted_service = service_part
                         extracted_message = parts[2].strip() if len(parts) > 2 else message_clean
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error parsing log date/message: {e}")
             pass  # Use defaults if parsing fails
         
         service_name = extracted_service if extracted_service else source_info['service']
@@ -809,13 +810,15 @@ class CentralizedLogger:
         
         return results
     
-    def get_recent_logs(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_recent_logs(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """
-        Get most recent logs, prioritizing journal entries and filtering out user@ services
+        Get recent logs with optional filtering and pagination
         """
-        # Filter out user@ service logs completely
         filtered_logs = []
-        for log in self.log_index:
+        
+        # Helper to check if we should iterate log_index or a filtered view
+        # For now, iterate all and filter
+        for log in reversed(self.log_index):
             service = log.get('service', '').lower()
             message = log.get('message', '').lower()
             source_file = log.get('source_file', '').lower()
@@ -839,9 +842,11 @@ class CentralizedLogger:
         journal_logs = [log for log in all_logs if log.get('source_file', '').startswith('systemd-journal')]
         other_logs = [log for log in all_logs if not log.get('source_file', '').startswith('systemd-journal')]
         
-        # Combine: journal logs first, then others, then limit
-        combined = journal_logs[:limit] + other_logs[:limit]
-        return combined[:limit]
+        # Combine: journal logs first, then others
+        combined = journal_logs + other_logs
+        
+        # Apply pagination
+        return combined[offset:offset + limit]
     
     def get_statistics(self) -> Dict[str, Any]:
         """

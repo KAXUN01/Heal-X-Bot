@@ -3527,7 +3527,7 @@ async def get_system_log_sources():
 
 # Centralized Logs Endpoints
 @app.get("/api/central-logs/recent")
-async def get_central_recent_logs(limit: int = 100):
+async def get_central_recent_logs(limit: int = 100, page: int = 1):
     """Get recent centralized logs"""
     try:
         # Use the global centralized_logger from the module
@@ -3539,12 +3539,15 @@ async def get_central_recent_logs(limit: int = 100):
                 "logs": []
             }
         
-        logs = _centralized_logger.get_recent_logs(limit=limit)
+        offset = (page - 1) * limit
+        logs = _centralized_logger.get_recent_logs(limit=limit, offset=offset)
         
         return {
             "status": "success",
             "logs": logs,
-            "count": len(logs)
+            "count": len(logs),
+            "page": page,
+            "limit": limit
         }
     except Exception as e:
         logger.error(f"Error getting centralized logs: {e}")

@@ -621,12 +621,17 @@ def get_central_recent_logs():
             }), 503
         
         limit = int(request.args.get('limit', 100))
-        logs = centralized_logger.get_recent_logs(limit=limit)
+        page = int(request.args.get('page', 1))
+        offset = (page - 1) * limit
+        
+        logs = centralized_logger.get_recent_logs(limit=limit, offset=offset)
         
         return jsonify({
             'status': 'success',
             'logs': logs,
-            'count': len(logs)
+            'count': len(logs),
+            'page': page,
+            'limit': limit
         })
     except Exception as e:
         return jsonify({

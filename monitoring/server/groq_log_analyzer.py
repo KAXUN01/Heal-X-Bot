@@ -30,8 +30,8 @@ class GroqLogAnalyzer:
             try:
                 # Initialize Groq client
                 self.client = Groq(api_key=self.api_key)
-                # Use mixtral-8x7b-32768 model (fast and good for log analysis)
-                self.model_name = "mixtral-8x7b-32768"
+                # Use llama-3.3-70b-versatile model (latest high-performance model)
+                self.model_name = "llama-3.3-70b-versatile"
                 logger.info(f"Groq client initialized successfully with {self.model_name}")
                     
             except Exception as e:
@@ -55,7 +55,7 @@ class GroqLogAnalyzer:
             if self.api_key and self.api_key != "your_groq_api_key_here" and len(self.api_key) >= 20:
                 try:
                     self.client = Groq(api_key=self.api_key)
-                    self.model_name = "mixtral-8x7b-32768"
+                    self.model_name = "llama-3.3-70b-versatile"
                     logger.info(f"Groq client initialized with {self.model_name} after reloading API key")
                 except Exception as e:
                     logger.error(f"Failed to initialize Groq client after reloading API key: {e}")
@@ -587,14 +587,14 @@ Log #{i}:
             thread = threading.Thread(target=api_call)
             thread.daemon = True
             thread.start()
-            thread.join(timeout=6)  # 6 second timeout for faster response
+            thread.join(timeout=15)  # Increased timeout for Llama 3 70B model
             
             if thread.is_alive():
                 # Request timed out
-                logger.warning("Groq API call timed out after 6 seconds")
+                logger.warning(f"Groq API call ({self.model_name}) timed out after 15 seconds")
                 return {
                     'status': 'error',
-                    'message': 'Analysis timed out. Please try again or analyze a simpler log entry.'
+                    'message': 'Analysis timed out. The AI model is taking longer than expected. Please try again.'
                 }
             
             # Get result from queue

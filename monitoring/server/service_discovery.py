@@ -374,7 +374,7 @@ class ServiceDiscovery:
     
     def _scan_directory_for_logs(self, directory: str, service_name: str = None):
         """
-        Scan a directory for log files
+        Scan a directory for log files with depth limit
         """
         try:
             dir_path = Path(directory)
@@ -393,36 +393,55 @@ class ServiceDiscovery:
                         if svc_name not in self.log_locations:
                             self.log_locations[svc_name] = []
                         
-                        self.log_locations[svc_name].append({
-                            'path': str(log_file),
-                            'size': log_file.stat().st_size,
-                            'modified': datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
-                        })
+                        # Check if already added
+                        path_str = str(log_file)
+                        if not any(l['path'] == path_str for l in self.log_locations[svc_name]):
+                            self.log_locations[svc_name].append({
+                                'path': path_str,
+                                'size': log_file.stat().st_size,
+                                'modified': datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
+                            })
             
-            # Find all .log files in directory
-            for log_file in dir_path.rglob('*.log'):
-                if log_file.is_file():
-                    # Determine service name from file path
-                    if not service_name:
-                        # Use filename without extension as service name
-                        service_name = log_file.stem
-                        # For /var/log files, use cleaner names
-                        if str(log_file.parent) == '/var/log':
-                            if log_file.name == 'syslog':
-                                service_name = 'syslog'
-                            elif log_file.name == 'kern.log':
-                                service_name = 'kernel'
-                            elif log_file.name == 'auth.log':
-                                service_name = 'auth'
+            # Find all .log files in directory with depth limit
+            max_depth = 3
+            root_depth = len(dir_path.parts)
+            
+            for root, dirs, files in os.walk(str(dir_path)):
+                # Check depth
+                current_depth = len(Path(root).parts)
+                if current_depth - root_depth >= max_depth:
+                    del dirs[:]  # Stop recursing
+                    continue
                     
-                    if service_name not in self.log_locations:
-                        self.log_locations[service_name] = []
-                    
-                    self.log_locations[service_name].append({
-                        'path': str(log_file),
-                        'size': log_file.stat().st_size,
-                        'modified': datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
-                    })
+                for file in files:
+                    if file.endswith('.log'):
+                        log_file = Path(root) / file
+                        # Determine service name from file path
+                        current_service_name = service_name
+                        if not current_service_name:
+                            # Use filename without extension as service name
+                            current_service_name = log_file.stem
+                            # For /var/log files, use cleaner names
+                            if str(log_file.parent) == '/var/log':
+                                if log_file.name == 'syslog':
+                                    current_service_name = 'syslog'
+                                elif log_file.name == 'kern.log':
+                                    current_service_name = 'kernel'
+                                elif log_file.name == 'auth.log':
+                                    current_service_name = 'auth'
+                        
+                        if current_service_name not in self.log_locations:
+                            self.log_locations[current_service_name] = []
+                        
+                        # Check if already added
+                        path_str = str(log_file)
+                        if not any(l['path'] == path_str for l in self.log_locations[current_service_name]):
+                            self.log_locations[current_service_name].append({
+                                'path': path_str,
+                                'size': log_file.stat().st_size,
+                                'modified': datetime.fromtimestamp(log_file.stat().st_mtime).isoformat()
+                            })
+                            
         except (PermissionError, OSError) as e:
             logger.debug(f"Cannot access {directory}: {e}")
             pass  # Silently skip directories we can't access

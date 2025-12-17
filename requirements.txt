@@ -63,6 +63,8 @@ typing-extensions>=4.12.0
 # If grpcio-status causes issues, it may need to be downgraded or excluded
 protobuf==4.25.3
 grpcio-status<1.71.0,>=1.48.0  # Pin to version compatible with protobuf 4.x (avoid 1.71.0+ which requires protobuf>=5.26.1)
+google-generativeai>=0.3.0  # Google Gemini AI for log analysis
+groq>=0.4.0  # Groq AI API client (alternative to Gemini)
 
 # Utilities
 python-dateutil==2.8.2

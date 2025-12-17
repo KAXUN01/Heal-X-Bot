@@ -164,11 +164,23 @@ except ImportError as e:
     # Use basic logging since logger may not be initialized yet
     import logging
     _temp_logger = logging.getLogger(__name__)
-    _temp_logger.warning(f"Groq analyzer not available: {e}. AI log analysis features will be disabled.")
+    _temp_logger.warning(f"Groq analyzer not available: {e}. Groq AI log analysis features will be disabled.")
     GROQ_AVAILABLE = False
     groq_analyzer = None
     def initialize_groq_analyzer():
         pass
+
+# Optional Gemini analyzer (may not be available if google-generativeai is not installed)
+try:
+    from gemini_log_analyzer import GeminiLogAnalyzer
+    GEMINI_AVAILABLE = True
+except ImportError as e:
+    # Use basic logging since logger may not be initialized yet
+    import logging
+    _temp_logger = logging.getLogger(__name__)
+    _temp_logger.warning(f"Gemini analyzer not available: {e}. Gemini AI log analysis features will be disabled.")
+    GEMINI_AVAILABLE = False
+    GeminiLogAnalyzer = None
 
 # Initialize FastAPI app
 app = FastAPI(title="Healing Bot Dashboard API")
@@ -219,11 +231,12 @@ else:
 
 # Initialize log collectors (must be after logger is defined)
 system_log_collector = None
-_groq_analyzer = None
+_ai_analyzer = None  # Generic AI analyzer (Gemini or Groq)
+_analyzer_type = None  # Track which analyzer is being used
 
 def initialize_log_services():
     """Initialize log collection services"""
-    global system_log_collector, _groq_analyzer
+    global system_log_collector, _ai_analyzer, _analyzer_type
     try:
         system_log_collector = initialize_system_log_collector()
         logger.info("System log collector initialized")
@@ -237,20 +250,53 @@ def initialize_log_services():
     except Exception as e:
         logger.warning(f"Centralized logger not available: {e}")
     
-    try:
-        # Get API key from environment (reload to ensure latest value)
-        api_key = os.getenv('GROQ_API_KEY')
-        # groq_analyzer is a global variable from the module
-        initialize_groq_analyzer(api_key=api_key)
-        from groq_log_analyzer import groq_analyzer as _groq_analyzer
-        if _groq_analyzer and _groq_analyzer.client:
-            logger.info("Groq AI analyzer initialized with API key")
-        elif api_key:
-            logger.warning(f"Groq AI analyzer initialized but client not available (API key length: {len(api_key)})")
+    # Initialize AI analyzer - prefer Gemini if available, fallback to Groq
+    gemini_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+    groq_key = os.getenv('GROQ_API_KEY')
+    
+    # Try Gemini first (user preference)
+    if gemini_key and GEMINI_AVAILABLE:
+        try:
+            _ai_analyzer = GeminiLogAnalyzer(api_key=gemini_key)
+            if _ai_analyzer and _ai_analyzer.model:
+                _analyzer_type = 'gemini'
+                logger.info(f"✅ Gemini AI analyzer initialized successfully (model: {_ai_analyzer.model_name})")
+            elif gemini_key:
+                logger.warning(f"Gemini AI analyzer initialized but model not available (API key length: {len(gemini_key)})")
+                _ai_analyzer = None
+            else:
+                logger.warning("Gemini API key found but analyzer failed to initialize")
+                _ai_analyzer = None
+        except Exception as e:
+            logger.warning(f"Gemini analyzer initialization failed: {e}")
+            _ai_analyzer = None
+    
+    # Fallback to Groq if Gemini not available
+    if not _ai_analyzer and groq_key and GROQ_AVAILABLE:
+        try:
+            initialize_groq_analyzer(api_key=groq_key)
+            from groq_log_analyzer import groq_analyzer
+            _ai_analyzer = groq_analyzer
+            if _ai_analyzer and _ai_analyzer.client:
+                _analyzer_type = 'groq'
+                logger.info(f"✅ Groq AI analyzer initialized successfully (fallback from Gemini)")
+            elif groq_key:
+                logger.warning(f"Groq AI analyzer initialized but client not available (API key length: {len(groq_key)})")
+                _ai_analyzer = None
+            else:
+                logger.warning("Groq API key found but analyzer failed to initialize")
+                _ai_analyzer = None
+        except Exception as e:
+            logger.warning(f"Groq analyzer initialization failed: {e}")
+            _ai_analyzer = None
+    
+    # Log final status
+    if not _ai_analyzer:
+        if not gemini_key and not groq_key:
+            logger.warning("⚠️  No AI API keys found. Set GEMINI_API_KEY or GROQ_API_KEY in .env for AI-powered log analysis")
         else:
-            logger.warning("Groq AI analyzer initialized without API key (AI analysis disabled)")
-    except Exception as e:
-        logger.warning(f"Groq analyzer not available: {e}")
+            logger.warning("⚠️  AI analyzers available but failed to initialize. Check API keys and dependencies")
+    
     
     try:
         # critical_services_monitor initialization
@@ -4119,15 +4165,14 @@ async def ignore_alert(data: dict = Body(...)):
 
 @app.post("/api/gemini/analyze-log")
 async def analyze_single_log(request: GroqAnalyzeRequest):
-    """Analyze a single log entry using Groq AI"""
+    """Analyze a single log entry using AI (Gemini or Groq)"""
     try:
-        # Use the global groq_analyzer from the module
-        from groq_log_analyzer import groq_analyzer as _groq_analyzer
-        if not _groq_analyzer:
-            logger.error("Groq analyzer not initialized")
+        # Use the global AI analyzer (Gemini or Groq based on what's available)
+        if not _ai_analyzer:
+            logger.error("AI analyzer not initialized")
             return {
                 "status": "error",
-                "message": "Groq analyzer not initialized. Check GROQ_API_KEY"
+                "message": "AI analyzer not initialized. Set GEMINI_API_KEY or GROQ_API_KEY in .env file"
             }
         
         log_entry = request.log_entry
@@ -4139,10 +4184,10 @@ async def analyze_single_log(request: GroqAnalyzeRequest):
                 "message": "No log entry provided"
             }
         
-        logger.info(f"Analyzing log entry: service={log_entry.get('service')}, message={log_entry.get('message', '')[:50]}")
+        logger.info(f"Analyzing log entry with {_analyzer_type.upper()}: service={log_entry.get('service')}, message={log_entry.get('message', '')[:50]}")
         
         # Analyze the log
-        analysis = _groq_analyzer.analyze_error_log(log_entry)
+        analysis = _ai_analyzer.analyze_error_log(log_entry)
         
         logger.info(f"Analysis result status: {analysis.get('status')}")
         return analysis
@@ -4156,13 +4201,12 @@ async def analyze_single_log(request: GroqAnalyzeRequest):
 
 @app.post("/api/gemini/analyze-pattern")
 async def analyze_log_pattern(request: GroqAnalyzeRequest):
-    """Analyze multiple logs for patterns using Groq AI"""
+    """Analyze multiple logs for patterns using AI (Gemini or Groq)"""
     try:
-        from groq_log_analyzer import groq_analyzer as _groq_analyzer
-        if not _groq_analyzer:
+        if not _ai_analyzer:
             return {
                 "status": "error",
-                "message": "Groq analyzer not initialized"
+                "message": "AI analyzer not initialized. Set GEMINI_API_KEY or GROQ_API_KEY in .env file"
             }
         
         log_entries = request.logs or []
@@ -4174,8 +4218,10 @@ async def analyze_log_pattern(request: GroqAnalyzeRequest):
                 "message": "No log entries provided"
             }
         
+        logger.info(f"Analyzing {len(log_entries)} logs for patterns with {_analyzer_type.upper()}")
+        
         # Analyze patterns
-        analysis = _groq_analyzer.analyze_multiple_logs(log_entries, limit=limit)
+        analysis = _ai_analyzer.analyze_multiple_logs(log_entries, limit=limit)
         
         return analysis
     
@@ -4188,15 +4234,14 @@ async def analyze_log_pattern(request: GroqAnalyzeRequest):
 
 @app.get("/api/gemini/analyze-service/{service_name}")
 async def analyze_service_health(service_name: str, limit: int = 50):
-    """Analyze overall health of a service using Groq AI"""
+    """Analyze overall health of a service using AI (Gemini or Groq)"""
     try:
-        from groq_log_analyzer import groq_analyzer as _groq_analyzer
         from centralized_logger import centralized_logger as _centralized_logger
         
-        if not _groq_analyzer:
+        if not _ai_analyzer:
             return {
                 "status": "error",
-                "message": "Groq analyzer not initialized"
+                "message": "AI analyzer not initialized. Set GEMINI_API_KEY or GROQ_API_KEY in .env file"
             }
         
         if not _centralized_logger:
@@ -4214,8 +4259,10 @@ async def analyze_service_health(service_name: str, limit: int = 50):
                 "message": f"No logs found for service: {service_name}"
             }
         
+        logger.info(f"Analyzing health of service '{service_name}' with {_analyzer_type.upper()}")
+        
         # Analyze service health
-        analysis = _groq_analyzer.analyze_service_health(service_name, logs)
+        analysis = _ai_analyzer.analyze_service_health(service_name, logs)
         
         return analysis
     

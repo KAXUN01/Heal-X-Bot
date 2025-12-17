@@ -570,16 +570,40 @@ Log #{i}:
             
             def api_call():
                 try:
-                    response = self.client.chat.completions.create(
-                        model=self.model_name,
-                        messages=[
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=0.1,  # Lower temperature for faster, more deterministic responses
-                        max_tokens=350,  # Limit response length for faster generation
-                        top_p=0.7,
-                    )
-                    result_queue.put(('success', response))
+                    # Attempt 1: Try primary model
+                    try:
+                        response = self.client.chat.completions.create(
+                            model=self.model_name,
+                            messages=[
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.1,
+                            max_tokens=350,
+                            top_p=0.7,
+                        )
+                        result_queue.put(('success', response))
+                        return
+                    except Exception as first_error:
+                        # Attempt 2: Try fallback model if primary is not Mixtral
+                        fallback_model = "mixtral-8x7b-32768"
+                        if self.model_name == fallback_model:
+                            raise first_error
+                        
+                        logger.warning(f"Primary model {self.model_name} failed: {first_error}. Retrying with fallback {fallback_model}...")
+                        
+                        response = self.client.chat.completions.create(
+                            model=fallback_model,
+                            messages=[
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.1,
+                            max_tokens=350,
+                            top_p=0.7,
+                        )
+                        # If success, update logs
+                        logger.info(f"Fallback to {fallback_model} successful")
+                        result_queue.put(('success', response))
+                        
                 except Exception as e:
                     result_queue.put(('error', e))
             

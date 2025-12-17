@@ -65,11 +65,18 @@ except ImportError:
 env_path = Path(__file__).parent.parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
-# Verify critical environment variables
-if not os.getenv('GROQ_API_KEY'):
-    print("⚠️  WARNING: GROQ_API_KEY not found in .env file")
-    print("   AI log analysis will not work without this key")
-    print("   Please add GROQ_API_KEY to your .env file")
+# Verify AI API keys (Gemini or Groq)
+gemini_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+groq_key = os.getenv('GROQ_API_KEY')
+
+if not gemini_key and not groq_key:
+    print("⚠️  WARNING: Neither GEMINI_API_KEY nor GROQ_API_KEY found in .env file")
+    print("   AI log analysis will not work without one of these keys")
+    print("   Please add GEMINI_API_KEY or GROQ_API_KEY to your .env file")
+elif gemini_key:
+    print("✅ GEMINI_API_KEY found - AI analysis will use Google Gemini")
+elif groq_key:
+    print("✅ GROQ_API_KEY found - AI analysis will use Groq")
 
 app = Flask(__name__)
 # Set Flask configuration to avoid KeyError (must be set before Bootstrap)
@@ -947,17 +954,48 @@ def initialize_services():
         # service_discovery.discover_all_services()
         print("⚠️  Service discovery DISABLED (monitoring system services only)")
         
-        # Initialize Groq AI log analyzer (for system log analysis)
-        # Get API key from environment (reload to ensure latest value)
-        api_key = os.getenv('GROQ_API_KEY')
-        groq_log_analyzer_service = initialize_groq_analyzer(api_key=api_key)
-        groq_analyzer = groq_log_analyzer_service  # Set alias for endpoints
-        if groq_analyzer and groq_analyzer.client:
-            print("✅ Groq AI log analyzer initialized with API key")
-        elif api_key:
-            print(f"⚠️  Groq AI log analyzer initialized but client not available (API key length: {len(api_key)})")
-        else:
-            print("⚠️  Groq AI log analyzer initialized without API key (AI analysis disabled)")
+        # Initialize AI log analyzer - prefer Gemini if available, fallback to Groq
+        gemini_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+        groq_key = os.getenv('GROQ_API_KEY')
+        ai_analyzer = None
+        ai_analyzer_type = None
+        
+        # Try Gemini first (user preference)
+        if gemini_key:
+            try:
+                from gemini_log_analyzer import GeminiLogAnalyzer
+                ai_analyzer = GeminiLogAnalyzer(api_key=gemini_key)
+                if ai_analyzer and ai_analyzer.model:
+                    ai_analyzer_type = 'gemini'
+                    print(f"✅ Gemini AI analyzer initialized (model: {ai_analyzer.model_name})")
+                else:
+                    ai_analyzer = None
+            except Exception as e:
+                print(f"⚠️  Failed to initialize Gemini analyzer: {e}")
+                ai_analyzer = None
+        
+        # Fallback to Groq if Gemini not available
+        if not ai_analyzer and groq_key:
+            try:
+                groq_log_analyzer_service = initialize_groq_analyzer(api_key=groq_key)
+                ai_analyzer = groq_log_analyzer_service
+                if ai_analyzer and ai_analyzer.client:
+                    ai_analyzer_type = 'groq'
+                    print("✅ Groq AI analyzer initialized (fallback from Gemini)")
+                else:
+                    ai_analyzer = None
+            except Exception as e:
+                print(f"⚠️  Failed to initialize Groq analyzer: {e}")
+                ai_analyzer = None
+        
+        # Set groq_analyzer alias for backward compatibility
+        groq_analyzer = ai_analyzer
+        
+        if not ai_analyzer:
+            if not gemini_key and not groq_key:
+                print("⚠️  No AI API keys found. AI analysis disabled")
+            else:
+                print("⚠️  AI analyzers failed to initialize. Check API keys and dependencies")
         
         # Initialize system-wide log collector (monitors Docker, systemd, etc.)
         system_log_collector = initialize_system_log_collector()

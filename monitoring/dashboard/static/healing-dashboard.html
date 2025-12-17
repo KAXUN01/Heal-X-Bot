@@ -9063,7 +9063,7 @@
 
                     if (healthCheck.ok) {
                         // Check for cloud-sim-api-server
-                        const servicesResponse = await fetch('/api/cloud/services');
+                        const servicesResponse = await fetch('/api/cloud/services/status');
                         if (servicesResponse.ok) {
                             const servicesData = await servicesResponse.json();
                             if (servicesData.success && servicesData.services) {
@@ -9083,7 +9083,7 @@
                 // If cloud not available, find any available Docker container
                 if (!targetService) {
                     try {
-                        const servicesResponse = await fetch('/api/services/discover');
+                        const servicesResponse = await fetch('/api/services');
                         if (servicesResponse.ok) {
                             const servicesData = await servicesResponse.json();
                             if (servicesData.services && servicesData.services.length > 0) {

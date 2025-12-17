@@ -2761,6 +2761,32 @@
         let recentActivities = [];
         const MAX_ACTIVITIES = 50;
 
+        // ============================================================================
+        // Global Variable Declarations (to prevent temporal dead zone errors)
+        // ============================================================================
+        
+        // Alerts Tab Variables
+        let alertsCurrentPage = 1;
+        const alertsItemsPerPage = 5;
+        let alertsFilteredIssues = [];
+
+        // Auto-Scaling Variables
+        let scalingStatusInterval = null;
+
+        // Auto-Healing Variables
+        let healingPerformanceChart = null;
+        const activeAbortControllers = new Map();
+        let autoHealingDemoActive = false;
+        let autoHealingDemoInterval = null;
+
+        // Logs Variables
+        let allSystemLogs = [];
+        let filteredSystemLogs = [];
+        let logsCurrentPage = 1;
+        let logsPerPage = 10;
+        let autoRefreshEnabled = false;
+        let autoRefreshInterval = null;
+
         // Configuration object (loaded from API)
         let CONFIG = {
             auto_restart: true,
@@ -6174,18 +6200,7 @@
         }
 
         // System-Wide Logs - Complete Rewrite
-        let allSystemLogs = [];
-        let filteredSystemLogs = [];
-        let logsCurrentPage = 1;
-        let logsPerPage = 10;
-        let autoRefreshEnabled = false;
-        let autoRefreshInterval = null;
-        let currentLogSource = 'fluent-bit'; // Default to Fluent Bit
-        let aiAnalysisCount = 0; // Counter for AI analysis operations
-
-        // Switch between log sources
-        function switchLogSource(source = null) {
-            const selector = document.getElementById('logSourceSelector');
+        async function refreshSystemLogs() {
             if (source) {
                 // If source is provided as parameter, use it
                 currentLogSource = source;
@@ -6667,22 +6682,6 @@
                 info.textContent = filteredSystemLogs.length;
             }
         }
-
-        if (endPage - startPage < maxVisible - 1) {
-            startPage = Math.max(1, endPage - maxVisible + 1);
-        }
-
-        for (let i = startPage; i <= endPage; i++) {
-            const isActive = i === logsCurrentPage;
-            html += `
-                        <button class="btn ${isActive ? 'btn-primary' : ''}" 
-                                onclick="logsCurrentPage=${i}; displayLogs();" 
-                                style="padding: 0.5rem 0.875rem; font-size: 0.875rem; min-width: 2.75rem; font-weight: ${isActive ? '700' : '500'}; border-radius: 0.375rem; transition: all 0.2s; ${isActive ? 'box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);' : ''}">
-                            ${i}
-                        </button>
-                    `;
-        }
-        pageNumbers.innerHTML = html;
 
 
 
@@ -7332,13 +7331,6 @@
                 </div>
             `;
         }
-
-        // ============================================================================
-        // Load Alerts Tab - Pagination State
-        // ============================================================================
-        let alertsCurrentPage = 1;
-        const alertsItemsPerPage = 5;
-        let alertsFilteredIssues = [];
 
         // ============================================================================
         // Load Alerts Tab
@@ -8612,11 +8604,6 @@
         // Autonomous Self-Healing System Functions
         // ============================================================================
 
-        let healingPerformanceChart = null;
-
-        // Track active AbortControllers to clean them up when switching tabs
-        const activeAbortControllers = new Map();
-
         // Cleanup function for abort controllers when tab is switched away
         function cleanupAutoHealingControllers() {
             for (const [key, controller] of activeAbortControllers.entries()) {
@@ -8975,9 +8962,6 @@
         // ============================================================================
         // Auto-Healing Demo Mode Functions
         // ============================================================================
-
-        let autoHealingDemoActive = false;
-        let autoHealingDemoInterval = null;
 
         function toggleAutoHealingDemo() {
             const checkbox = document.getElementById('autoHealingDemoToggle');
@@ -10914,7 +10898,6 @@
         // ============================================================================
         // Scaling Functions
         // ============================================================================
-        let scalingStatusInterval = null;
 
         async function loadScalingStatus() {
             try {

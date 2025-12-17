@@ -3147,9 +3147,9 @@
                 if (!response.ok) {
                     if (response.status === 404 || response.status === 503) {
                         // Show unavailable message in charts
-                        updateChart('cpuChart', 'CPU Usage', 0, '% (Unavailable)');
-                        updateChart('memoryChart', 'Memory Usage', 0, '% (Unavailable)');
-                        updateChart('diskChart', 'Disk Usage', 0, '% (Unavailable)');
+                        updateResourceChart('cpuChart', 'CPU Usage', 0, '% (Unavailable)');
+                        updateResourceChart('memoryChart', 'Memory Usage', 0, '% (Unavailable)');
+                        updateResourceChart('diskChart', 'Disk Usage', 0, '% (Unavailable)');
                         return;
                     }
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -3159,31 +3159,31 @@
 
                 if (data.success && data.resources) {
                     // Update CPU chart
-                    updateChart('cpuChart', 'CPU Usage', data.resources.cpu?.cpu_percent || 0, '%');
+                    updateResourceChart('cpuChart', 'CPU Usage', data.resources.cpu?.cpu_percent || 0, '%');
                     // Update Memory chart
-                    updateChart('memoryChart', 'Memory Usage', data.resources.memory?.memory_percent || 0, '%');
+                    updateResourceChart('memoryChart', 'Memory Usage', data.resources.memory?.memory_percent || 0, '%');
                     // Update Disk chart
-                    updateChart('diskChart', 'Disk Usage', data.resources.disk?.disk_percent || 0, '%');
+                    updateResourceChart('diskChart', 'Disk Usage', data.resources.disk?.disk_percent || 0, '%');
                 } else {
                     // Show no data message
-                    updateChart('cpuChart', 'CPU Usage', 0, '% (No Data)');
-                    updateChart('memoryChart', 'Memory Usage', 0, '% (No Data)');
-                    updateChart('diskChart', 'Disk Usage', 0, '% (No Data)');
+                    updateResourceChart('cpuChart', 'CPU Usage', 0, '% (No Data)');
+                    updateResourceChart('memoryChart', 'Memory Usage', 0, '% (No Data)');
+                    updateResourceChart('diskChart', 'Disk Usage', 0, '% (No Data)');
                 }
             } catch (error) {
                 if (error.name === 'AbortError') {
-                    updateChart('cpuChart', 'CPU Usage', 0, '% (Timeout)');
-                    updateChart('memoryChart', 'Memory Usage', 0, '% (Timeout)');
-                    updateChart('diskChart', 'Disk Usage', 0, '% (Timeout)');
+                    updateResourceChart('cpuChart', 'CPU Usage', 0, '% (Timeout)');
+                    updateResourceChart('memoryChart', 'Memory Usage', 0, '% (Timeout)');
+                    updateResourceChart('diskChart', 'Disk Usage', 0, '% (Timeout)');
                 } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-                    updateChart('cpuChart', 'CPU Usage', 0, '% (Offline)');
-                    updateChart('memoryChart', 'Memory Usage', 0, '% (Offline)');
-                    updateChart('diskChart', 'Disk Usage', 0, '% (Offline)');
+                    updateResourceChart('cpuChart', 'CPU Usage', 0, '% (Offline)');
+                    updateResourceChart('memoryChart', 'Memory Usage', 0, '% (Offline)');
+                    updateResourceChart('diskChart', 'Disk Usage', 0, '% (Offline)');
                 }
             }
         }
 
-        function updateChart(canvasId, label, value, unit) {
+        function updateResourceChart(canvasId, label, value, unit) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return;
 
@@ -3539,7 +3539,7 @@
             }
 
             // Update chart with new data
-            updateChart(data);
+            updateMetricsChart(data);
 
             // Update system status
             updateSystemStatus(data);
@@ -3548,7 +3548,7 @@
             trackSystemActivity(data);
         }
 
-        function updateChart(data) {
+        function updateMetricsChart(data) {
             if (!metricsChart || !data.cpu || !data.memory) return;
 
             const now = new Date().toLocaleTimeString();
@@ -6205,12 +6205,6 @@
             refreshSystemLogs();
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
         function getLevelColor(level) {
             const upperLevel = (level || 'INFO').toUpperCase();
             if (upperLevel === 'CRITICAL' || upperLevel === 'CRIT') return '#ef4444';
@@ -6425,24 +6419,6 @@
             if (!hasMoreLogs) return;
             centralLogsPage++;
             await refreshSystemLogs(true);
-        }
-        console.error('Error loading system logs:', error);
-        let errorMsg = `Error: ${error.message}`;
-        let helpMsg = 'Check the browser console for details. Make sure the API server is running.';
-
-        if (currentLogSource === 'fluent-bit' && error.message.includes('fetch')) {
-            errorMsg = 'Failed to connect to Fluent Bit API';
-            helpMsg = 'Make sure Docker is running and Fluent Bit container is started. Run: ./scripts/start-fluent-bit.sh';
-        }
-
-        displayNoLogs(errorMsg, helpMsg);
-            } finally {
-            if (btn) {
-                const icon = btn.querySelector('i');
-                if (icon) icon.classList.remove('fa-spin');
-                btn.disabled = false;
-            }
-        }
         }
 
         function displayNoLogs(message, helpText = 'Try adjusting your filters or refresh to load new logs') {
@@ -6707,8 +6683,8 @@
                     `;
         }
         pageNumbers.innerHTML = html;
-            }
-        }
+
+
 
         function changeLogsPage(direction) {
             const totalPages = Math.ceil(filteredSystemLogs.length / logsPerPage);
@@ -7080,7 +7056,7 @@
 
                 if (result.status === 'success') {
                     // Pass the panel and log entry to displayAIAnalysis
-                    displayAIAnalysis(result, panel, logEntry);
+                    displayLogAIAnalysis(result, panel, logEntry);
                     aiAnalysisCount++;
                     addActivity('ai', 'AI analysis completed for log entry', 'success');
                 } else {
@@ -7139,7 +7115,7 @@
             return escapeHtml(text).replace(/\n/g, '<br>');
         }
 
-        function displayAIAnalysis(result, targetPanel = null, logEntry = null) {
+        function displayLogAIAnalysis(result, targetPanel = null, logEntry = null) {
             console.log('displayAIAnalysis called with:', { result, targetPanel, logEntry });
 
             // Use provided panel or fallback to default
@@ -9341,13 +9317,13 @@
                                 }
                             }
                         }
-                    } catch (e) {
-                        // Continue polling
                     }
-
-                    const elapsed = Math.floor((Date.now() - healingStartTime) / 1000);
-                    updateDemoStatus(`Step 4: Monitoring healing process... (${elapsed}s elapsed)`, 'loading');
+                } catch (e) {
+                    // Continue polling
                 }
+
+                const elapsed = Math.floor((Date.now() - healingStartTime) / 1000);
+                updateDemoStatus(`Step 4: Monitoring healing process... (${elapsed}s elapsed)`, 'loading');
             }
 
             if (!healingComplete && autoHealingDemoActive) {
@@ -9871,7 +9847,7 @@
                 faultAnalysisCache.set(faultId, data);
 
                 // Display analysis results
-                displayAIAnalysis(faultId, data);
+                displayFaultAIAnalysis(faultId, data);
 
                 // Update Auto-Heal button state
                 const healBtn = document.getElementById(`fault-${faultId}-heal-btn`);
@@ -9911,7 +9887,7 @@
             }
         }
 
-        function displayAIAnalysis(faultId, analysisData) {
+        function displayFaultAIAnalysis(faultId, analysisData) {
             const analysisContent = document.getElementById(`fault-${faultId}-analysis-content`);
             if (!analysisContent) return;
 

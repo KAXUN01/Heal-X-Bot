@@ -4165,7 +4165,9 @@ async def ignore_alert(data: dict = Body(...)):
 
 @app.post("/api/gemini/analyze-log")
 async def analyze_single_log(request: GroqAnalyzeRequest):
-    """Analyze a single log entry using AI (Gemini or Groq)"""
+    """Analyze a single log entry using AI (Gemini or Groq with automatic fallback)"""
+    global _ai_analyzer, _analyzer_type
+    
     try:
         # Use the global AI analyzer (Gemini or Groq based on what's available)
         if not _ai_analyzer:
@@ -4186,11 +4188,44 @@ async def analyze_single_log(request: GroqAnalyzeRequest):
         
         logger.info(f"Analyzing log entry with {_analyzer_type.upper()}: service={log_entry.get('service')}, message={log_entry.get('message', '')[:50]}")
         
-        # Analyze the log
-        analysis = _ai_analyzer.analyze_error_log(log_entry)
-        
-        logger.info(f"Analysis result status: {analysis.get('status')}")
-        return analysis
+        # Try to analyze the log with current analyzer
+        try:
+            analysis = _ai_analyzer.analyze_error_log(log_entry)
+            logger.info(f"Analysis result status: {analysis.get('status')}")
+            return analysis
+        except Exception as primary_error:
+            logger.warning(f"{_analyzer_type.upper()} analysis failed: {primary_error}")
+            
+            # Automatic fallback to Groq if Gemini fails
+            if _analyzer_type == 'gemini':
+                groq_key = os.getenv('GROQ_API_KEY')
+                if groq_key and GROQ_AVAILABLE:
+                    try:
+                        logger.info("🔄 Attempting fallback to Groq analyzer...")
+                        initialize_groq_analyzer(api_key=groq_key)
+                        from groq_log_analyzer import groq_analyzer
+                        
+                        if groq_analyzer and groq_analyzer.client:
+                            # Switch to Groq analyzer
+                            _ai_analyzer = groq_analyzer
+                            _analyzer_type = 'groq'
+                            logger.info("✅ Successfully switched to Groq analyzer")
+                            
+                            # Retry analysis with Groq
+                            analysis = _ai_analyzer.analyze_error_log(log_entry)
+                            logger.info(f"Groq analysis result status: {analysis.get('status')}")
+                            return analysis
+                        else:
+                            raise Exception("Groq analyzer initialization failed")
+                    except Exception as fallback_error:
+                        logger.error(f"Groq fallback failed: {fallback_error}")
+                        raise primary_error  # Re-raise original error
+                else:
+                    logger.error("No Groq API key available for fallback")
+                    raise primary_error
+            else:
+                # Already using Groq or other analyzer, no fallback available
+                raise primary_error
     
     except Exception as e:
         logger.error(f"Error analyzing log: {e}", exc_info=True)
@@ -4201,7 +4236,9 @@ async def analyze_single_log(request: GroqAnalyzeRequest):
 
 @app.post("/api/gemini/analyze-pattern")
 async def analyze_log_pattern(request: GroqAnalyzeRequest):
-    """Analyze multiple logs for patterns using AI (Gemini or Groq)"""
+    """Analyze multiple logs for patterns using AI (Gemini or Groq with automatic fallback)"""
+    global _ai_analyzer, _analyzer_type
+    
     try:
         if not _ai_analyzer:
             return {
@@ -4220,10 +4257,39 @@ async def analyze_log_pattern(request: GroqAnalyzeRequest):
         
         logger.info(f"Analyzing {len(log_entries)} logs for patterns with {_analyzer_type.upper()}")
         
-        # Analyze patterns
-        analysis = _ai_analyzer.analyze_multiple_logs(log_entries, limit=limit)
-        
-        return analysis
+        # Try to analyze patterns with current analyzer
+        try:
+            analysis = _ai_analyzer.analyze_multiple_logs(log_entries, limit=limit)
+            return analysis
+        except Exception as primary_error:
+            logger.warning(f"{_analyzer_type.upper()} pattern analysis failed: {primary_error}")
+            
+            # Automatic fallback to Groq if Gemini fails
+            if _analyzer_type == 'gemini':
+                groq_key = os.getenv('GROQ_API_KEY')
+                if groq_key and GROQ_AVAILABLE:
+                    try:
+                        logger.info("🔄 Attempting fallback to Groq analyzer for pattern analysis...")
+                        initialize_groq_analyzer(api_key=groq_key)
+                        from groq_log_analyzer import groq_analyzer
+                        
+                        if groq_analyzer and groq_analyzer.client:
+                            _ai_analyzer = groq_analyzer
+                            _analyzer_type = 'groq'
+                            logger.info("✅ Successfully switched to Groq analyzer")
+                            
+                            analysis = _ai_analyzer.analyze_multiple_logs(log_entries, limit=limit)
+                            return analysis
+                        else:
+                            raise Exception("Groq analyzer initialization failed")
+                    except Exception as fallback_error:
+                        logger.error(f"Groq fallback failed: {fallback_error}")
+                        raise primary_error
+                else:
+                    logger.error("No Groq API key available for fallback")
+                    raise primary_error
+            else:
+                raise primary_error
     
     except Exception as e:
         logger.error(f"Error analyzing log pattern: {e}")
@@ -4234,7 +4300,9 @@ async def analyze_log_pattern(request: GroqAnalyzeRequest):
 
 @app.get("/api/gemini/analyze-service/{service_name}")
 async def analyze_service_health(service_name: str, limit: int = 50):
-    """Analyze overall health of a service using AI (Gemini or Groq)"""
+    """Analyze overall health of a service using AI (Gemini or Groq with automatic fallback)"""
+    global _ai_analyzer, _analyzer_type
+    
     try:
         from centralized_logger import centralized_logger as _centralized_logger
         
@@ -4261,10 +4329,39 @@ async def analyze_service_health(service_name: str, limit: int = 50):
         
         logger.info(f"Analyzing health of service '{service_name}' with {_analyzer_type.upper()}")
         
-        # Analyze service health
-        analysis = _ai_analyzer.analyze_service_health(service_name, logs)
-        
-        return analysis
+        # Try to analyze service health with current analyzer
+        try:
+            analysis = _ai_analyzer.analyze_service_health(service_name, logs)
+            return analysis
+        except Exception as primary_error:
+            logger.warning(f"{_analyzer_type.upper()} service health analysis failed: {primary_error}")
+            
+            # Automatic fallback to Groq if Gemini fails
+            if _analyzer_type == 'gemini':
+                groq_key = os.getenv('GROQ_API_KEY')
+                if groq_key and GROQ_AVAILABLE:
+                    try:
+                        logger.info("🔄 Attempting fallback to Groq analyzer for service health...")
+                        initialize_groq_analyzer(api_key=groq_key)
+                        from groq_log_analyzer import groq_analyzer
+                        
+                        if groq_analyzer and groq_analyzer.client:
+                            _ai_analyzer = groq_analyzer
+                            _analyzer_type = 'groq'
+                            logger.info("✅ Successfully switched to Groq analyzer")
+                            
+                            analysis = _ai_analyzer.analyze_service_health(service_name, logs)
+                            return analysis
+                        else:
+                            raise Exception("Groq analyzer initialization failed")
+                    except Exception as fallback_error:
+                        logger.error(f"Groq fallback failed: {fallback_error}")
+                        raise primary_error
+                else:
+                    logger.error("No Groq API key available for fallback")
+                    raise primary_error
+            else:
+                raise primary_error
     
     except Exception as e:
         logger.error(f"Error analyzing service health: {e}")

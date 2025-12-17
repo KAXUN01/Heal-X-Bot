@@ -6556,8 +6556,14 @@
                 if (pag) pag.style.display = 'flex';
             }
 
-            // No client-side pagination slicing - show all filtered logs
-            const pageLogs = filteredSystemLogs;
+            // Calculate pagination
+            const totalPages = Math.ceil(filteredSystemLogs.length / logsPerPage);
+            logsCurrentPage = Math.max(1, Math.min(logsCurrentPage, totalPages || 1));
+            
+            // Slice logs for current page
+            const startIndex = (logsCurrentPage - 1) * logsPerPage;
+            const endIndex = startIndex + logsPerPage;
+            const pageLogs = filteredSystemLogs.slice(startIndex, endIndex);
 
             // Build table rows with alternating colors and better styling
             let html = '';
@@ -6678,9 +6684,18 @@
             const pagination = document.getElementById('logsPagination');
             if (!pagination) return;
 
+            const totalLogs = filteredSystemLogs.length;
+            const totalPages = Math.ceil(totalLogs / logsPerPage);
+            const startIndex = (logsCurrentPage - 1) * logsPerPage + 1;
+            const endIndex = Math.min(logsCurrentPage * logsPerPage, totalLogs);
+
             const info = document.getElementById('logsPageInfo');
             if (info) {
-                info.textContent = filteredSystemLogs.length;
+                if (totalLogs > 0) {
+                    info.textContent = `${startIndex}-${endIndex} of ${totalLogs} logs (Page ${logsCurrentPage}/${totalPages})`;
+                } else {
+                    info.textContent = '0 logs';
+                }
             }
         }
 

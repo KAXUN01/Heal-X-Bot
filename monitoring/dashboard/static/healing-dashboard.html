@@ -8210,7 +8210,7 @@
                     }
 
                     try {
-                        // Fetch alerts
+                        // Fetch critical issues
                         let data = await cachedFetch('/api/critical-services/issues?include_test=true', {}, 5000).catch(() => null);
 
                         // If no data or no issues, try without test
@@ -8218,18 +8218,49 @@
                             data = await cachedFetch('/api/critical-services/issues', {}, 5000).catch(() => null);
                         }
 
-                        if (!data) {
+                        // Fetch Discord alerts
+                        const discordAlertsData = await cachedFetch('/api/alerts/discord', {}, 5000).catch(() => null);
+                        let discordAlerts = [];
+
+                        if (discordAlertsData && discordAlertsData.status === 'success' && discordAlertsData.alerts) {
+                            discordAlerts = discordAlertsData.alerts.map(alert => {
+                                // Extract service name from message or embed title
+                                let serviceName = 'Discord Alert';
+                                if (alert.message.includes('Service Crash:')) {
+                                    serviceName = alert.message.split('Service Crash:')[1].trim();
+                                } else if (alert.embed_data && alert.embed_data.title) {
+                                    if (alert.embed_data.title.includes('Service Crash')) {
+                                        serviceName = alert.embed_data.title.split(':').pop().trim();
+                                    } else {
+                                        serviceName = alert.embed_data.title;
+                                    }
+                                }
+
+                                return {
+                                    timestamp: alert.timestamp,
+                                    service: serviceName,
+                                    severity: alert.severity || 'INFO',
+                                    priority: alert.severity === 'CRITICAL' ? 1 : (alert.severity === 'ERROR' ? 3 : 4),
+                                    message: alert.message,
+                                    source: 'discord',
+                                    isDiscordAlert: true
+                                };
+                            });
+                        }
+
+                        if (!data && discordAlerts.length === 0) {
                             throw new Error('Failed to fetch alerts');
                         }
 
-                        if (data.status === 'success' && data.issues !== undefined) {
+                        let criticalCrashErrors = [];
+                        if (data && data.status === 'success' && data.issues !== undefined) {
                             // Filter to show ONLY errors that cause system crashes or downtime
                             // Must have priority <= 2 (CRITICAL level) AND contain crash/down keywords
                             const crashKeywords = ['crash', 'down', 'abort', 'terminated', 'killed',
                                 'unavailable', 'stopped', 'failed to start',
                                 'service failure', 'system failure', 'fatal', 'panic'];
 
-                            const criticalCrashErrors = data.issues.filter(issue => {
+                            criticalCrashErrors = data.issues.filter(issue => {
                                 const priority = issue.priority !== undefined ? issue.priority : 6;
                                 const message = (issue.message || '').toLowerCase();
 
@@ -8239,41 +8270,42 @@
                                 // Must contain crash/down keywords
                                 return crashKeywords.some(keyword => message.includes(keyword));
                             });
+                        }
 
-                            // Store filtered issues for pagination
-                            alertsFilteredIssues = criticalCrashErrors;
+                        // Merge with Discord alerts
+                        alertsFilteredIssues = [...criticalCrashErrors, ...discordAlerts];
 
-                            // Sort by timestamp (newest first)
-                            const sortedIssues = [...alertsFilteredIssues].sort((a, b) => {
-                                const timeA = new Date(a.timestamp || 0);
-                                const timeB = new Date(b.timestamp || 0);
-                                return timeB - timeA;
-                            });
+                        // Sort by timestamp (newest first)
+                        const sortedIssues = [...alertsFilteredIssues].sort((a, b) => {
+                            const timeA = new Date(a.timestamp || 0);
+                            const timeB = new Date(b.timestamp || 0);
+                            return timeB - timeA;
+                        });
 
-                            // Update alert count in overview card
-                            const alertCountElement = document.getElementById('alertCount');
-                            if (alertCountElement) {
-                                alertCountElement.textContent = sortedIssues.length;
-                            }
+                        // Update alert count in overview card
+                        const alertCountElement = document.getElementById('alertCount');
+                        if (alertCountElement) {
+                            alertCountElement.textContent = sortedIssues.length;
+                        }
 
-                            // Calculate pagination
-                            const totalPages = Math.ceil(sortedIssues.length / alertsItemsPerPage);
+                        // Calculate pagination
+                        const totalPages = Math.ceil(sortedIssues.length / alertsItemsPerPage);
 
-                            // Fix: Reset alertsCurrentPage if it exceeds totalPages after filtering
-                            // This prevents silent failures when filters reduce the result set
-                            if (alertsCurrentPage > totalPages && totalPages > 0) {
-                                alertsCurrentPage = totalPages;
-                            } else if (totalPages === 0) {
-                                alertsCurrentPage = 1;
-                            }
+                        // Fix: Reset alertsCurrentPage if it exceeds totalPages after filtering
+                        // This prevents silent failures when filters reduce the result set
+                        if (alertsCurrentPage > totalPages && totalPages > 0) {
+                            alertsCurrentPage = totalPages;
+                        } else if (totalPages === 0) {
+                            alertsCurrentPage = 1;
+                        }
 
-                            const startIndex = (alertsCurrentPage - 1) * alertsItemsPerPage;
-                            const endIndex = startIndex + alertsItemsPerPage;
-                            const displayedIssues = sortedIssues.slice(startIndex, endIndex);
+                        const startIndex = (alertsCurrentPage - 1) * alertsItemsPerPage;
+                        const endIndex = startIndex + alertsItemsPerPage;
+                        const displayedIssues = sortedIssues.slice(startIndex, endIndex);
 
-                            // Display alerts
-                            if (sortedIssues.length === 0) {
-                                tbody.innerHTML = `
+                        // Display alerts
+                        if (sortedIssues.length === 0) {
+                            tbody.innerHTML = `
                             <tr>
                                 <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
                                     <i class="fas fa-check-circle" style="font-size: 2rem; color: var(--accent-green); margin-bottom: 0.5rem; display: block;"></i>
@@ -8283,43 +8315,45 @@
                             </tr>
                         `;
 
-                                // Hide pagination when no alerts
-                                if (paginationDiv) {
-                                    paginationDiv.style.display = 'none';
-                                }
-                            } else {
-                                let html = '';
-                                displayedIssues.forEach(issue => {
-                                    const severity = issue.severity || issue.level || 'CRITICAL';
-                                    const severityColor = 'var(--accent-red)';
-                                    const timeStr = new Date(issue.timestamp).toLocaleString('en-US', {
-                                        month: 'short',
-                                        day: 'numeric',
-                                        hour: '2-digit',
-                                        minute: '2-digit',
-                                        second: '2-digit'
-                                    });
+                            // Hide pagination when no alerts
+                            if (paginationDiv) {
+                                paginationDiv.style.display = 'none';
+                            }
+                        } else {
+                            let html = '';
+                            displayedIssues.forEach(issue => {
+                                const isDiscord = issue.source === 'discord';
+                                const severity = issue.severity || issue.level || 'CRITICAL';
+                                const severityColor = isDiscord ? '#5865F2' : 'var(--accent-red)';
+                                const timeStr = new Date(issue.timestamp).toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit'
+                                });
 
-                                    // Prepare issue data for AI analysis (convert issue format to logEntry format)
-                                    const logEntryData = {
-                                        timestamp: issue.timestamp,
-                                        service: issue.service || 'unknown',
-                                        message: issue.message || '',
-                                        level: issue.level || issue.severity || 'CRITICAL',
-                                        source_file: issue.source_file || issue.source || 'critical-services',
-                                        source: issue.source || 'critical-services',
-                                        tag: issue.tag || null,
-                                        severity: issue.severity || issue.level || 'CRITICAL',
-                                        category: issue.category || null
-                                    };
+                                // Prepare issue data for AI analysis
+                                const logEntryData = {
+                                    timestamp: issue.timestamp,
+                                    service: issue.service || 'unknown',
+                                    message: issue.message || '',
+                                    level: severity,
+                                    source: isDiscord ? 'discord' : (issue.source || 'critical-services'),
+                                    source_file: issue.source_file || issue.service || 'alert',
+                                    severity: severity
+                                };
 
-                                    html += `
+                                html += `
                                 <tr style="transition: background 0.2s; border-bottom: 1px solid var(--border-color);" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">
                                     <td style="padding: 1rem; white-space: nowrap; vertical-align: middle;">
                                         ${timeStr}
                                     </td>
                                     <td style="padding: 1rem; white-space: nowrap; vertical-align: middle;">
-                                        <span style="font-weight: 500;">${escapeHtml(issue.service || 'Unknown')}</span>
+                                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                            ${isDiscord ? '<i class="fab fa-discord" style="color: #5865F2;"></i>' : '<i class="fas fa-exclamation-triangle" style="color: var(--accent-red);"></i>'}
+                                            <span style="font-weight: 500;">${escapeHtml(issue.service || 'Unknown')}</span>
+                                        </div>
                                     </td>
                                     <td style="padding: 1rem; white-space: nowrap; vertical-align: middle;">
                                         <span style="padding: 0.35rem 0.75rem; background: ${severityColor}; color: white; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 600; display: inline-block;">
@@ -8341,21 +8375,21 @@
                                     </td>
                                 </tr>
                             `;
-                                });
+                            });
 
-                                tbody.innerHTML = html;
+                            tbody.innerHTML = html;
 
-                                // Update pagination controls
-                                updateAlertsPagination(sortedIssues.length, totalPages, startIndex + 1, Math.min(endIndex, sortedIssues.length));
-                            }
-                        } else if (data.status === 'success' && (!data.issues || data.issues.length === 0)) {
-                            // No issues found
-                            const alertCountElement = document.getElementById('alertCount');
-                            if (alertCountElement) {
-                                alertCountElement.textContent = '0';
-                            }
+                            // Update pagination controls
+                            updateAlertsPagination(sortedIssues.length, totalPages, startIndex + 1, Math.min(endIndex, sortedIssues.length));
+                        }
+                    } else if (data.status === 'success' && (!data.issues || data.issues.length === 0)) {
+                        // No issues found
+                        const alertCountElement = document.getElementById('alertCount');
+                        if (alertCountElement) {
+                            alertCountElement.textContent = '0';
+                        }
 
-                            tbody.innerHTML = `
+                        tbody.innerHTML = `
                         <tr>
                             <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
                                 <i class="fas fa-check-circle" style="font-size: 2rem; color: var(--accent-green); margin-bottom: 0.5rem; display: block;"></i>
@@ -8365,17 +8399,17 @@
                         </tr>
                     `;
 
-                            // Hide pagination when no alerts
-                            const paginationDiv = document.getElementById('alertsPagination');
-                            if (paginationDiv) {
-                                paginationDiv.style.display = 'none';
-                            }
-                        } else {
-                            throw new Error(data.message || 'Unknown error');
+                        // Hide pagination when no alerts
+                        const paginationDiv = document.getElementById('alertsPagination');
+                        if (paginationDiv) {
+                            paginationDiv.style.display = 'none';
                         }
-                    } catch (error) {
-                        console.error('Error loading alerts:', error);
-                        tbody.innerHTML = `
+                    } else {
+                        throw new Error(data.message || 'Unknown error');
+                    }
+                } catch (error) {
+                    console.error('Error loading alerts:', error);
+                    tbody.innerHTML = `
                     <tr>
                         <td colspan="5" style="text-align: center; padding: 2rem; color: var(--accent-red);">
                             <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 0.5rem; display: block;"></i>
@@ -8385,12 +8419,12 @@
                     </tr>
                 `;
 
-                        // Hide pagination on error
-                        const paginationDiv = document.getElementById('alertsPagination');
-                        if (paginationDiv) {
-                            paginationDiv.style.display = 'none';
-                        }
+                    // Hide pagination on error
+                    const paginationDiv = document.getElementById('alertsPagination');
+                    if (paginationDiv) {
+                        paginationDiv.style.display = 'none';
                     }
+                }
                 }
 
                 // ============================================================================

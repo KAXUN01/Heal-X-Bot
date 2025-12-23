@@ -15,6 +15,10 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 try:
+    from .alert_manager import get_discord_alert_manager
+except ImportError:
+    from alert_manager import get_discord_alert_manager
+try:
     from .log_monitor import initialize_log_monitoring, log_monitor
 except ImportError:
     from log_monitor import initialize_log_monitoring, log_monitor
@@ -107,6 +111,7 @@ log_monitor = None  # Alias for endpoints
 system_log_collector = None  # System-wide log collector
 critical_services_monitor = None  # Critical services monitor
 auto_healer = None  # AI-powered auto-healing system
+discord_alert_manager = None # Manager for Discord alerts
 
 # Prometheus metrics
 REQUEST_COUNT = Counter("request_count", "Total number of requests", ['endpoint'])
@@ -937,6 +942,10 @@ def initialize_services():
     global log_monitoring_service, centralized_logging_service, centralized_logger
     global service_discovery, groq_log_analyzer_service, groq_analyzer, log_monitor
     global system_log_collector, critical_services_monitor, auto_healer
+    global discord_alert_manager
+
+    # Initialize discord alert manager
+    discord_alert_manager = get_discord_alert_manager(max_alerts=100)
     
     try:
         # DISABLED: Application log monitoring (not needed - only monitoring system services)
@@ -1016,6 +1025,10 @@ def initialize_services():
             def discord_notifier(message, severity="info", embed_data=None):
                 # Simple Discord notification - can be enhanced
                 try:
+                    # Record the alert in history
+                    if discord_alert_manager:
+                        discord_alert_manager.record_alert(message, severity, embed_data)
+                    
                     import requests
                     discord_webhook = os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL", "")
                     if discord_webhook:
@@ -1296,6 +1309,33 @@ def update_auto_healer_config():
         }), 400
     except Exception as e:
         app.logger.error(f"Error updating auto-healer config: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'An internal error occurred'
+        }), 500
+
+# ========== Discord Alerts Endpoints ==========
+
+@app.route("/api/alerts/discord")
+def get_discord_alerts():
+    """Get history of alerts sent to Discord"""
+    try:
+        limit = int(request.args.get('limit', 50))
+        if not discord_alert_manager:
+            return jsonify({
+                'status': 'success',
+                'alerts': [],
+                'count': 0
+            })
+            
+        alerts = discord_alert_manager.get_alerts(limit=limit)
+        return jsonify({
+            'status': 'success',
+            'alerts': alerts,
+            'count': len(alerts)
+        })
+    except Exception as e:
+        app.logger.error(f"Error getting Discord alerts: {str(e)}")
         return jsonify({
             'status': 'error',
             'message': 'An internal error occurred'

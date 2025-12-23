@@ -8382,34 +8382,10 @@
                             // Update pagination controls
                             updateAlertsPagination(sortedIssues.length, totalPages, startIndex + 1, Math.min(endIndex, sortedIssues.length));
                         }
-                    } else if (data.status === 'success' && (!data.issues || data.issues.length === 0)) {
-                        // No issues found
-                        const alertCountElement = document.getElementById('alertCount');
-                        if (alertCountElement) {
-                            alertCountElement.textContent = '0';
-                        }
-
-                        tbody.innerHTML = `
-                        <tr>
-                            <td colspan="5" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
-                                <i class="fas fa-check-circle" style="font-size: 2rem; color: var(--accent-green); margin-bottom: 0.5rem; display: block;"></i>
-                                No Critical Crash Errors ✅
-                                <div style="font-size: 0.85rem; margin-top: 0.5rem;">No system crashes or downtime detected</div>
-                            </td>
-                        </tr>
-                    `;
-
-                        // Hide pagination when no alerts
-                        const paginationDiv = document.getElementById('alertsPagination');
-                        if (paginationDiv) {
-                            paginationDiv.style.display = 'none';
-                        }
-                    } else {
-                        throw new Error(data.message || 'Unknown error');
                     }
-                } catch (error) {
-                    console.error('Error loading alerts:', error);
-                    tbody.innerHTML = `
+                    } catch (error) {
+                        console.error('Error loading alerts:', error);
+                        tbody.innerHTML = `
                     <tr>
                         <td colspan="5" style="text-align: center; padding: 2rem; color: var(--accent-red);">
                             <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 0.5rem; display: block;"></i>
@@ -8419,12 +8395,12 @@
                     </tr>
                 `;
 
-                    // Hide pagination on error
-                    const paginationDiv = document.getElementById('alertsPagination');
-                    if (paginationDiv) {
-                        paginationDiv.style.display = 'none';
+                        // Hide pagination on error
+                        const paginationDiv = document.getElementById('alertsPagination');
+                        if (paginationDiv) {
+                            paginationDiv.style.display = 'none';
+                        }
                     }
-                }
                 }
 
                 // ============================================================================

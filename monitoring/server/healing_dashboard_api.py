@@ -58,7 +58,10 @@ class BlockIPRequest(BaseModel):
     """Request model for blocking an IP address"""
     ip: str = Field(..., description="IP address to block")
     reason: Optional[str] = Field(None, description="Reason for blocking")
-    threat_level: Optional[Union[str, float]] = Field(None, description="Threat level (Low, Medium, High, Critical or 0.0-1.0)")
+    threat_level: Optional[Union[str, float]] = Field(None, description="Threat level (e.g., Low, Medium, High, Critical)")
+    attack_count: Optional[int] = Field(1, description="Number of attacks detected")
+    attack_type: Optional[str] = Field(None, description="Type of attack detected")
+    blocked_by: Optional[str] = Field("dashboard", description="Source of the block action")
     
     @validator('ip')
     def validate_ip(cls, v):
@@ -218,12 +221,22 @@ app.add_middleware(
 try:
     from monitoring.server.core.logging_config import setup_logger
     log_dir = Path(__file__).parent.parent.parent / "logs"
-    logger = setup_logger(
-        name=__name__,
-        log_file="Healing Dashboard API.log",
-        log_dir=str(log_dir),
-        console_output=True
-    )
+    try:
+        logger = setup_logger(
+            name=__name__,
+            log_file="Healing Dashboard API.log",
+            log_dir=str(log_dir),
+            console_output=True
+        )
+    except (PermissionError, OSError):
+        # Fallback to current directory if logs dir is not writable
+        logger = setup_logger(
+            name=__name__,
+            log_file="Healing Dashboard API.log",
+            log_dir=".",
+            console_output=True
+        )
+        logger.warning(f"Default log directory {log_dir} not writable, falling back to current directory")
 except ImportError:
     # Fallback to basic logging if core module not available
     logging.basicConfig(level=logging.INFO)
@@ -404,7 +417,7 @@ def load_config():
     }
     
     return {
-    "auto_restart": True,
+    "auto_restart": False,
     "cpu_threshold": 90.0,
     "memory_threshold": 85.0,
     "disk_threshold": 80.0,
@@ -6318,22 +6331,14 @@ async def get_ml_history():
         }
 
 @app.post("/api/blocking/block")
-async def block_ip_ddos(request: BlockIPRequest, additional_data: dict = Body(None)):
+async def block_ip_ddos(request: BlockIPRequest):
     """Block an IP address (DDoS endpoint)"""
-    # Use Pydantic model for IP validation, but allow additional fields from body
     ip = request.ip
-    if additional_data:
-        attack_count = additional_data.get("attack_count", 1)
-        threat_level = additional_data.get("threat_level", "Medium")
-        attack_type = additional_data.get("attack_type")
-        reason = additional_data.get("reason") or request.reason or f"Manual block via dashboard"
-        blocked_by = additional_data.get("blocked_by", "dashboard")
-    else:
-        attack_count = 1
-        threat_level = "Medium"
-        attack_type = None
-        reason = request.reason or f"Manual block via dashboard"
-        blocked_by = "dashboard"
+    attack_count = request.attack_count or 1
+    threat_level = request.threat_level or "Medium"
+    attack_type = request.attack_type
+    reason = request.reason or f"Manual block via dashboard"
+    blocked_by = request.blocked_by or "dashboard"
     
     try:
         success = block_ip(

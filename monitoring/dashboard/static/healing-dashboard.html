@@ -5999,10 +5999,17 @@
                             setTimeout(() => {
                                 showNotification(`✅ IP ${ip} moved to Blocked IPs table`, 'success');
                             }, 500);
-                        } else {
-                            const errorMessage = result.message || result.error || 'Unknown error';
+                            let detailMsg = '';
+                            if (result.detail) {
+                                if (Array.isArray(result.detail)) {
+                                    detailMsg = ': ' + result.detail.map(d => `${d.loc.join('.')}: ${d.msg}`).join(', ');
+                                } else {
+                                    detailMsg = ': ' + result.detail;
+                                }
+                            }
+                            const errorMessage = (result.message || result.error || 'Unknown error') + detailMsg;
                             addActivity('network', `❌ Failed to block IP: ${ip} - ${errorMessage}`, 'error');
-                            showNotification(`❌ Failed to block IP ${ip}: ${errorMessage}`, 'error');
+                            showNotification(`❌ Failed to block IP ${ip}${detailMsg}`, 'error');
                         }
 
                     } catch (error) {

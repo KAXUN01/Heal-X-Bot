@@ -15,6 +15,8 @@ except ImportError:
     from pydantic import root_validator
     _HAS_MODEL_VALIDATOR = False
 from typing import Union
+import secrets
+import uuid
 import psutil
 import subprocess
 import asyncio
@@ -136,6 +138,11 @@ class ConfigUpdateRequest(BaseModel):
     cpu_threshold: Optional[float] = Field(None, ge=0.0, le=100.0)
     memory_threshold: Optional[float] = Field(None, ge=0.0, le=100.0)
     disk_threshold: Optional[float] = Field(None, ge=0.0, le=100.0)
+
+class LoginRequest(BaseModel):
+    """Request model for user login"""
+    username: str = Field(..., min_length=1, max_length=50, description="Username")
+    password: str = Field(..., min_length=1, max_length=100, description="Password")
 
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
@@ -585,6 +592,61 @@ ml_statistics = {
 # DDoS Simulator Instance
 ddos_simulator = None
 
+# Authentication Session Storage
+# In production, use Redis or a database. For simplicity, using in-memory storage.
+active_sessions = {}  # token -> {username, created_at, last_activity}
+
+# Default credentials (in production, use a database with hashed passwords)
+# Username: admin, Password: admin123
+DEFAULT_USERS = {
+    "admin": {
+        "password_hash": hashlib.sha256("admin123".encode()).hexdigest(),
+        "role": "admin"
+    }
+}
+
+def verify_credentials(username: str, password: str) -> bool:
+    """Verify user credentials"""
+    user = DEFAULT_USERS.get(username)
+    if not user:
+        return False
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    return password_hash == user["password_hash"]
+
+def create_session(username: str) -> str:
+    """Create a new session and return the token"""
+    token = secrets.token_urlsafe(32)
+    active_sessions[token] = {
+        "username": username,
+        "created_at": datetime.now(),
+        "last_activity": datetime.now()
+    }
+    return token
+
+def verify_session(token: str) -> Optional[Dict[str, Any]]:
+    """Verify session token and return session data if valid"""
+    session = active_sessions.get(token)
+    if not session:
+        return None
+    
+    # Update last activity
+    session["last_activity"] = datetime.now()
+    
+    # Check if session is expired (24 hours)
+    if (datetime.now() - session["created_at"]).total_seconds() > 86400:
+        del active_sessions[token]
+        return None
+    
+    return session
+
+def invalidate_session(token: str) -> bool:
+    """Invalidate a session token"""
+    if token in active_sessions:
+        del active_sessions[token]
+        return True
+    return False
+
+
 @app.post("/api/demo/ddos/start")
 async def start_ddos_demo():
     """Start the DDoS simulation"""
@@ -642,6 +704,76 @@ ml_performance_history = {
     "f1_score": [],
     "prediction_times": []
 }
+
+# ============================================================================
+# Authentication Endpoints
+# ============================================================================
+
+@app.post("/api/auth/login")
+async def login(request: LoginRequest):
+    """Authenticate user and create session"""
+    try:
+        if verify_credentials(request.username, request.password):
+            token = create_session(request.username)
+            logger.info(f"User {request.username} logged in successfully")
+            return {
+                "status": "success",
+                "token": token,
+                "username": request.username
+            }
+        else:
+            logger.warning(f"Failed login attempt for user: {request.username}")
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/api/auth/logout")
+async def logout(request: Request):
+    """Logout user and invalidate session"""
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            if invalidate_session(token):
+                logger.info("User logged out successfully")
+                return {"status": "success", "message": "Logged out successfully"}
+        
+        return {"status": "success", "message": "No active session"}
+    except Exception as e:
+        logger.error(f"Logout error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/api/auth/check")
+async def check_auth(request: Request):
+    """Check if user is authenticated"""
+    try:
+        # Get token from Authorization header
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            session = verify_session(token)
+            if session:
+                return {
+                    "status": "success",
+                    "authenticated": True,
+                    "username": session["username"]
+                }
+        
+        return {
+            "status": "success",
+            "authenticated": False
+        }
+    except Exception as e:
+        logger.error(f"Auth check error: {e}")
+        return {
+            "status": "error",
+            "authenticated": False
+        }
+
 
 # ============================================================================
 # WebSocket Connection Management

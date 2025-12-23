@@ -119,9 +119,9 @@
         }
 
         .container {
-            max-width: 1600px;
-            margin: 0 auto;
-            padding: 2rem;
+            width: 100%;
+            margin: 0;
+            padding: 1.5rem;
         }
 
         .summary-cards {
@@ -1465,16 +1465,19 @@
             margin-left: 260px;
             display: flex;
             flex-direction: column;
+            min-height: 100vh;
+            width: calc(100% - 260px);
         }
 
         .top-bar {
             background: var(--bg-secondary);
             border-bottom: 2px solid var(--border-color);
-            padding: 1rem 2rem;
+            padding: 1rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            width: 100%;
         }
 
         .top-bar-title {
@@ -1487,18 +1490,81 @@
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-100%);
+                z-index: 2000;
             }
 
             .sidebar.mobile-open {
                 transform: translateX(0);
+                box-shadow: 4px 0 10px rgba(0, 0, 0, 0.3);
             }
 
             .main-content {
                 margin-left: 0;
+                width: 100%;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+
+            .top-bar {
+                padding: 0.75rem 1rem;
+            }
+
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .card {
+                margin-bottom: 1rem;
             }
 
             .mobile-menu-btn {
                 display: block !important;
+            }
+        }
+
+        /* Tablet responsive */
+        @media (max-width: 1024px) and (min-width: 769px) {
+            .sidebar {
+                width: 220px;
+            }
+
+            .main-content {
+                margin-left: 220px;
+                width: calc(100% - 220px);
+            }
+
+            .container {
+                padding: 1.25rem;
+            }
+
+            .summary-cards {
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            }
+        }
+
+        /* Small mobile */
+        @media (max-width: 480px) {
+            .top-bar-title {
+                font-size: 1.1rem;
+            }
+
+            .status-badge {
+                font-size: 0.75rem;
+                padding: 0.4rem 0.75rem;
+            }
+
+            .container {
+                padding: 0.75rem;
+            }
+
+            .card {
+                padding: 1rem;
+            }
+
+            .card-value {
+                font-size: 2rem;
             }
         }
 
@@ -1510,6 +1576,11 @@
             padding: 0.5rem 1rem;
             border-radius: 8px;
             cursor: pointer;
+            font-size: 1.2rem;
+        }
+
+        .mobile-menu-btn:hover {
+            background: var(--bg-primary);
         }
 
         /* Hide old header and tabs when sidebar is active */

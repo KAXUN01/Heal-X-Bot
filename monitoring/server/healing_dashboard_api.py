@@ -58,7 +58,7 @@ class BlockIPRequest(BaseModel):
     """Request model for blocking an IP address"""
     ip: str = Field(..., description="IP address to block")
     reason: Optional[str] = Field(None, description="Reason for blocking")
-    threat_level: Optional[float] = Field(None, ge=0.0, le=1.0, description="Threat level (0.0-1.0)")
+    threat_level: Optional[Union[str, float]] = Field(None, description="Threat level (Low, Medium, High, Critical or 0.0-1.0)")
     
     @validator('ip')
     def validate_ip(cls, v):
@@ -6351,8 +6351,8 @@ async def block_ip_ddos(request: BlockIPRequest, additional_data: dict = Body(No
         else:
             return {"success": False, "ip": ip, "message": "Failed to block IP"}
     except Exception as e:
-        logger.error(f"Error blocking IP {ip}: {e}")
-        return {"success": False, "ip": ip, "error": str(e)}
+        logger.error(f"Error blocking IP {ip}: {e}", exc_info=True)
+        return {"success": False, "ip": ip, "message": f"Server error: {str(e)}", "error": str(e)}
 
 @app.post("/api/ddos/report")
 async def report_ddos_detection(data: dict):

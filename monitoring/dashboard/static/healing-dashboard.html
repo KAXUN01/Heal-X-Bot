@@ -6000,8 +6000,9 @@
                                 showNotification(`✅ IP ${ip} moved to Blocked IPs table`, 'success');
                             }, 500);
                         } else {
-                            addActivity('network', `❌ Failed to block IP: ${ip}`, 'error');
-                            showNotification(`❌ Failed to block IP ${ip}: ${result.message || 'Unknown error'}`, 'error');
+                            const errorMessage = result.message || result.error || 'Unknown error';
+                            addActivity('network', `❌ Failed to block IP: ${ip} - ${errorMessage}`, 'error');
+                            showNotification(`❌ Failed to block IP ${ip}: ${errorMessage}`, 'error');
                         }
 
                     } catch (error) {

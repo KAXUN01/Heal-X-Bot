@@ -5120,20 +5120,53 @@
                 let lastDemoMetrics = null;
                 let currentDemoScenario = null;
 
-                function toggleDemoMode() {
+                async function toggleDemoMode() {
                     const toggle = document.getElementById('demoModeToggle');
                     demoMode = toggle.checked;
                     console.log('🎭 Demo mode:', demoMode ? 'ON' : 'OFF');
 
                     if (demoMode) {
-                        showNotification('🎭 Demo mode enabled - Will use test scenarios', 'info');
+                        showNotification('🎭 Demo mode enabling - Starting test scenarios...', 'info');
+
+                        try {
+                            // Start the backend demo script
+                            const response = await fetch('/api/demo/predictive/start', {
+                                method: 'POST',
+                                cache: 'no-cache'
+                            });
+                            const data = await response.json();
+
+                            if (data.status === 'success') {
+                                console.log('✅ Demo script started successfully');
+                                showNotification('🔮 Predictive Maintenance demo started!', 'success');
+                            } else {
+                                console.error('❌ Failed to start demo script:', data.message);
+                                showNotification('⚠️ Failed to start demo script: ' + data.message, 'warning');
+                            }
+                        } catch (err) {
+                            console.error('❌ Error starting demo script:', err);
+                            showNotification('⚠️ Connection error starting demo script', 'warning');
+                        }
+
                         // Start polling for demo metrics
                         startDemoMetricsPolling();
                         // Try to fetch metrics after polling has had time to complete
                         // Polling runs immediately, so give it 1.5 seconds to fetch
                         setTimeout(() => refreshPredictiveMaintenance(), 1500);
                     } else {
-                        showNotification('📊 Demo mode disabled - Using real system metrics', 'info');
+                        showNotification('📊 Demo mode disabling...', 'info');
+
+                        try {
+                            // Stop the backend demo script
+                            await fetch('/api/demo/predictive/stop', {
+                                method: 'POST',
+                                cache: 'no-cache'
+                            });
+                            console.log('🛑 Demo script stopped');
+                        } catch (err) {
+                            console.error('❌ Error stopping demo script:', err);
+                        }
+
                         // Stop polling
                         stopDemoMetricsPolling();
                         lastDemoMetrics = null;
@@ -5145,8 +5178,11 @@
                         }
                         // Refresh with real metrics
                         refreshPredictiveMaintenance();
+
+                        showNotification('📊 Demo mode disabled - Using real system metrics', 'info');
                     }
                 }
+
 
                 // Listen for demo metrics from external scripts
                 window.addEventListener('message', function (event) {

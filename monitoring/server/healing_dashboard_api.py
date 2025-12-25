@@ -714,6 +714,77 @@ ddos_statistics = {
     "top_source_ips": {}
 }
 
+# Predictive Demo Process (automated run)
+predictive_demo_process = None
+
+@app.post("/api/demo/predictive/start")
+async def start_predictive_demo():
+    """Start the predictive maintenance demo script as a background process"""
+    global predictive_demo_process
+    # Check if already running
+    if predictive_demo_process and predictive_demo_process.poll() is None:
+        return {"status": "success", "message": "Predictive demo already running"}
+    
+    try:
+        # Get path to the demo script
+        script_path = str(Path(__file__).parent.parent.parent / 'scripts' / 'demo-predictive-model.py')
+        
+        # Start the script as a subprocess
+        # --loop: keep running through scenarios
+        # --delay 10: wait 10 seconds between scenarios for dashboard to catch up
+        # --url: explicitly set the dashboard URL
+        dashboard_url = f"http://localhost:{os.getenv('PORT', '5001')}"
+        
+        logger.info(f"Starting predictive maintenance demo script: {script_path}")
+        
+        # Run using the same python interpreter
+        predictive_demo_process = subprocess.Popen(
+            [sys.executable, script_path, "--loop", "--delay", "10", "--url", dashboard_url],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        
+        logger.info(f"✅ Predictive maintenance demo started (PID: {predictive_demo_process.pid})")
+        return {"status": "success", "message": "Predictive maintenance demo started"}
+    except Exception as e:
+        logger.error(f"❌ Failed to start predictive maintenance demo: {e}")
+        return {"status": "error", "message": f"Failed to start demo script: {str(e)}"}
+
+@app.post("/api/demo/predictive/stop")
+async def stop_predictive_demo():
+    """Stop the predictive maintenance demo script background process"""
+    global predictive_demo_process
+    if predictive_demo_process and predictive_demo_process.poll() is None:
+        try:
+            # Try to terminate gracefully
+            predictive_demo_process.terminate()
+            try:
+                predictive_demo_process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                # Force kill if termination takes too long
+                predictive_demo_process.kill()
+            
+            logger.info("🛑 Predictive maintenance demo stopped")
+            predictive_demo_process = None
+            return {"status": "success", "message": "Predictive maintenance demo stopped"}
+        except Exception as e:
+            logger.error(f"Error stopping demo process: {e}")
+            predictive_demo_process = None # Reset anyway
+            return {"status": "error", "message": f"Error stopping process: {str(e)}"}
+    
+    predictive_demo_process = None
+    return {"status": "success", "message": "Predictive maintenance demo not running"}
+
+@app.get("/api/demo/predictive/status")
+async def get_predictive_demo_status():
+    """Get status of the predictive maintenance demo process"""
+    global predictive_demo_process
+    is_running = predictive_demo_process is not None and predictive_demo_process.poll() is None
+    pid = predictive_demo_process.pid if is_running else None
+    return {"status": "success", "running": is_running, "pid": pid}
+
+
 # ML Performance History
 ml_performance_history = {
     "timestamps": [],

@@ -268,9 +268,8 @@ class FaultDetector:
         print(f"Time: {fault.get('timestamp', 'unknown')}")
         print(f"{'='*70}\n")
         
-        # Send Discord notification for service crashes
-        if fault['type'] == 'service_crash':
-            self._send_discord_notification(fault)
+        # Send Discord notification for all faults
+        self._send_discord_notification(fault)
         
         # Emit event for dashboard
         if self.event_emitter:
@@ -321,27 +320,45 @@ class FaultDetector:
         
         try:
             service_name = fault.get('service', 'Unknown Service')
-            status = fault.get('status', 'unknown')
-            restart_count = fault.get('restart_count', 0)
+            fault_type = fault.get('type', 'Unknown Fault')
+            message = fault.get('message', 'No details provided')
+            severity = fault.get('severity', 'warning')
+            timestamp = fault.get('timestamp', datetime.now().isoformat())
             
+            # customized title and color based on severity
+            if severity == 'critical':
+                color = 15158332 # Red
+                title = f'🚨 Critical Issue: {service_name}'
+            elif severity == 'high':
+                color = 15105570 # Orange
+                title = f'⚠️ High Priority Issue: {service_name}'
+            else:
+                color = 16776960 # Yellow
+                title = f'⚠️ Issue Detected: {service_name}'
+
             embed_data = {
-                'title': '🚨 Service Crash Detected',
-                'description': f"**Service:** {service_name}\n**Status:** {status}\n**Restart Count:** {restart_count}",
-                'color': 15158332,  # Red
+                'title': title,
+                'description': f"**Type:** {fault_type}\n**Message:** {message}",
+                'color': color,
                 'fields': [
                     {
-                        'name': 'Fault Type',
-                        'value': fault.get('type', 'unknown'),
+                        'name': 'Service',
+                        'value': service_name,
                         'inline': True
                     },
                     {
                         'name': 'Severity',
-                        'value': fault.get('severity', 'unknown'),
+                        'value': severity.upper(),
                         'inline': True
                     },
                     {
+                        'name': 'Details',
+                        'value': str(fault.get('details', 'N/A'))[:200], # Truncate if too long
+                        'inline': False
+                    },
+                    {
                         'name': 'Timestamp',
-                        'value': fault.get('timestamp', 'unknown'),
+                        'value': timestamp,
                         'inline': False
                     }
                 ],
@@ -351,12 +368,12 @@ class FaultDetector:
             }
             
             self.discord_notifier(
-                f"🚨 Service Crash: {service_name}",
-                'critical',
+                f"🚨 Alert: {fault_type} on {service_name}",
+                severity,
                 embed_data
             )
             
-            logger.info(f"Discord notification sent for service crash: {service_name}")
+            logger.info(f"Discord notification sent for fault: {fault_type} on {service_name}")
         except Exception as e:
             logger.error(f"Error sending Discord notification: {e}")
     

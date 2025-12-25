@@ -147,6 +147,12 @@ class LoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=50, description="Username")
     password: str = Field(..., min_length=1, max_length=100, description="Password")
 
+class ChangePasswordRequest(BaseModel):
+    """Request model for changing user password"""
+    old_password: str = Field(..., min_length=1, description="Current password")
+    new_password: str = Field(..., min_length=8, description="New password")
+    confirm_password: str = Field(..., min_length=8, description="Confirm new password")
+
 # Load environment variables from .env file
 env_path = Path(__file__).parent.parent.parent / '.env'
 env_path_abs = env_path.resolve()
@@ -786,6 +792,47 @@ async def check_auth(request: Request):
             "status": "error",
             "authenticated": False
         }
+
+
+@app.post("/api/auth/change-password")
+async def change_password(request: ChangePasswordRequest, auth_request: Request):
+    """Change user password"""
+    try:
+        # Get token from Authorization header
+        auth_header = auth_request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        
+        token = auth_header[7:]
+        session = verify_session(token)
+        if not session:
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
+        
+        username = session["username"]
+        user_data = DEFAULT_USERS.get(username)
+        
+        if not user_data:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Verify old password
+        if user_data["password_hash"] != hashlib.sha256(request.old_password.encode()).hexdigest():
+            raise HTTPException(status_code=400, detail="Incorrect old password")
+        
+        # Verify new passwords match
+        if request.new_password != request.confirm_password:
+            raise HTTPException(status_code=400, detail="New passwords do not match")
+        
+        # Update password
+        user_data["password_hash"] = hashlib.sha256(request.new_password.encode()).hexdigest()
+        logger.info(f"Password changed successfully for user: {username}")
+        
+        return {"status": "success", "message": "Password changed successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Change password error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================================

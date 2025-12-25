@@ -1411,6 +1411,15 @@
             padding: 0.75rem;
             background: var(--bg-tertiary);
             border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .user-info:hover {
+            background: var(--bg-primary);
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
         }
 
         .user-avatar {
@@ -1484,6 +1493,63 @@
             font-size: 1.5rem;
             font-weight: 600;
             color: var(--text-primary);
+        }
+
+
+        /* Admin Tab Styles */
+        .admin-config-card {
+            max-width: 500px;
+            margin: 2rem auto;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .admin-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .admin-header i {
+            font-size: 3rem;
+            color: var(--accent-blue);
+            margin-bottom: 1rem;
+        }
+
+        .admin-header h3 {
+            font-size: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            background: var(--bg-primary);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
         }
 
         /* Mobile responsive */
@@ -1679,7 +1745,7 @@
                 </div>
             </nav>
             <div class="sidebar-footer">
-                <div class="user-info">
+                <div class="user-info" onclick="switchTab('admin', event)">
                     <div class="user-avatar" id="userAvatar">A</div>
                     <div class="user-details">
                         <div class="user-name" id="userName">Admin</div>
@@ -1752,6 +1818,51 @@
                     </div>
 
                     <!-- Tab Content -->
+                    <div id="admin" class="tab-content">
+                        <div class="admin-config-card">
+                            <div class="admin-header">
+                                <i class="fas fa-user-shield"></i>
+                                <h3>Admin Settings</h3>
+                                <p style="color: var(--text-secondary); font-size: 0.9rem;">Manage your administrator
+                                    account</p>
+                            </div>
+
+                            <form id="changePasswordForm" onsubmit="handleChangePassword(event)">
+                                <div class="form-group">
+                                    <label for="oldPassword">Current Password</label>
+                                    <input type="password" id="oldPassword" class="form-control" placeholder="••••••••"
+                                        required>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="newPassword">New Password</label>
+                                    <input type="password" id="newPassword" class="form-control" placeholder="••••••••"
+                                        required minlength="8">
+                                    <p style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                                        Minimum 8 characters</p>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="confirmPassword">Confirm New Password</label>
+                                    <input type="password" id="confirmPassword" class="form-control"
+                                        placeholder="••••••••" required minlength="8">
+                                </div>
+
+                                <button type="submit" class="btn btn-primary"
+                                    style="width: 100%; padding: 0.75rem; font-weight: 600;">
+                                    <i class="fas fa-key"></i> Update Password
+                                </button>
+                            </form>
+
+                            <div
+                                style="margin-top: 2rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                                <p style="font-size: 0.85rem; color: var(--text-secondary); text-align: center;">
+                                    For security reasons, you will be logged out after a successful password change.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
                     <div id="overview" class="tab-content active">
                         <h2 style="margin-bottom: 1.5rem;">System Overview</h2>
 
@@ -3468,7 +3579,8 @@
                         'predictive': 'Predictive Maintenance',
                         'cli': 'CLI Terminal',
                         'auto-scaling': 'Auto Scaling',
-                        'auto-healing': 'Autonomous Self-Healing'
+                        'auto-healing': 'Autonomous Self-Healing',
+                        'admin': 'Admin Settings'
                     };
                     document.getElementById('currentPageTitle').textContent = titles[tabName] || 'Dashboard';
 
@@ -4338,6 +4450,10 @@
                                 ]);
                                 // Start periodic updates for scaling status
                                 startScalingStatusUpdates();
+                                break;
+
+                            case 'admin':
+                                // Admin tab initialization if needed
                                 break;
                         }
 
@@ -12050,6 +12166,57 @@
                 window.approveScaling = approveScaling;
                 window.rejectScaling = rejectScaling;
                 window.executeManualScaling = executeManualScaling;
+                async function handleChangePassword(event) {
+                    event.preventDefault();
+
+                    const old_password = document.getElementById('oldPassword').value;
+                    const new_password = document.getElementById('newPassword').value;
+                    const confirm_password = document.getElementById('confirmPassword').value;
+
+                    if (new_password !== confirm_password) {
+                        showNotification('❌ New passwords do not match', 'error');
+                        return;
+                    }
+
+                    const token = localStorage.getItem('auth_token');
+                    if (!token) {
+                        showNotification('❌ Session expired. Please login again.', 'error');
+                        setTimeout(() => window.location.reload(), 1500);
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch('/api/auth/change-password', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                old_password,
+                                new_password,
+                                confirm_password
+                            })
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            showNotification('✅ Password updated successfully! Logging out...', 'success');
+                            // Clear form
+                            document.getElementById('changePasswordForm').reset();
+                            // Logout after delay
+                            setTimeout(() => handleLogout(), 2000);
+                        } else {
+                            showNotification(`❌ ${data.detail || 'Failed to update password'}`, 'error');
+                        }
+                    } catch (error) {
+                        console.error('Change password error:', error);
+                        showNotification('❌ Error updating password', 'error');
+                    }
+                }
+
+                window.handleChangePassword = handleChangePassword;
                 window.deleteTemplate = deleteTemplate;
                 window.showCreateTemplateModal = showCreateTemplateModal;
             </script>

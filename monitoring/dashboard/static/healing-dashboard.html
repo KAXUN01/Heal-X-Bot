@@ -2406,86 +2406,6 @@
                             </div>
                         </div>
 
-                        <!-- Model Details & API Responses -->
-                        <div class="card" style="margin-bottom: 2rem;">
-                            <div
-                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                                <h3 style="margin: 0;">🔍 Model Details & API Responses</h3>
-                                <button onclick="toggleModelDetails()"
-                                    style="padding: 0.5rem 1rem; background: #6366f1; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.875rem;">
-                                    <span id="modelDetailsToggle">▼ Show Details</span>
-                                </button>
-                            </div>
-                            <div id="modelDetailsSection" style="display: none;">
-                                <!-- Model Information -->
-                                <div style="margin-bottom: 2rem;">
-                                    <h4
-                                        style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">
-                                        Model Information</h4>
-                                    <div
-                                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-                                        <div>
-                                            <strong style="color: var(--text-secondary); font-size: 0.875rem;">Model
-                                                Status:</strong>
-                                            <div id="modelDetails_status"
-                                                style="font-family: monospace; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem;">
-                                                --</div>
-                                        </div>
-                                        <div>
-                                            <strong style="color: var(--text-secondary); font-size: 0.875rem;">Model
-                                                Loaded:</strong>
-                                            <div id="modelDetails_loaded"
-                                                style="font-family: monospace; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem;">
-                                                --</div>
-                                        </div>
-                                        <div>
-                                            <strong
-                                                style="color: var(--text-secondary); font-size: 0.875rem;">Prediction
-                                                Mode:</strong>
-                                            <div id="modelDetails_mode"
-                                                style="font-family: monospace; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem;">
-                                                --</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- System Metrics Used -->
-                                <div style="margin-bottom: 2rem;">
-                                    <h4
-                                        style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">
-                                        System Metrics Used for Prediction</h4>
-                                    <pre id="modelDetails_metrics"
-                                        style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 200px; overflow-y: auto;">Loading metrics...</pre>
-                                </div>
-
-                                <!-- API Response: Risk Prediction -->
-                                <div style="margin-bottom: 2rem;">
-                                    <h4
-                                        style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">
-                                        📊 Risk Prediction API Response</h4>
-                                    <pre id="modelDetails_riskResponse"
-                                        style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 250px; overflow-y: auto;">Waiting for data...</pre>
-                                </div>
-
-                                <!-- API Response: Time to Failure -->
-                                <div style="margin-bottom: 2rem;">
-                                    <h4
-                                        style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">
-                                        ⏱️ Time to Failure API Response</h4>
-                                    <pre id="modelDetails_timeResponse"
-                                        style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 250px; overflow-y: auto;">Waiting for data...</pre>
-                                </div>
-
-                                <!-- API Response: Early Warnings -->
-                                <div style="margin-bottom: 1rem;">
-                                    <h4
-                                        style="margin-bottom: 1rem; color: var(--text-primary); border-bottom: 2px solid var(--border-color); padding-bottom: 0.5rem;">
-                                        ⚠️ Early Warnings API Response</h4>
-                                    <pre id="modelDetails_warningsResponse"
-                                        style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.85rem; color: var(--text-primary); max-height: 250px; overflow-y: auto;">Waiting for data...</pre>
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
                     <div id="services" class="tab-content">
@@ -5689,7 +5609,7 @@
                         console.log('Predictive maintenance data refreshed successfully');
 
                         // Update model details section if visible
-                        updateModelDetails();
+
 
                     } catch (error) {
                         console.error('Error refreshing predictive maintenance data:', error);
@@ -5894,76 +5814,6 @@
                     predictiveTimelineChart.update('active');
                 }
 
-                // Toggle model details section
-                function toggleModelDetails() {
-                    const section = document.getElementById('modelDetailsSection');
-                    const toggle = document.getElementById('modelDetailsToggle');
-                    if (section && toggle) {
-                        if (section.style.display === 'none' || !section.style.display) {
-                            section.style.display = 'block';
-                            toggle.textContent = '▲ Hide Details';
-                            // Update details when showing
-                            updateModelDetails();
-                        } else {
-                            section.style.display = 'none';
-                            toggle.textContent = '▼ Show Details';
-                        }
-                    }
-                }
-
-                // Update model details section
-                function updateModelDetails() {
-                    // Update model status
-                    const statusEl = document.getElementById('modelDetails_status');
-                    const loadedEl = document.getElementById('modelDetails_loaded');
-                    const modeEl = document.getElementById('modelDetails_mode');
-
-                    if (statusEl) {
-                        statusEl.textContent = lastRiskData && !lastRiskData.error ? 'Active' : 'Inactive';
-                        statusEl.style.color = lastRiskData && !lastRiskData.error ? '#10b981' : '#ef4444';
-                    }
-
-                    if (loadedEl) {
-                        loadedEl.textContent = lastRiskData && !lastRiskData.error ? 'Yes' : 'No';
-                        loadedEl.style.color = lastRiskData && !lastRiskData.error ? '#10b981' : '#ef4444';
-                    }
-
-                    if (modeEl) {
-                        modeEl.textContent = demoMode ? 'Demo Mode' : 'Real Mode';
-                    }
-
-                    // Update system metrics
-                    const metricsEl = document.getElementById('modelDetails_metrics');
-                    if (metricsEl && lastSystemMetrics) {
-                        metricsEl.textContent = JSON.stringify(lastSystemMetrics, null, 2);
-                    } else if (metricsEl) {
-                        metricsEl.textContent = 'No metrics available';
-                    }
-
-                    // Update risk response
-                    const riskResponseEl = document.getElementById('modelDetails_riskResponse');
-                    if (riskResponseEl && lastRiskData) {
-                        riskResponseEl.textContent = JSON.stringify(lastRiskData, null, 2);
-                    } else if (riskResponseEl) {
-                        riskResponseEl.textContent = 'Waiting for risk prediction data...';
-                    }
-
-                    // Update time to failure response
-                    const timeResponseEl = document.getElementById('modelDetails_timeResponse');
-                    if (timeResponseEl && lastTimeData) {
-                        timeResponseEl.textContent = JSON.stringify(lastTimeData, null, 2);
-                    } else if (timeResponseEl) {
-                        timeResponseEl.textContent = 'Waiting for time-to-failure prediction data...';
-                    }
-
-                    // Update warnings response
-                    const warningsResponseEl = document.getElementById('modelDetails_warningsResponse');
-                    if (warningsResponseEl && lastWarningsData) {
-                        warningsResponseEl.textContent = JSON.stringify(lastWarningsData, null, 2);
-                    } else if (warningsResponseEl) {
-                        warningsResponseEl.textContent = 'Waiting for early warnings data...';
-                    }
-                }
 
                 // Update source IPs table with block status
                 async function updateSourceIpsTable(sourceIps) {

@@ -3197,6 +3197,80 @@
                         </button>
                     </div>
 
+                    <!-- Process Flow Visualization Panel -->
+                    <div id="healingProcessPanel" class="card" style="margin-bottom: 2rem; display: none;">
+                        <h3 style="margin: 0 0 1rem 0; font-size: 1.1rem; color: var(--text-primary);">
+                            <i class="fas fa-project-diagram"></i> Healing Process
+                        </h3>
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; position: relative; padding: 1rem 0;">
+                            <!-- Connecting Line -->
+                            <div
+                                style="position: absolute; top: 50%; left: 10%; right: 10%; height: 2px; background: var(--border-color); z-index: 0;">
+                            </div>
+
+                            <!-- Step 1: Detection -->
+                            <div class="process-step" id="step-detection"
+                                style="position: relative; z-index: 1; text-align: center; width: 20%;">
+                                <div class="step-icon"
+                                    style="width: 40px; height: 40px; background: var(--bg-secondary); border: 2px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.5rem auto; transition: all 0.3s ease;">
+                                    <i class="fas fa-exclamation-triangle" style="color: var(--text-secondary);"></i>
+                                </div>
+                                <div class="step-label"
+                                    style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">Fault
+                                    Detected</div>
+                            </div>
+
+                            <!-- Step 2: Analysis -->
+                            <div class="process-step" id="step-analysis"
+                                style="position: relative; z-index: 1; text-align: center; width: 20%;">
+                                <div class="step-icon"
+                                    style="width: 40px; height: 40px; background: var(--bg-secondary); border: 2px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.5rem auto; transition: all 0.3s ease;">
+                                    <i class="fas fa-brain" style="color: var(--text-secondary);"></i>
+                                </div>
+                                <div class="step-label"
+                                    style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">AI
+                                    Analysis</div>
+                            </div>
+
+                            <!-- Step 3: Selection -->
+                            <div class="process-step" id="step-selection"
+                                style="position: relative; z-index: 1; text-align: center; width: 20%;">
+                                <div class="step-icon"
+                                    style="width: 40px; height: 40px; background: var(--bg-secondary); border: 2px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.5rem auto; transition: all 0.3s ease;">
+                                    <i class="fas fa-hand-pointer" style="color: var(--text-secondary);"></i>
+                                </div>
+                                <div class="step-label"
+                                    style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">Action
+                                    Selection</div>
+                            </div>
+
+                            <!-- Step 4: Execution -->
+                            <div class="process-step" id="step-execution"
+                                style="position: relative; z-index: 1; text-align: center; width: 20%;">
+                                <div class="step-icon"
+                                    style="width: 40px; height: 40px; background: var(--bg-secondary); border: 2px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.5rem auto; transition: all 0.3s ease;">
+                                    <i class="fas fa-cogs" style="color: var(--text-secondary);"></i>
+                                </div>
+                                <div class="step-label"
+                                    style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">Healing
+                                    Execution</div>
+                            </div>
+
+                            <!-- Step 5: Verification -->
+                            <div class="process-step" id="step-verification"
+                                style="position: relative; z-index: 1; text-align: center; width: 20%;">
+                                <div class="step-icon"
+                                    style="width: 40px; height: 40px; background: var(--bg-secondary); border: 2px solid var(--border-color); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 0.5rem auto; transition: all 0.3s ease;">
+                                    <i class="fas fa-clipboard-check" style="color: var(--text-secondary);"></i>
+                                </div>
+                                <div class="step-label"
+                                    style="font-size: 0.85rem; color: var(--text-secondary); font-weight: 500;">
+                                    Verification</div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Demo Status Panel -->
                     <div id="demoStatusPanel" style="display: none; margin-bottom: 2rem;" class="card">
                         <div
@@ -9837,9 +9911,54 @@
                 // Auto-Healing Demo Mode Functions
                 // ============================================================================
 
+                function updateHealingProcessStep(stepName) {
+                    const steps = ['detection', 'analysis', 'selection', 'execution', 'verification'];
+                    const stepMap = {
+                        'Fault Injection': 'detection',
+                        'Fault Detected': 'detection',
+                        'AI Analysis': 'analysis',
+                        'Generating Insights': 'analysis',
+                        'Waiting for User': 'selection',
+                        'Healing in Progress': 'execution',
+                        'Verifying Fix': 'verification',
+                        'Done': 'verification'
+                    };
+
+                    const activeStep = stepMap[stepName] || 'detection';
+                    let passed = true;
+
+                    steps.forEach(step => {
+                        const el = document.getElementById(`step-${step}`);
+                        const icon = el.querySelector('.step-icon');
+                        const label = el.querySelector('.step-label');
+
+                        if (step === activeStep) {
+                            icon.style.borderColor = 'var(--accent-blue)';
+                            icon.style.background = 'rgba(59, 130, 246, 0.1)';
+                            icon.querySelector('i').style.color = 'var(--accent-blue)';
+                            label.style.color = 'var(--accent-blue)';
+                            label.style.fontWeight = '700';
+                            passed = false;
+                        } else if (passed) {
+                            icon.style.borderColor = 'var(--accent-green)';
+                            icon.style.background = 'rgba(16, 185, 129, 0.1)';
+                            icon.querySelector('i').style.color = 'var(--accent-green)';
+                            label.style.color = 'var(--accent-green)';
+                            label.style.fontWeight = '500';
+                        } else {
+                            icon.style.borderColor = 'var(--border-color)';
+                            icon.style.background = 'var(--bg-secondary)';
+                            icon.querySelector('i').style.color = 'var(--text-secondary)';
+                            label.style.color = 'var(--text-secondary)';
+                            label.style.fontWeight = '500';
+                        }
+                    });
+                }
+
                 function toggleAutoHealingDemo() {
                     const demoBtn = document.getElementById('demoToggleBtn');
                     const statusPanel = document.getElementById('demoStatusPanel');
+                    const processPanel = document.getElementById('healingProcessPanel');
 
                     if (!autoHealingDemoActive) {
                         // Start demo mode via API
@@ -9849,6 +9968,7 @@
                                 if (data.status === 'success') {
                                     autoHealingDemoActive = true;
                                     if (statusPanel) statusPanel.style.display = 'block';
+                                    if (processPanel) processPanel.style.display = 'block';
                                     if (demoBtn) {
                                         demoBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Demo';
                                         demoBtn.style.background = 'linear-gradient(135deg, var(--accent-red), var(--accent-yellow))';
@@ -9875,12 +9995,14 @@
                             autoHealingDemoActive = false;
                             const demoBtn = document.getElementById('demoToggleBtn');
                             const statusPanel = document.getElementById('demoStatusPanel');
+                            const processPanel = document.getElementById('healingProcessPanel');
 
                             if (demoBtn) {
                                 demoBtn.innerHTML = '<i class="fas fa-play-circle"></i> Start Demo';
                                 demoBtn.style.background = 'linear-gradient(135deg, var(--accent-blue), var(--accent-purple))';
                             }
                             if (statusPanel) statusPanel.style.display = 'none';
+                            if (processPanel) processPanel.style.display = 'none';
 
                             if (autoHealingDemoInterval) {
                                 clearInterval(autoHealingDemoInterval);
@@ -9919,20 +10041,21 @@
 
                                 const type = data.step === 'Done' ? 'success' : 'loading';
                                 updateDemoStatus(`[${data.step}] ${data.message}`, type);
+                                updateHealingProcessStep(data.step);
 
                                 // Handle Mock Fault & Interactive Buttons
                                 if (data.waiting_for_user && data.mock_fault) {
                                     const mockFaults = [data.mock_fault];
-                                    updateActiveFaultsList(mockFaults, true); // Pass true to indicate demo mode interactive
+                                    setMockFaults(mockFaults); // Use helper to update UI
                                 } else {
                                     // Handle Manual Instructions
                                     if (data.step === 'Manual Intervention' || data.manual_instructions) {
-                                        updateActiveFaultsList([], false); // Clear faults
+                                        setMockFaults([]); // Clear faults
                                         updateManualInstructions(data.manual_instructions);
                                     } else {
                                         // Refresh normal faults logic here or clear if demo is running
                                         // keeping it simple for demo exclusive mode
-                                        updateActiveFaultsList([], false);
+                                        setMockFaults([]);
                                         const manualPanel = document.getElementById('manualInstructionsPanel');
                                         if (manualPanel) manualPanel.innerHTML = '';
                                     }

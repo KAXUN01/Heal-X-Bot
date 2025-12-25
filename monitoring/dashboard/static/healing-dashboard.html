@@ -9574,6 +9574,11 @@
                         return;
                     }
 
+                    // Don't poll if demo is active to avoid 503 errors and console noise
+                    if (typeof autoHealingDemoActive !== 'undefined' && autoHealingDemoActive) {
+                        return;
+                    }
+
                     // Clean up any existing controller for this function
                     const existingController = activeAbortControllers.get('updateAutoHealingDashboard');
                     if (existingController && !existingController.signal.aborted) {
@@ -9692,6 +9697,11 @@
                 async function loadAutoHealingConfig() {
                     // Check if tab is still active before starting
                     if (!isAutoHealingTabActive()) {
+                        return;
+                    }
+
+                    // Don't poll if demo is active
+                    if (typeof autoHealingDemoActive !== 'undefined' && autoHealingDemoActive) {
                         return;
                     }
 
@@ -11350,7 +11360,8 @@
                     // Update auto-healing dashboard every 10 seconds (only when tab is active)
                     setInterval(() => {
                         const autoHealingTab = document.getElementById('auto-healing');
-                        if (autoHealingTab && autoHealingTab.classList.contains('active')) {
+                        if (autoHealingTab && autoHealingTab.classList.contains('active') &&
+                            (typeof autoHealingDemoActive === 'undefined' || !autoHealingDemoActive)) {
                             updateAutoHealingDashboard();
                         }
                     }, 10000);
@@ -11366,7 +11377,8 @@
                     // Load auto-healing config every 30 seconds (only when tab is active)
                     setInterval(() => {
                         const autoHealingTab = document.getElementById('auto-healing');
-                        if (autoHealingTab && autoHealingTab.classList.contains('active')) {
+                        if (autoHealingTab && autoHealingTab.classList.contains('active') &&
+                            (typeof autoHealingDemoActive === 'undefined' || !autoHealingDemoActive)) {
                             loadAutoHealingConfig();
                         }
                     }, 30000);
@@ -11378,6 +11390,9 @@
                             return;
                         }
                         try {
+                            // Skip if demo is active
+                            if (typeof autoHealingDemoActive !== 'undefined' && autoHealingDemoActive) return;
+
                             const data = await cachedFetch('/api/cloud/faults?limit=10', {}, 5000);
                             if (data && data.success) {
                                 updateFaultDetection(data.faults, data.statistics);
@@ -11397,6 +11412,9 @@
                             return;
                         }
                         try {
+                            // Skip if demo is active
+                            if (typeof autoHealingDemoActive !== 'undefined' && autoHealingDemoActive) return;
+
                             const data = await cachedFetch('/api/cloud/healing/history?limit=10', { timeout: 15000 }, 10000);
                             if (data && data.success) {
                                 updateHealingActions(data.history, data.statistics);

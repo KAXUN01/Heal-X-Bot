@@ -806,6 +806,68 @@
             transition: all 0.2s;
         }
 
+
+
+        /* Switch Toggle Styles */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-tertiary);
+            transition: .4s;
+            border: 1px solid var(--border-color);
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: var(--text-secondary);
+            transition: .4s;
+        }
+
+        input:checked+.slider {
+            background-color: var(--accent-blue);
+            border-color: var(--accent-blue);
+        }
+
+        input:focus+.slider {
+            box-shadow: 0 0 1px var(--accent-blue);
+        }
+
+        input:checked+.slider:before {
+            transform: translateX(26px);
+            background-color: white;
+        }
+
+        /* Rounded sliders */
+        .slider.round {
+            border-radius: 34px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+
         .modal-close:hover {
             background: var(--bg-tertiary);
             color: var(--text-primary);
@@ -3191,10 +3253,13 @@
                             <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">Automatic detection,
                                 analysis, and resolution of system issues</p>
                         </div>
-                        <button class="btn btn-primary" onclick="toggleAutoHealingDemo()" id="demoToggleBtn"
-                            style="padding: 0.75rem 1.5rem; font-size: 1rem; min-height: 48px; background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple)); border: none;">
-                            <i class="fas fa-play-circle"></i> Start Demo
-                        </button>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <label class="switch">
+                                <input type="checkbox" id="demoToggleSwitch" onchange="toggleAutoHealingDemo()">
+                                <span class="slider round"></span>
+                            </label>
+                            <span id="demoToggleLabel" style="margin-left: 0.5rem; font-weight: 500;">Demo Off</span>
+                        </div>
                     </div>
 
                     <!-- Process Flow Visualization Panel -->
@@ -3299,85 +3364,8 @@
                         </div>
                     </div>
 
-                    <!-- System Status Overview -->
-                    <div
-                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-                        <!-- Total Healing Actions -->
-                        <div class="card"
-                            style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05)); border-left: 4px solid var(--accent-blue);">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <p
-                                        style="margin: 0 0 0.5rem 0; color: var(--text-secondary); font-size: 0.875rem; font-weight: 500;">
-                                        Total Healing Actions</p>
-                                    <h3 style="margin: 0; font-size: 2rem; color: var(--accent-blue);"
-                                        id="statsTotalAttempts">0</h3>
-                                </div>
-                                <div
-                                    style="width: 60px; height: 60px; background: rgba(59, 130, 246, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                                    <i class="fas fa-heartbeat"
-                                        style="font-size: 1.75rem; color: var(--accent-blue);"></i>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Successful Healings -->
-                        <div class="card"
-                            style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05)); border-left: 4px solid var(--accent-green);">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <p
-                                        style="margin: 0 0 0.5rem 0; color: var(--text-secondary); font-size: 0.875rem; font-weight: 500;">
-                                        Successful</p>
-                                    <h3 style="margin: 0; font-size: 2rem; color: var(--accent-green);"
-                                        id="statsSuccessful">0</h3>
-                                </div>
-                                <div
-                                    style="width: 60px; height: 60px; background: rgba(16, 185, 129, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                                    <i class="fas fa-check-circle"
-                                        style="font-size: 1.75rem; color: var(--accent-green);"></i>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Failed Healings -->
-                        <div class="card"
-                            style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05)); border-left: 4px solid var(--accent-red);">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <p
-                                        style="margin: 0 0 0.5rem 0; color: var(--text-secondary); font-size: 0.875rem; font-weight: 500;">
-                                        Failed</p>
-                                    <h3 style="margin: 0; font-size: 2rem; color: var(--accent-red);" id="statsFailed">0
-                                    </h3>
-                                </div>
-                                <div
-                                    style="width: 60px; height: 60px; background: rgba(239, 68, 68, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                                    <i class="fas fa-times-circle"
-                                        style="font-size: 1.75rem; color: var(--accent-red);"></i>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Average Response Time -->
-                        <div class="card"
-                            style="background: linear-gradient(135deg, rgba(251, 191, 36, 0.1), rgba(245, 158, 11, 0.05)); border-left: 4px solid var(--accent-yellow);">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <p
-                                        style="margin: 0 0 0.5rem 0; color: var(--text-secondary); font-size: 0.875rem; font-weight: 500;">
-                                        Avg Response Time</p>
-                                    <h3 style="margin: 0; font-size: 2rem; color: var(--accent-yellow);"
-                                        id="statsAvgResponseTime">0s</h3>
-                                </div>
-                                <div
-                                    style="width: 60px; height: 60px; background: rgba(251, 191, 36, 0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                                    <i class="fas fa-clock"
-                                        style="font-size: 1.75rem; color: var(--accent-yellow);"></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- System Status Overview - REMOVED AS PER USER REQUEST -->
+                    <!-- Elements statsTotalAttempts, statsSuccessful, statsFailed, statsAvgResponseTime removed -->
 
                     <!-- Active Faults -->
                     <div class="card" style="margin-bottom: 2rem;">
@@ -9966,60 +9954,95 @@
                 }
 
                 function toggleAutoHealingDemo() {
-                    const demoBtn = document.getElementById('demoToggleBtn');
-                    const statusPanel = document.getElementById('demoStatusPanel');
-                    const processPanel = document.getElementById('healingProcessPanel');
-
-                    if (!autoHealingDemoActive) {
-                        // Start demo mode via API
-                        fetch('/api/demo/healing/start', { method: 'POST' })
-                            .then(res => res.json())
+                    if (autoHealingDemoActive) {
+                        stopAutoHealingDemo();
+                    } else {
+                        // Check if we can start
+                        fetch('/api/demo/healing/status')
+                            .then(response => response.json())
                             .then(data => {
-                                if (data.status === 'success') {
-                                    autoHealingDemoActive = true;
-                                    if (statusPanel) statusPanel.style.display = 'block';
-                                    if (processPanel) processPanel.style.display = 'block';
-                                    if (demoBtn) {
-                                        demoBtn.innerHTML = '<i class="fas fa-stop"></i> Stop Demo';
-                                        demoBtn.style.background = 'linear-gradient(135deg, var(--accent-red), var(--accent-yellow))';
-                                    }
-                                    showNotification('🎬 Self-healing demo started', 'info');
-                                    // Start polling
-                                    pollHealingDemoStatus();
-                                } else {
-                                    showNotification('❌ Failed to start demo: ' + data.message, 'error');
-                                }
+                                startAutoHealingDemo();
                             })
                             .catch(err => {
-                                console.error('Error starting demo:', err);
-                                showNotification('❌ Error starting demo', 'error');
+                                console.error('Error checking status:', err);
+                                startAutoHealingDemo(); // Try anyway
                             });
-                    } else {
-                        stopAutoHealingDemo();
                     }
                 }
 
+                function startAutoHealingDemo() {
+                    autoHealingDemoActive = true;
+
+                    // Update UI - Switch state is already handled by user click usually, but ensure it's synced
+                    const switchEl = document.getElementById('demoToggleSwitch');
+                    const labelEl = document.getElementById('demoToggleLabel');
+
+                    if (switchEl) switchEl.checked = true;
+                    if (labelEl) {
+                        labelEl.textContent = 'Demo Active';
+                        labelEl.style.color = 'var(--accent-blue)';
+                    }
+
+                    const panel = document.getElementById('demoStatusPanel');
+                    if (panel) panel.style.display = 'block';
+
+                    const visualizationPanel = document.getElementById('healingProcessPanel');
+                    if (visualizationPanel) visualizationPanel.style.display = 'block';
+
+                    // Trigger demo start on backend
+                    fetch('/api/demo/healing/start', { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                updateDemoStatus('Demo initialized', 'info');
+                                showNotification('🚀 Auto-healing demo started', 'success');
+                                pollHealingDemoStatus();
+                                updateHealingProcessStep('detection'); // Reset to first step
+                            } else {
+                                showNotification('Failed to start demo: ' + data.message, 'error');
+                                stopAutoHealingDemo();
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Error starting demo:', err);
+                            showNotification('Error starting demo', 'error');
+                            stopAutoHealingDemo();
+                        });
+                }
+
                 function stopAutoHealingDemo() {
+                    autoHealingDemoActive = false;
+
+                    // Update UI
+                    const switchEl = document.getElementById('demoToggleSwitch');
+                    const labelEl = document.getElementById('demoToggleLabel');
+
+                    if (switchEl) switchEl.checked = false;
+                    if (labelEl) {
+                        labelEl.textContent = 'Demo Off';
+                        labelEl.style.color = 'var(--text-secondary)';
+                    }
+
+                    const panel = document.getElementById('demoStatusPanel');
+                    if (panel) panel.style.display = 'none';
+
+                    // Keep the visualization panel visible but reset validation
+                    // maybe hide it? User didn't specify, leaving it hidden for cleaner stop state
+                    const visualizationPanel = document.getElementById('healingProcessPanel');
+                    if (visualizationPanel) visualizationPanel.style.display = 'none';
+
+                    if (autoHealingDemoInterval) {
+                        clearInterval(autoHealingDemoInterval);
+                        autoHealingDemoInterval = null;
+                    }
+
+                    // Reset mock faults
+                    setMockFaults([]);
+
+                    // Call backend to stop
                     fetch('/api/demo/healing/stop', { method: 'POST' })
-                        .then(() => {
-                            autoHealingDemoActive = false;
-                            const demoBtn = document.getElementById('demoToggleBtn');
-                            const statusPanel = document.getElementById('demoStatusPanel');
-                            const processPanel = document.getElementById('healingProcessPanel');
-
-                            if (demoBtn) {
-                                demoBtn.innerHTML = '<i class="fas fa-play-circle"></i> Start Demo';
-                                demoBtn.style.background = 'linear-gradient(135deg, var(--accent-blue), var(--accent-purple))';
-                            }
-                            if (statusPanel) statusPanel.style.display = 'none';
-                            if (processPanel) processPanel.style.display = 'none';
-
-                            if (autoHealingDemoInterval) {
-                                clearInterval(autoHealingDemoInterval);
-                                autoHealingDemoInterval = null;
-                            }
-
-                            // Clear manual instructions
+                        .then(response => response.json())
+                        .then(data => {
                             const manualPanel = document.getElementById('manualInstructionsPanel');
                             if (manualPanel) manualPanel.innerHTML = '';
 

@@ -8374,7 +8374,7 @@
                                         </div>
                                     </td>
                                 </tr>
-                            `;
+```
                             });
 
                             tbody.innerHTML = html;
@@ -8382,7 +8382,6 @@
                             // Update pagination controls
                             updateAlertsPagination(sortedIssues.length, totalPages, startIndex + 1, Math.min(endIndex, sortedIssues.length));
                         }
-                    }
                     } catch (error) {
                         console.error('Error loading alerts:', error);
                         tbody.innerHTML = `

@@ -19,25 +19,35 @@ def test_healing_demo():
         print(f"Error connecting to dashboard: {e}")
         return
 
-    # 2. Poll Status
-    print("\n2. Polling Status for 15 seconds...")
-    for i in range(8):
-        status_res = requests.get(f"{BASE_URL}/demo/healing/status")
-        data = status_res.json()
-        print(f"Step: {data.get('step')}, Message: {data.get('message')}")
-        if data.get('manual_instructions'):
-            print(f"Manual Instructions detected!")
+    # 2. Poll Status & Interact
+    print("\n2. Polling Status...")
+    for i in range(15):
+        try:
+            status_res = requests.get(f"{BASE_URL}/demo/healing/status")
+            data = status_res.json()
+            print(f"[{i}] Step: {data.get('step')}, Waiting: {data.get('waiting_for_user')}")
+            
+            if data.get('waiting_for_user'):
+                print(f"   Action required! Scenario: {data.get('scenario')}")
+                action = "auto_heal" if data.get('scenario') == 'auto-heal' else "manual_steps"
+                print(f"   Triggering action: {action}")
+                
+                solve_res = requests.post(f"{BASE_URL}/demo/healing/solve", json={"action": action})
+                print(f"   Solve Response: {solve_res.json()}")
+            
+            if data.get('step') == 'Done':
+                print("   Demo iteration complete.")
+                break
+                
+        except Exception as e:
+            print(f"Error polling: {e}")
+            
         time.sleep(2)
 
     # 3. Stop Demo
     print("\n3. Stopping Demo...")
     stop_res = requests.post(f"{BASE_URL}/demo/healing/stop")
     print(f"Stop Response: {stop_res.json()}")
-
-    # 4. Final Status Check
-    print("\n4. Final Status Check...")
-    final_res = requests.get(f"{BASE_URL}/demo/healing/status")
-    print(f"Final Status: {final_res.json()}")
 
 if __name__ == "__main__":
     test_healing_demo()

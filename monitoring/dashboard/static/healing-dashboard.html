@@ -9910,31 +9910,56 @@
                             const data = await response.json();
 
                             if (data.status === 'success') {
+                                if (!data.active) {
+                                    // Demo finished or stopped
+                                    updateDemoStatus(data.message || 'Demo stopped', 'info');
+                                    stopAutoHealingDemo(); // Cleanup UI
+                                    return;
+                                }
+
                                 const type = data.step === 'Done' ? 'success' : 'loading';
                                 updateDemoStatus(`[${data.step}] ${data.message}`, type);
 
-                                // Update manual instructions if they exist
-                                if (data.manual_instructions) {
-                                    updateManualInstructions(data.manual_instructions);
-                                } else if (data.step !== 'Manual Intervention' && data.step !== 'Done') {
-                                    // Clear if not in manual step
-                                    const manualPanel = document.getElementById('manualInstructionsPanel');
-                                    if (manualPanel) manualPanel.innerHTML = '';
-                                }
-
-                                if (!data.active && autoHealingDemoActive) {
-                                    // Backend stopped or finished
-                                    autoHealingDemoActive = false;
-                                    clearInterval(autoHealingDemoInterval);
-                                    setTimeout(() => {
-                                        if (!autoHealingDemoActive) stopAutoHealingDemo();
-                                    }, 5000);
+                                // Handle Mock Fault & Interactive Buttons
+                                if (data.waiting_for_user && data.mock_fault) {
+                                    const mockFaults = [data.mock_fault];
+                                    updateActiveFaultsList(mockFaults, true); // Pass true to indicate demo mode interactive
+                                } else {
+                                    // Handle Manual Instructions
+                                    if (data.step === 'Manual Intervention' || data.manual_instructions) {
+                                        updateActiveFaultsList([], false); // Clear faults
+                                        updateManualInstructions(data.manual_instructions);
+                                    } else {
+                                        // Refresh normal faults logic here or clear if demo is running
+                                        // keeping it simple for demo exclusive mode
+                                        updateActiveFaultsList([], false);
+                                        const manualPanel = document.getElementById('manualInstructionsPanel');
+                                        if (manualPanel) manualPanel.innerHTML = '';
+                                    }
                                 }
                             }
                         } catch (err) {
                             console.error('Polling error:', err);
                         }
-                    }, 2000);
+                    }, 500); // Faster polling for demo responsiveness
+                }
+
+                async function triggerDemoSolve(action) {
+                    try {
+                        const response = await fetch('/api/demo/healing/solve', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: action })
+                        });
+                        const data = await response.json();
+                        if (data.status === 'success') {
+                            // UI will update on next poll
+                            const btnContainer = document.getElementById('demo-action-buttons');
+                            if (btnContainer) btnContainer.innerHTML = '<span class="text-success"><i class="fas fa-check"></i> Action triggered...</span>';
+                        }
+                    } catch (e) {
+                        console.error("Failed to trigger solve:", e);
+                    }
                 }
 
                 function updateDemoStatus(message, type = 'info') {
@@ -9971,6 +9996,7 @@
                 // Make demo functions globally accessible
                 window.toggleAutoHealingDemo = toggleAutoHealingDemo;
                 window.stopAutoHealingDemo = stopAutoHealingDemo;
+                window.triggerDemoSolve = triggerDemoSolve;
 
                 // Helper function to update status badges
                 function updateStatusBadge(element, enabled, text = null) {
@@ -10190,18 +10216,28 @@
                         
                         <!-- Action Buttons -->
                         <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
-                            <button class="btn btn-secondary" onclick="analyzeFaultWithAI(${faultId}, ${actualIndex})" id="fault-${faultId}-analyze-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
-                                <i class="fas fa-brain"></i> Analyze
-                            </button>
-                            <button class="btn btn-primary" onclick="autoHealFault(${faultId})" id="fault-${faultId}-heal-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
-                                <i class="fas fa-magic"></i> Auto-Heal
-                            </button>
-                            <button class="btn btn-secondary" onclick="viewHealingSteps(${faultId})" id="fault-${faultId}-steps-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
-                                <i class="fas fa-list-ol"></i> View Healing Steps
-                            </button>
-                            <button class="btn btn-secondary" onclick="toggleManualInstructions(${faultId})" id="fault-${faultId}-manual-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
-                                <i class="fas fa-book"></i> Manual Instructions
-                            </button>
+                            ${fault.is_demo ? `
+                                <button class="btn btn-primary" onclick="triggerDemoSolve('auto_heal')" style="padding: 0.5rem 1rem; font-size: 0.85rem; background: var(--accent-blue);">
+                                    <i class="fas fa-magic"></i> Auto Heal
+                                </button>
+                                <button class="btn btn-secondary" onclick="triggerDemoSolve('manual_steps')" style="padding: 0.5rem 1rem; font-size: 0.85rem; background: var(--accent-yellow); color: #000;">
+                                    <i class="fas fa-tools"></i> Manual Steps
+                                </button>
+                                <div id="demo-action-buttons" style="display:inline-block; margin-left: 10px; align-self: center;"></div>
+                            ` : `
+                                <button class="btn btn-secondary" onclick="analyzeFaultWithAI(${faultId}, ${actualIndex})" id="fault-${faultId}-analyze-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    <i class="fas fa-brain"></i> Analyze
+                                </button>
+                                <button class="btn btn-primary" onclick="autoHealFault(${faultId})" id="fault-${faultId}-heal-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    <i class="fas fa-magic"></i> Auto-Heal
+                                </button>
+                                <button class="btn btn-secondary" onclick="viewHealingSteps(${faultId})" id="fault-${faultId}-steps-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    <i class="fas fa-list-ol"></i> View Healing Steps
+                                </button>
+                                <button class="btn btn-secondary" onclick="toggleManualInstructions(${faultId})" id="fault-${faultId}-manual-btn" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                    <i class="fas fa-book"></i> Manual Instructions
+                                </button>
+                            `}
                         </div>
                         
                         <!-- AI Analysis Panel (initially hidden) -->
@@ -10250,6 +10286,13 @@
                     const totalPages = Math.ceil(allFaults.length / FAULTS_PER_PAGE);
                     if (page < 1 || page > totalPages) return;
                     currentFaultsPage = page;
+                    renderFaultsPage();
+                }
+
+                // Helper to set mock faults for demo
+                function setMockFaults(faults) {
+                    allFaults = faults;
+                    currentFaultsPage = 1;
                     renderFaultsPage();
                 }
 

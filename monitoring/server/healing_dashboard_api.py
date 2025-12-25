@@ -794,6 +794,8 @@ class HealingDemoOrchestrator:
         self.task = None
         self.target_service = "nginx-container"
         self.scenario = "auto-heal" # or "manual-heal"
+        self.waiting_for_user = False
+        self.mock_fault = None
     
     async def start(self):
         if self.active:
@@ -810,7 +812,25 @@ class HealingDemoOrchestrator:
             self.task = None
         self.current_step = "Inactive"
         self.message = "Demo stopped"
+        self.waiting_for_user = False
+        self.mock_fault = None
         return "Demo stopped"
+
+    async def solve(self, action: str):
+        """Handle user action to solve the issue"""
+        if not self.active or not self.waiting_for_user:
+            return {"status": "error", "message": "Not waiting for user input"}
+        
+        if action == "auto_heal":
+             self.waiting_for_user = False # Resume loop
+             return {"status": "success", "message": "Auto-healing triggered"}
+        elif action == "manual_steps":
+             # Switch scenario to manual-heal to show instructions
+             self.scenario = "manual-heal"
+             self.waiting_for_user = False # Resume loop
+             return {"status": "success", "message": "Manual steps requested"}
+        else:
+             return {"status": "error", "message": f"Unknown action: {action}"}
     
     async def _run_demo(self):
         try:
@@ -818,6 +838,7 @@ class HealingDemoOrchestrator:
                 # Step 1: Initialize
                 self.current_step = "Service Discovery"
                 self.message = "Searching for available services..."
+                self.mock_fault = None
                 await asyncio.sleep(3)
                 
                 # Try to find a real target, fallback to mock
@@ -831,55 +852,52 @@ class HealingDemoOrchestrator:
                 self.message = f"Selected target service: {self.target_service}"
                 await asyncio.sleep(2)
                 
-                # Step 2: Inject Fault
-                self.current_step = "Fault Injection"
-                self.message = f"Injecting fault into {self.target_service}..."
-                await asyncio.sleep(2)
+                # Step 2: Inject Fault & Wait
+                self.current_step = "Fault Active"
+                self.message = f"Simulated fault injected in {self.target_service}. Waiting for action..."
                 
-                # Simulate error in statistics
-                fault_type = "service_crash" if self.scenario == "auto-heal" else "config_corruption"
-                self.message = f"Simulating {fault_type}..."
+                # Mock fault data for frontend to display
+                self.mock_fault = {
+                    "id": f"demo-{int(time.time())}",
+                    "type": "service_crash" if self.scenario == "auto-heal" else "config_corruption",
+                    "container": self.target_service,
+                    "severity": "critical",
+                    "detected_at": datetime.now().isoformat(),
+                    "description": "Process terminated unexpectedly" if self.scenario == "auto-heal" else "Configuration file corruption detected",
+                    "is_demo": True # Flag for frontend
+                }
                 
-                # In a real demo, we might actually kill the container, 
-                # but for simplicity we'll just update the UI state
-                await asyncio.sleep(3)
+                self.waiting_for_user = True
                 
-                # Step 3: Detection
-                self.current_step = "Fault Detection"
-                self.message = "System detected an anomaly! Triggers AI analysis..."
-                await asyncio.sleep(4)
+                # Wait loop until user clicks a button
+                while self.waiting_for_user and self.active:
+                    await asyncio.sleep(0.5)
                 
-                # Step 4: AI Analysis & Response
-                self.current_step = "AI Analysis"
+                if not self.active: break # Stop if demo cancelled
+
+                # Step 3: Resolution
                 if self.scenario == "auto-heal":
-                    self.message = "AI identified root cause: Service process terminated unexpectedly. Suggesting: RESTART"
-                    await asyncio.sleep(3)
-                    self.current_step = "Self-Healing"
-                    self.message = f"Auto-healer is restarting {self.target_service}..."
-                    await asyncio.sleep(4)
-                    self.message = "✅ Healing successful! Service is back online."
-                    # Increment stats
-                    if auto_healer:
-                        try:
-                            # Mock some stats update if possible or just let UI show it
-                            pass
-                        except: pass
+                     self.current_step = "Auto-Healing"
+                     self.message = "Auto-healer is diagnosing the issue..."
+                     await asyncio.sleep(2)
+                     self.message = f"Applying fix: Restarting {self.target_service}..."
+                     await asyncio.sleep(3)
+                     self.message = "Verifying service health..."
+                     await asyncio.sleep(2)
+                     self.message = "✅ Healing successful! Service is back online."
                 else:
-                    self.message = "AI identified root cause: Complex configuration mismatch. Auto-healing not safe."
-                    await asyncio.sleep(3)
-                    self.current_step = "Manual Intervention"
-                    self.message = "Providing manual recovery instructions to administrator..."
-                    await asyncio.sleep(2)
+                     self.current_step = "Manual Intervention"
+                     self.message = "Auto-healing not possible for this issue."
+                     await asyncio.sleep(2)
+                     self.message = "Please follow the manual recovery instructions below."
+                
+                self.mock_fault = None # Clear fault
                 
                 # Final step
-                self.current_step = "Done"
-                if self.scenario == "manual-heal":
-                    self.message = "Demo complete. Check 'Manual Instructions' panel below."
-                else:
-                    self.message = "Demo complete. System restored successfully."
+                self.current_step = "Done" if self.scenario == "auto-heal" else "Manual Intervention" # Keep manual step active for reading
                 
                 await asyncio.sleep(10)
-                # Cycle scenario
+                # Cycle scenario (flip for variety)
                 self.scenario = "manual-heal" if self.scenario == "auto-heal" else "auto-heal"
                 
         except asyncio.CancelledError:
@@ -889,6 +907,8 @@ class HealingDemoOrchestrator:
             self.message = f"Error: {str(e)}"
         finally:
             self.active = False
+            self.waiting_for_user = False
+            self.mock_fault = None
 
 healing_demo = HealingDemoOrchestrator()
 
@@ -901,6 +921,13 @@ async def start_healing_demo():
 async def stop_healing_demo():
     msg = await healing_demo.stop()
     return {"status": "success", "message": msg}
+
+@app.post("/api/demo/healing/solve")
+async def solve_healing_demo(request: Request):
+    data = await request.json()
+    action = data.get("action")
+    result = await healing_demo.solve(action)
+    return result
 
 @app.get("/api/demo/healing/status")
 async def get_healing_demo_status():
@@ -919,7 +946,9 @@ async def get_healing_demo_status():
         "step": healing_demo.current_step, 
         "message": healing_demo.message,
         "scenario": healing_demo.scenario,
-        "manual_instructions": manual_steps
+        "manual_instructions": manual_steps,
+        "mock_fault": healing_demo.mock_fault,
+        "waiting_for_user": healing_demo.waiting_for_user
     }
 
 # ML Performance History

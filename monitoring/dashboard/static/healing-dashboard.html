@@ -5205,7 +5205,7 @@
                     }
 
                     let pollAttempts = 0;
-                    const MAX_POLL_ATTEMPTS = 20; // Stop after 20 attempts if no data
+                    const MAX_POLL_ATTEMPTS = 60; // Wait up to 60s for demo script to start
 
                     // Start polling immediately and then every 5 seconds when demo mode is on
                     const pollDemoMetrics = async () => {
@@ -5223,6 +5223,7 @@
 
                         // Stop polling after max attempts if no data received
                         if (pollAttempts >= MAX_POLL_ATTEMPTS) {
+                            console.warn('🛑 Demo metrics timeout - demo script may have failed to start or backend needs restart');
                             stopDemoMetricsPolling();
                             return;
                         }
@@ -5254,9 +5255,10 @@
                                 } else if (demoMode) {
                                     // Log when in demo mode but no metrics available
                                     if (pollAttempts === 1 || pollAttempts % 5 === 0) {
-                                        console.log('⏳ Waiting for demo metrics... (attempt ' + pollAttempts + ')');
+                                        console.log('⏳ Waiting for automated demo script to send metrics... (attempt ' + pollAttempts + '/' + MAX_POLL_ATTEMPTS + ')');
                                     }
                                 }
+
                             }
                         } catch (e) {
                             // Silently handle errors - don't spam console

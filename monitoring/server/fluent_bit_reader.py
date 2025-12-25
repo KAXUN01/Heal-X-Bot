@@ -56,9 +56,23 @@ class FluentBitReader:
             failed_count = 0
             
             with open(self.log_file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                lines = f.readlines()
+                # Efficiently read only the necessary part of the file
+                # Check file size first
+                f.seek(0, os.SEEK_END)
+                file_size = f.tell()
+                
+                # If file is large, only read the last 1MB which should contain more than 5000 logs
+                if file_size > 1024 * 1024:
+                    f.seek(file_size - 1024 * 1024)
+                    # Skip the first partial line
+                    f.readline()
+                else:
+                    f.seek(0)
+                
+                content = f.read()
+                lines = content.splitlines()
                 total_lines = len(lines)
-                logger.debug(f"Read {total_lines} lines from file")
+                logger.debug(f"Read approximately {total_lines} lines from end of file")
                 
                 # Load last 5000 lines to avoid memory issues
                 lines_to_process = lines[-5000:] if len(lines) > 5000 else lines

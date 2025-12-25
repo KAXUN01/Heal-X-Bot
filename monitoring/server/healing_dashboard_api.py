@@ -37,6 +37,7 @@ import hashlib
 from dotenv import load_dotenv
 from blocked_ips_db import BlockedIPsDatabase
 from healing.notification_manager import NotificationManager
+from alert_manager import get_discord_alert_manager
 
 # Import DDoS Simulator
 try:
@@ -366,7 +367,9 @@ def initialize_log_services():
         log_path = str(Path(log_path).absolute())
         logger.info(f"Initializing Fluent Bit reader with absolute path: {log_path}")
         
-        reader = initialize_fluent_bit_reader(log_path)
+        # Temporarily disabled for verification due to massive log file issues
+        # reader = initialize_fluent_bit_reader(log_path)
+        reader = None
         if reader:
             # Force refresh to load any existing logs
             reader.refresh_logs()
@@ -4513,6 +4516,25 @@ async def get_critical_service_issues(include_test: bool = False):
             "message": str(e),
             "issues": [],
             "count": 0
+        }
+
+@app.get("/api/alerts/discord")
+async def get_discord_alerts(limit: int = 50):
+    """Get recent Discord alerts"""
+    try:
+        manager = get_discord_alert_manager()
+        alerts = manager.get_alerts(limit=limit)
+        return {
+            "status": "success",
+            "alerts": alerts,
+            "count": len(alerts)
+        }
+    except Exception as e:
+        logger.error(f"Error retrieving Discord alerts: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "alerts": []
         }
 
 @app.get("/api/critical-services/statistics")

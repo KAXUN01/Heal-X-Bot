@@ -733,7 +733,7 @@ async def start_predictive_demo():
         # --loop: keep running through scenarios
         # --delay 10: wait 10 seconds between scenarios for dashboard to catch up
         # --url: explicitly set the dashboard URL
-        dashboard_url = f"http://localhost:{os.getenv('PORT', '5001')}"
+        dashboard_url = f"http://localhost:{os.getenv('HEALING_DASHBOARD_PORT', '5001')}"
         
         logger.info(f"Starting predictive maintenance demo script: {script_path}")
         

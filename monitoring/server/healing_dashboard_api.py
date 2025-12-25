@@ -785,6 +785,143 @@ async def get_predictive_demo_status():
     return {"status": "success", "running": is_running, "pid": pid}
 
 
+# Self-Healing Demo Orchestrator
+class HealingDemoOrchestrator:
+    def __init__(self):
+        self.active = False
+        self.current_step = "Inactive"
+        self.message = "Demo not running"
+        self.task = None
+        self.target_service = "nginx-container"
+        self.scenario = "auto-heal" # or "manual-heal"
+    
+    async def start(self):
+        if self.active:
+            return "Demo already active"
+        self.active = True
+        self.scenario = random.choice(["auto-heal", "manual-heal"])
+        self.task = asyncio.create_task(self._run_demo())
+        return f"Demo started with scenario: {self.scenario}"
+    
+    async def stop(self):
+        self.active = False
+        if self.task:
+            self.task.cancel()
+            self.task = None
+        self.current_step = "Inactive"
+        self.message = "Demo stopped"
+        return "Demo stopped"
+    
+    async def _run_demo(self):
+        try:
+            while self.active:
+                # Step 1: Initialize
+                self.current_step = "Service Discovery"
+                self.message = "Searching for available services..."
+                await asyncio.sleep(3)
+                
+                # Try to find a real target, fallback to mock
+                self.target_service = "nginx-container" # Default
+                if container_monitor:
+                    containers = container_monitor.get_all_containers_status()
+                    running = [c['name'] for c in containers if c['status'] == 'running']
+                    if running:
+                        self.target_service = random.choice(running)
+                
+                self.message = f"Selected target service: {self.target_service}"
+                await asyncio.sleep(2)
+                
+                # Step 2: Inject Fault
+                self.current_step = "Fault Injection"
+                self.message = f"Injecting fault into {self.target_service}..."
+                await asyncio.sleep(2)
+                
+                # Simulate error in statistics
+                fault_type = "service_crash" if self.scenario == "auto-heal" else "config_corruption"
+                self.message = f"Simulating {fault_type}..."
+                
+                # In a real demo, we might actually kill the container, 
+                # but for simplicity we'll just update the UI state
+                await asyncio.sleep(3)
+                
+                # Step 3: Detection
+                self.current_step = "Fault Detection"
+                self.message = "System detected an anomaly! Triggers AI analysis..."
+                await asyncio.sleep(4)
+                
+                # Step 4: AI Analysis & Response
+                self.current_step = "AI Analysis"
+                if self.scenario == "auto-heal":
+                    self.message = "AI identified root cause: Service process terminated unexpectedly. Suggesting: RESTART"
+                    await asyncio.sleep(3)
+                    self.current_step = "Self-Healing"
+                    self.message = f"Auto-healer is restarting {self.target_service}..."
+                    await asyncio.sleep(4)
+                    self.message = "✅ Healing successful! Service is back online."
+                    # Increment stats
+                    if auto_healer:
+                        try:
+                            # Mock some stats update if possible or just let UI show it
+                            pass
+                        except: pass
+                else:
+                    self.message = "AI identified root cause: Complex configuration mismatch. Auto-healing not safe."
+                    await asyncio.sleep(3)
+                    self.current_step = "Manual Intervention"
+                    self.message = "Providing manual recovery instructions to administrator..."
+                    await asyncio.sleep(2)
+                
+                # Final step
+                self.current_step = "Done"
+                if self.scenario == "manual-heal":
+                    self.message = "Demo complete. Check 'Manual Instructions' panel below."
+                else:
+                    self.message = "Demo complete. System restored successfully."
+                
+                await asyncio.sleep(10)
+                # Cycle scenario
+                self.scenario = "manual-heal" if self.scenario == "auto-heal" else "auto-heal"
+                
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Error in healing demo: {e}")
+            self.message = f"Error: {str(e)}"
+        finally:
+            self.active = False
+
+healing_demo = HealingDemoOrchestrator()
+
+@app.post("/api/demo/healing/start")
+async def start_healing_demo():
+    msg = await healing_demo.start()
+    return {"status": "success", "message": msg}
+
+@app.post("/api/demo/healing/stop")
+async def stop_healing_demo():
+    msg = await healing_demo.stop()
+    return {"status": "success", "message": msg}
+
+@app.get("/api/demo/healing/status")
+async def get_healing_demo_status():
+    # Return mock manual instructions if in that step
+    manual_steps = ""
+    if healing_demo.active and healing_demo.current_step == "Manual Intervention":
+        manual_steps = f"""1. SSH into the server: ssh admin@heal-x-bot
+2. Verify {healing_demo.target_service} config: cat /etc/{healing_demo.target_service}/config.json
+3. Fixed the corrupted entries identified by AI.
+4. Test configuration: {healing_demo.target_service} --test-config
+5. Restart service: systemctl restart {healing_demo.target_service}"""
+    
+    return {
+        "status": "success", 
+        "active": healing_demo.active, 
+        "step": healing_demo.current_step, 
+        "message": healing_demo.message,
+        "scenario": healing_demo.scenario,
+        "manual_instructions": manual_steps
+    }
+
 # ML Performance History
 ml_performance_history = {
     "timestamps": [],

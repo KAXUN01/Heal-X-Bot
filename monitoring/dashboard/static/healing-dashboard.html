@@ -1701,9 +1701,9 @@
                     <i class="fas fa-bars"></i>
                 </button>
                 <div class="top-bar-title" id="currentPageTitle">System Overview</div>
-                <div class="status-badge healthy" id="systemStatus">
-                    <i class="fas fa-check-circle" id="statusIcon"></i>
-                    <span id="statusText">System Healthy</span>
+                <div class="status-badge healthy status-badge-update" id="systemStatusNav">
+                    <span class="status-icon-update">🟢</span>
+                    <span class="status-text-update">System Healthy</span>
                 </div>
             </div>
 
@@ -1729,9 +1729,9 @@
 
                 <div class="header">
                     <h1>🛡️ Heal-X Dashboard</h1>
-                    <div class="status-badge healthy" id="systemStatus">
-                        <span id="statusIcon">🟢</span>
-                        <span id="statusText">System Healthy</span>
+                    <div class="status-badge healthy status-badge-update" id="systemStatusMain">
+                        <span class="status-icon-update">🟢</span>
+                        <span class="status-text-update">System Healthy</span>
                     </div>
                 </div>
 
@@ -4425,25 +4425,31 @@
                 }
 
                 function updateSystemStatus(data) {
-                    const statusBadge = document.getElementById('systemStatus');
-                    const statusIcon = document.getElementById('statusIcon');
-                    const statusText = document.getElementById('statusText');
+                    const statusBadges = document.querySelectorAll('.status-badge-update');
+                    const statusIcons = document.querySelectorAll('.status-icon-update');
+                    const statusTexts = document.querySelectorAll('.status-text-update');
 
                     const maxMetric = Math.max(data.cpu || 0, data.memory || 0, data.disk || 0);
 
+                    let statusClass, icon, text;
+
                     if (maxMetric > 90) {
-                        statusBadge.className = 'status-badge critical';
-                        statusIcon.textContent = '🔴';
-                        statusText.textContent = 'Critical';
+                        statusClass = 'status-badge critical status-badge-update';
+                        icon = '🔴';
+                        text = 'Critical';
                     } else if (maxMetric > 75) {
-                        statusBadge.className = 'status-badge warning';
-                        statusIcon.textContent = '🟡';
-                        statusText.textContent = 'Warning';
+                        statusClass = 'status-badge warning status-badge-update';
+                        icon = '🟡';
+                        text = 'Warning';
                     } else {
-                        statusBadge.className = 'status-badge healthy';
-                        statusIcon.textContent = '🟢';
-                        statusText.textContent = 'Healthy';
+                        statusClass = 'status-badge healthy status-badge-update';
+                        icon = '🟢';
+                        text = 'Healthy';
                     }
+
+                    statusBadges.forEach(badge => badge.className = statusClass);
+                    statusIcons.forEach(iconEl => iconEl.textContent = icon);
+                    statusTexts.forEach(textEl => textEl.textContent = text);
                 }
 
                 // Recent Activity Functions

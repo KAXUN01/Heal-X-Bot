@@ -799,12 +799,28 @@ class HealingDemoOrchestrator:
         self.scenario = "auto-heal" # or "manual-heal"
         self.waiting_for_user = False
         self.mock_fault = None
+        
+        # Docker integration for real fault injection
+        self.docker_available = DOCKER_AVAILABLE
+        self.docker_client = None
+        if DOCKER_AVAILABLE:
+            try:
+                self.docker_client = docker.from_env()
+                logger.info("✅ Docker client initialized for healing demo")
+            except Exception as e:
+                logger.warning(f"⚠️ Docker not available for demo: {e}")
+                self.docker_available = False
     
     async def start(self):
         if self.active:
             return "Demo already active"
+        
+        # Validate Docker is available
+        if not self.docker_available:
+            return "Error: Docker not available. Demo requires Docker to inject real faults."
+        
         self.active = True
-        self.scenario = random.choice(["auto-heal", "manual-heal"])
+        self.scenario = "auto-heal"  # Start with auto-heal scenario
         self.task = asyncio.create_task(self._run_demo())
         return f"Demo started with scenario: {self.scenario}"
     
@@ -835,79 +851,205 @@ class HealingDemoOrchestrator:
         else:
              return {"status": "error", "message": f"Unknown action: {action}"}
     
+    async def _find_nginx_container(self):
+        """Find nginx container - try common names"""
+        if not self.docker_available:
+            return None
+        
+        try:
+            # Try common nginx container names
+            common_names = ["nginx-container", "nginx", "heal-x-nginx", "web-server"]
+            
+            all_containers = self.docker_client.containers.list(all=False)  # Only running
+            
+            for container in all_containers:
+                # Check if container name matches nginx patterns
+                container_name = container.name
+                if any(name in container_name.lower() for name in ["nginx", "web"]):
+                    logger.info(f"Found nginx container: {container_name}")
+                    return container_name
+            
+            # Try exact matches from common names
+            for name in common_names:
+                try:
+                    container = self.docker_client.containers.get(name)
+                    if container.status == "running":
+                        logger.info(f"Found nginx container by name: {name}")
+                        return name
+                except:
+                    continue
+            
+            return None
+        except Exception as e:
+            logger.error(f"Error finding nginx container: {e}")
+            return None
+    
+    async def _inject_real_fault(self):
+        """Actually stop the container"""
+        if not self.docker_available:
+            return False, "Docker not available"
+        
+        try:
+            container = self.docker_client.containers.get(self.target_service)
+            container.stop(timeout=5)
+            logger.info(f"✅ Container {self.target_service} stopped for demo")
+            
+            # Verify it's actually stopped
+            await asyncio.sleep(1)
+            container.reload()
+            if container.status != "running":
+                return True, f"Container {self.target_service} stopped successfully"
+            else:
+                return False, "Container failed to stop"
+            
+        except docker.errors.NotFound:
+            return False, f"Container {self.target_service} not found"
+        except Exception as e:
+            logger.error(f"Error stopping container: {e}")
+            return False, f"Error stopping container: {str(e)}"
+    
+    async def _verify_healing(self, max_wait=60):
+        """Wait for and verify auto-healing"""
+        start_time = time.time()
+        
+        logger.info(f"Waiting for auto-healing of {self.target_service} (max {max_wait}s)...")
+        
+        while time.time() - start_time < max_wait:
+            try:
+                container = self.docker_client.containers.get(self.target_service)
+                container.reload()
+                
+                if container.status == 'running':
+                    logger.info(f"✅ Container {self.target_service} is running again")
+                    
+                    # Give nginx a moment to fully start
+                    await asyncio.sleep(2)
+                    
+                    # Verify nginx actually responds on port 80
+                    try:
+                        response = requests.get('http://localhost:80', timeout=3)
+                        if response.status_code == 200:
+                            logger.info("✅ Nginx responding on port 80")
+                            elapsed = time.time() - start_time
+                            return True, f"Container healed and responding (took {elapsed:.1f}s)"
+                        else:
+                            logger.warning(f"Nginx running but returned status {response.status_code}")
+                    except requests.exceptions.RequestException as e:
+                        logger.debug(f"Nginx not responding yet: {e}")
+                        # Container running but not responding yet, continue waiting
+                        
+            except docker.errors.NotFound:
+                logger.debug(f"Container {self.target_service} not found yet...")
+            except Exception as e:
+                logger.debug(f"Error checking container: {e}")
+            
+            await asyncio.sleep(2)
+        
+        # Timeout
+        logger.error(f"❌ Healing timeout - container not recovered after {max_wait}s")
+        return False, f"Healing timeout - container not recovered after {max_wait}s"
+    
     async def _run_demo(self):
         try:
             while self.active:
                 # Step 1: Initialize
                 self.current_step = "Service Discovery"
-                self.message = "Searching for available services..."
+                self.message = "Searching for nginx container..."
                 self.mock_fault = None
-                await asyncio.sleep(3)
-                
-                # Try to find a real target, fallback to mock
-                self.target_service = "nginx-container" # Default
-                if container_monitor:
-                    containers = container_monitor.get_all_containers_status()
-                    running = [c['name'] for c in containers if c['status'] == 'running']
-                    if running:
-                        self.target_service = random.choice(running)
-                
-                self.message = f"Selected target service: {self.target_service}"
                 await asyncio.sleep(2)
                 
-                # Step 2: Inject Fault & Wait
-                self.current_step = "Fault Active"
-                self.message = f"Simulated fault injected in {self.target_service}. Waiting for action..."
+                # Find nginx container
+                nginx_container = await self._find_nginx_container()
                 
-                # Mock fault data for frontend to display
+                if not nginx_container:
+                    self.message = "❌ Error: No nginx container found. Please ensure nginx is running."
+                    logger.error("No nginx container found for demo")
+                    await asyncio.sleep(5)
+                    self.active = False
+                    break
+                
+                self.target_service = nginx_container
+                self.message = f"✅ Found target: {self.target_service}"
+                logger.info(f"Demo targeting container: {self.target_service}")
+                await asyncio.sleep(2)
+                
+                # Step 2: Inject Real Fault
+                self.current_step = "Fault Injection"
+                self.message = f"⚠️ Stopping {self.target_service} to demonstrate auto-healing..."
+                await asyncio.sleep(1)
+                
+                # Actually stop the container
+                success, msg = await self._inject_real_fault()
+                
+                if not success:
+                    self.message = f"❌ Failed to inject fault: {msg}"
+                    logger.error(f"Fault injection failed: {msg}")
+                    await asyncio.sleep(5)
+                    self.active = False
+                    break
+                
+                # Update status - fault is REAL now
+                self.current_step = "Fault Active"
+                self.message = f"🔴 REAL FAULT: {self.target_service} stopped! Waiting for auto-healing..."
+                
+                # Create fault data for frontend
                 self.mock_fault = {
                     "id": f"demo-{int(time.time())}",
-                    "type": "service_crash" if self.scenario == "auto-heal" else "config_corruption",
+                    "type": "service_crash",
                     "container": self.target_service,
                     "severity": "critical",
                     "detected_at": datetime.now().isoformat(),
-                    "description": "Process terminated unexpectedly" if self.scenario == "auto-heal" else "Configuration file corruption detected",
-                    "is_demo": True # Flag for frontend
+                    "description": f"Container stopped - nginx no longer responding on port 80",
+                    "is_demo": True,
+                    "real_fault": True  # Flag to indicate this is a real fault
                 }
                 
-                self.waiting_for_user = True
+                logger.info(f"🔴 Real fault injected: {self.target_service} stopped")
                 
-                # Wait loop until user clicks a button
-                while self.waiting_for_user and self.active:
-                    await asyncio.sleep(0.5)
+                # Step 3: Wait for Auto-Healing
+                self.current_step = "Auto-Healing"
+                self.message = "⏳ Monitoring auto-healer... Container should restart automatically."
+                await asyncio.sleep(3)
                 
-                if not self.active: break # Stop if demo cancelled
-
-                # Step 3: Resolution
-                if self.scenario == "auto-heal":
-                     self.current_step = "Auto-Healing"
-                     self.message = "Auto-healer is diagnosing the issue..."
-                     await asyncio.sleep(2)
-                     self.message = f"Applying fix: Restarting {self.target_service}..."
-                     await asyncio.sleep(3)
-                     self.message = "Verifying service health..."
-                     await asyncio.sleep(2)
-                     self.message = "✅ Healing successful! Service is back online."
+                # Monitor healing process
+                self.message = "🔍 Detecting stopped container..."
+                await asyncio.sleep(2)
+                
+                self.message = "🔧 Auto-healer should be restarting container..."
+                
+                # Verify healing
+                healed, heal_msg = await self._verify_healing(max_wait=60)
+                
+                if healed:
+                    self.current_step = "Healed"
+                    self.message = f"✅ SUCCESS! {heal_msg}"
+                    logger.info(f"✅ Auto-healing successful: {heal_msg}")
+                    
+                    # Verify nginx is responding
+                    await asyncio.sleep(1)
+                    self.message = "✅ Healing successful! Nginx is back online and responding on port 80."
                 else:
-                     self.current_step = "Manual Intervention"
-                     self.message = "Auto-healing not possible for this issue."
-                     await asyncio.sleep(2)
-                     self.message = "Please follow the manual recovery instructions below."
+                    self.current_step = "Healing Failed"
+                    self.message = f"❌ {heal_msg}. Manual intervention may be required."
+                    logger.error(f"Auto-healing failed: {heal_msg}")
                 
-                self.mock_fault = None # Clear fault
+                self.mock_fault = None  # Clear fault
                 
-                # Final step
-                self.current_step = "Done" if self.scenario == "auto-heal" else "Manual Intervention" # Keep manual step active for reading
-                
+                # Wait before next cycle
                 await asyncio.sleep(10)
-                # Cycle scenario (flip for variety)
-                self.scenario = "manual-heal" if self.scenario == "auto-heal" else "auto-heal"
+                
+                # Stop after one cycle (user can restart demo for another round)
+                self.active = False
+                self.current_step = "Done"
+                self.message = "Demo completed. Click 'Start Demo' to run again."
                 
         except asyncio.CancelledError:
+            logger.info("Demo cancelled by user")
             pass
         except Exception as e:
-            logger.error(f"Error in healing demo: {e}")
-            self.message = f"Error: {str(e)}"
+            logger.error(f"Error in healing demo: {e}", exc_info=True)
+            self.message = f"❌ Demo error: {str(e)}"
+            self.current_step = "Error"
         finally:
             self.active = False
             self.waiting_for_user = False
@@ -943,6 +1085,33 @@ async def get_healing_demo_status():
 4. Test configuration: {healing_demo.target_service} --test-config
 5. Restart service: systemctl restart {healing_demo.target_service}"""
     
+    # Get real container status if Docker is available
+    container_status = None
+    nginx_responding = False
+    
+    if healing_demo.docker_available and healing_demo.target_service:
+        try:
+            container = healing_demo.docker_client.containers.get(healing_demo.target_service)
+            container.reload()
+            container_status = {
+                "name": healing_demo.target_service,
+                "status": container.status,
+                "running": container.status == "running"
+            }
+        except:
+            container_status = {
+                "name": healing_demo.target_service,
+                "status": "not_found",
+                "running": False
+            }
+    
+    # Check if nginx is responding on port 80
+    try:
+        response = requests.get('http://localhost:80', timeout=2)
+        nginx_responding = response.status_code == 200
+    except:
+        nginx_responding = False
+    
     return {
         "status": "success", 
         "active": healing_demo.active, 
@@ -951,7 +1120,10 @@ async def get_healing_demo_status():
         "scenario": healing_demo.scenario,
         "manual_instructions": manual_steps,
         "mock_fault": healing_demo.mock_fault,
-        "waiting_for_user": healing_demo.waiting_for_user
+        "waiting_for_user": healing_demo.waiting_for_user,
+        "docker_available": healing_demo.docker_available,
+        "container_status": container_status,
+        "nginx_responding": nginx_responding
     }
 
 # ML Performance History

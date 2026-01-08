@@ -4443,6 +4443,26 @@
                         }
 
                         console.log(`✅ Tab data loaded: ${tabName}`);
+
+                        // Start polling for active faults on auto-healing tab
+                        if (tabName === 'auto-healing') {
+                            // Initial load
+                            if (typeof updateActiveFaults === 'function') {
+                                updateActiveFaults();
+                            }
+
+                            // Poll every 5 seconds
+                            if (!window.activeFaultsInterval) {
+                                window.activeFaultsInterval = setInterval(async () => {
+                                    const autoHealingTab = document.getElementById('auto-healing');
+                                    if (autoHealingTab && autoHealingTab.classList.contains('active')) {
+                                        if (typeof updateActiveFaults === 'function') {
+                                            await updateActiveFaults();
+                                        }
+                                    }
+                                }, 5000);
+                            }
+                        }
                     } catch (error) {
                         console.error(`❌ Error loading tab data for ${tabName}:`, error);
                     }

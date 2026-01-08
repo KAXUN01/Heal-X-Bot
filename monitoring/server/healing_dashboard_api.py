@@ -1126,6 +1126,53 @@ async def get_healing_demo_status():
         "nginx_responding": nginx_responding
     }
 
+@app.get("/api/cloud/faults")
+async def get_cloud_faults(limit: int = 100):
+    """Get active faults from cloud simulation and demo"""
+    try:
+        faults = []
+        
+        # Get cloud simulation faults if fault_detector exists
+        if fault_detector:
+            try:
+                detected_faults = fault_detector.get_detected_faults(limit=limit)
+                if detected_faults:
+                    faults.extend(detected_faults)
+            except Exception as e:
+                logger.debug(f"Error getting detected faults: {e}")
+        
+        # Add demo fault if healing demo is active
+        if healing_demo.active and healing_demo.mock_fault:
+            # Insert demo fault at the beginning (highest priority)
+            demo_fault = healing_demo.mock_fault.copy()
+            
+            # Ensure it has all required fields for display
+            if 'timestamp' not in demo_fault:
+                demo_fault['timestamp'] = datetime.now().isoformat()
+            if 'service' not in demo_fault and 'container' in demo_fault:
+                demo_fault['service'] = demo_fault['container']
+            if 'resource' not in demo_fault and 'container' in demo_fault:
+                demo_fault['resource'] = demo_fault['container']
+            
+            # Insert at beginning
+            faults.insert(0, demo_fault)
+            logger.info(f"Including demo fault in active faults: {demo_fault.get('type')} - {demo_fault.get('service')}")
+        
+        return {
+            "success": True,
+            "faults": faults[:limit],  # Respect limit
+            "count": len(faults[:limit]),
+            "total": len(faults)
+        }
+    except Exception as e:
+        logger.error(f"Error getting cloud faults: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "faults": [],
+            "count": 0
+        }
+
 # ML Performance History
 ml_performance_history = {
     "timestamps": [],

@@ -7300,6 +7300,20 @@ def initialize_cloud_components():
     except Exception as e:
         logger.error(f"Error initializing cloud components: {e}", exc_info=True)
 
+# ============================================================================
+# FastAPI Startup Event - Initialize All Monitors
+# ============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize all monitoring components when the API server starts"""
+    logger.info("🚀 Starting Heal-X-Bot Dashboard API...")
+    
+    # Initialize cloud monitoring components
+    initialize_cloud_components()
+    
+    logger.info("✅ All monitoring systems initialized and ready")
+
 # WebSocket connection manager
 class ConnectionManager:
     def __init__(self):

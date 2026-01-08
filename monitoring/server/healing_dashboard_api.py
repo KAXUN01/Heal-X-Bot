@@ -1126,51 +1126,247 @@ async def get_healing_demo_status():
         "nginx_responding": nginx_responding
     }
 
+# ============================================================================
+# Fault Detection Helper Functions
+# ============================================================================
+
+def deduplicate_faults(faults: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Remove duplicate faults based on type and service/container
+    
+    Args:
+        faults: List of fault dictionaries
+        
+    Returns:
+        List of unique faults
+    """
+    seen = set()
+    unique = []
+    
+    for fault in faults:
+        # Create unique key from fault type and target (service/container/resource)
+        fault_type = fault.get('type', 'unknown')
+        target = fault.get('service') or fault.get('container') or fault.get('resource', 'unknown')
+        key = f"{fault_type}-{target}"
+        
+        if key not in seen:
+            seen.add(key)
+            unique.append(fault)
+    
+    return unique
+
+def sort_faults_by_priority(faults: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Sort faults by severity (critical first) then timestamp
+    
+    Args:
+        faults: List of fault dictionaries
+        
+    Returns:
+        Sorted list of faults
+    """
+    severity_order = {
+        'critical': 0,
+        'high': 1,
+        'medium': 2,
+        'low': 3
+    }
+    
+    def get_sort_key(fault):
+        severity = fault.get('severity', 'medium').lower()
+        severity_value = severity_order.get(severity, 2)
+        timestamp = fault.get('timestamp', fault.get('detected_at', ''))
+        return (severity_value, timestamp)
+    
+    return sorted(faults, key=get_sort_key)
+
 @app.get("/api/cloud/faults")
-async def get_cloud_faults(limit: int = 100):
-    """Get active faults from cloud simulation and demo"""
+async def get_cloud_faults(limit: int = 100, include_resolved: bool = False):
+    """
+    Get ALL active faults from multiple sources:
+    - Container crashes (Docker)
+    - Service failures (systemd services)
+    - Resource exhaustion (CPU/RAM/Disk)
+    - Network issues
+    - Demo faults (if active)
+    
+    This provides enterprise-grade real-world fault detection.
+    """
     try:
         faults = []
         
-        # Get cloud simulation faults if fault_detector exists
+        # ===================================================================
+        # 1. FaultDetector - Container crashes, resource issues, network
+        # ===================================================================
         if fault_detector:
             try:
-                detected_faults = fault_detector.get_detected_faults(limit=limit)
+                detected_faults = fault_detector.get_detected_faults(limit=100)
                 if detected_faults:
+                    for fault in detected_faults:
+                        # Ensure fault has required fields
+                        if 'timestamp' not in fault:
+                            fault['timestamp'] = datetime.now().isoformat()
+                        fault['real_fault'] = True
+                        fault['source'] = 'fault_detector'
                     faults.extend(detected_faults)
+                    logger.debug(f"Added {len(detected_faults)} faults from FaultDetector")
             except Exception as e:
-                logger.debug(f"Error getting detected faults: {e}")
+                logger.error(f"Error getting faults from FaultDetector: {e}")
         
-        # Add demo fault if healing demo is active
+        # ===================================================================
+        # 2. CriticalServicesMonitor - Systemd service failures
+        # ===================================================================
+        if critical_services_monitor:
+            try:
+                service_issues = critical_services_monitor.get_critical_issues()
+                if service_issues:
+                    for issue in service_issues:
+                        fault = {
+                            "id": f"service-{issue.get('service', 'unknown')}-{int(time.time())}",
+                            "type": "service_crashed",
+                            "service": issue.get('service', 'unknown'),
+                            "severity": "critical" if issue.get('category') == 'CRITICAL' else "high",
+                            "description": f"Service {issue.get('service')} is {issue.get('status', 'failed')}",
+                            "timestamp": datetime.now().isoformat(),
+                            "category": issue.get('category'),
+                            "status": issue.get('status'),
+                            "real_fault": True,
+                            "source": "service_monitor"
+                        }
+                        
+                        # Add recent error logs if available
+                        if 'error_logs' in issue and issue['error_logs']:
+                            fault['logs'] = issue['error_logs'][:5]  # Last 5 error logs
+                        
+                        faults.append(fault)
+                    
+                    logger.debug(f"Added {len(service_issues)} faults from CriticalServicesMonitor")
+            except Exception as e:
+                logger.error(f"Error getting faults from CriticalServicesMonitor: {e}")
+        
+        # ===================================================================
+        # 3. ResourceMonitor - CPU/Memory/Disk exhaustion
+        # ===================================================================
+        if resource_monitor:
+            try:
+                anomalies = resource_monitor.detect_resource_anomalies()
+                if anomalies:
+                    for anomaly in anomalies:
+                        fault = {
+                            "id": f"resource-{anomaly.get('type', 'unknown')}-{int(time.time())}",
+                            "type": anomaly.get('type', 'resource_exhaustion'),
+                            "severity": anomaly.get('severity', 'high'),
+                            "description": anomaly.get('message', 'Resource threshold exceeded'),
+                            "value": anomaly.get('value'),
+                            "threshold": anomaly.get('threshold'),
+                            "timestamp": anomaly.get('timestamp', datetime.now().isoformat()),
+                            "resource": anomaly.get('type', 'unknown').replace('_exhaustion', '').replace('_full', ''),
+                            "real_fault": True,
+                            "source": "resource_monitor"
+                        }
+                        faults.append(fault)
+                    
+                    logger.debug(f"Added {len(anomalies)} faults from ResourceMonitor")
+            except Exception as e:
+                logger.error(f"Error getting faults from ResourceMonitor: {e}")
+        
+        # ===================================================================
+        # 4. ContainerMonitor - Stopped/crashed containers beyond FaultDetector
+        # ===================================================================
+        if container_monitor:
+            try:
+                crashed = container_monitor.detect_crashed_containers()
+                if crashed:
+                    for container in crashed:
+                        fault = {
+                            "id": f"container-{container.get('name', 'unknown')}-{int(time.time())}",
+                            "type": "container_stopped",
+                            "container": container.get('name', 'unknown'),
+                            "service": container.get('name', 'unknown'),
+                            "severity": "critical",
+                            "description": f"Container {container.get('name')} stopped unexpectedly",
+                            "timestamp": container.get('stopped_at', datetime.now().isoformat()),
+                            "exit_code": container.get('exit_code'),
+                            "status": container.get('status'),
+                            "real_fault": True,
+                            "source": "container_monitor"
+                        }
+                        faults.append(fault)
+                    
+                    logger.debug(f"Added {len(crashed)} faults from ContainerMonitor")
+            except Exception as e:
+                logger.error(f"Error getting faults from ContainerMonitor: {e}")
+        
+        # ===================================================================
+        # 5. Demo Faults - For testing and demonstration
+        # ===================================================================
         if healing_demo.active and healing_demo.mock_fault:
-            # Insert demo fault at the beginning (highest priority)
-            demo_fault = healing_demo.mock_fault.copy()
-            
-            # Ensure it has all required fields for display
-            if 'timestamp' not in demo_fault:
-                demo_fault['timestamp'] = datetime.now().isoformat()
-            if 'service' not in demo_fault and 'container' in demo_fault:
-                demo_fault['service'] = demo_fault['container']
-            if 'resource' not in demo_fault and 'container' in demo_fault:
-                demo_fault['resource'] = demo_fault['container']
-            
-            # Insert at beginning
-            faults.insert(0, demo_fault)
-            logger.info(f"Including demo fault in active faults: {demo_fault.get('type')} - {demo_fault.get('service')}")
+            try:
+                demo_fault = healing_demo.mock_fault.copy()
+                
+                # Ensure demo fault has all required fields
+                if 'timestamp' not in demo_fault:
+                    demo_fault['timestamp'] = datetime.now().isoformat()
+                if 'service' not in demo_fault and 'container' in demo_fault:
+                    demo_fault['service'] = demo_fault['container']
+                if 'resource' not in demo_fault and 'container' in demo_fault:
+                    demo_fault['resource'] = demo_fault['container']
+                
+                demo_fault['source'] = 'demo'
+                
+                # Insert demo fault at beginning (highest priority for visibility)
+                faults.insert(0, demo_fault)
+                logger.info(f"Including demo fault: {demo_fault.get('type')} - {demo_fault.get('service')}")
+            except Exception as e:
+                logger.error(f"Error adding demo fault: {e}")
+        
+        # ===================================================================
+        # Post-processing: Deduplicate and Sort
+        # ===================================================================
+        
+        # Remove duplicate faults
+        unique_faults = deduplicate_faults(faults)
+        
+        # Sort by priority (critical first, then by timestamp)
+        sorted_faults = sort_faults_by_priority(unique_faults)
+        
+        # Apply limit
+        limited_faults = sorted_faults[:limit]
+        
+        # Build response with source information
+        source_status = {
+            "fault_detector": fault_detector is not None,
+            "service_monitor": critical_services_monitor is not None,
+            "container_monitor": container_monitor is not None,
+            "resource_monitor": resource_monitor is not None,
+            "demo_active": healing_demo.active
+        }
+        
+        logger.info(f"Returning {len(limited_faults)} faults (from {len(faults)} total, {len(unique_faults)} unique)")
         
         return {
             "success": True,
-            "faults": faults[:limit],  # Respect limit
-            "count": len(faults[:limit]),
-            "total": len(faults)
+            "faults": limited_faults,
+            "count": len(limited_faults),
+            "total": len(unique_faults),
+            "sources": source_status,
+            "monitors_active": sum(1 for v in source_status.values() if v)
         }
+        
     except Exception as e:
-        logger.error(f"Error getting cloud faults: {e}", exc_info=True)
+        logger.error(f"Error in get_cloud_faults: {e}", exc_info=True)
         return {
             "success": False,
             "error": str(e),
             "faults": [],
-            "count": 0
+            "count": 0,
+            "sources": {
+                "fault_detector": False,
+                "service_monitor": False,
+                "container_monitor": False,
+                "resource_monitor": False,
+                "demo_active": False
+            }
         }
 
 # ML Performance History
@@ -7024,16 +7220,18 @@ auto_healer = None
 root_cause_analyzer = None
 container_monitor = None
 resource_monitor = None
+critical_services_monitor = None
 
 def initialize_cloud_components():
     """Initialize cloud simulation and fault detection components"""
     global fault_detector, fault_injector, container_healer, auto_healer
-    global root_cause_analyzer, container_monitor, resource_monitor
+    global root_cause_analyzer, container_monitor, resource_monitor, critical_services_monitor
     
     try:
         from fault_detector import initialize_fault_detector
         from fault_injector import initialize_fault_injector
         from container_healer import initialize_container_healer
+        from critical_services_monitor import initialize_critical_services_monitor
         try:
             from healing import initialize_auto_healer
         except ImportError:
@@ -7091,6 +7289,12 @@ def initialize_cloud_components():
         
         container_monitor = ContainerMonitor()
         resource_monitor = ResourceMonitor()
+        
+        # Initialize critical services monitor
+        critical_services_monitor = initialize_critical_services_monitor()
+        if critical_services_monitor:
+            critical_services_monitor.start_monitoring(interval_seconds=60)
+            logger.info("✅ Critical services monitor initialized")
         
         logger.info("✅ Cloud simulation components initialized")
     except Exception as e:

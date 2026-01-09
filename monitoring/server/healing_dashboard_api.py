@@ -1593,45 +1593,78 @@ async def analyze_fault(fault_index: int):
     """Analyze a fault using AI"""
     try:
         # Get the fault from allFaults (frontend sends index)
+        fault = None
         if fault_detector:
             faults = fault_detector.get_detected_faults(limit=100)
             if 0 <= fault_index < len(faults):
                 fault = faults[fault_index]
-            else:
-                # Create a default fault for analysis
-                fault = {
-                    "type": "unknown",
-                    "service": "unknown",
-                    "message": "Fault not found"
-                }
-        else:
-            fault = {"type": "unknown", "service": "unknown", "message": "Fault detector not available"}
         
-        # Try to use Groq analyzer if available
-        if _groq_analyzer:
-            try:
-                analysis = _groq_analyzer.analyze_fault(fault)
-                return {
-                    "success": True,
-                    "analysis": analysis,
-                    "confidence": analysis.get('confidence', 0.75)
-                }
-            except Exception as e:
-                logger.error(f"Groq analysis failed: {e}")
+        if not fault:
+            fault = {
+                "type": "unknown",
+                "service": "unknown",
+                "message": "Fault not found"
+            }
         
-        # Fallback analysis
         fault_type = fault.get('type', 'unknown')
         service = fault.get('service', 'unknown')
+        message = fault.get('message', fault.get('description', 'No details available'))
+        
+        # Try to use root_cause_analyzer if available
+        if root_cause_analyzer:
+            try:
+                analysis = await root_cause_analyzer.analyze_fault(fault)
+                if analysis:
+                    return {
+                        "success": True,
+                        "analysis": analysis,
+                        "confidence": analysis.get('confidence', 0.75)
+                    }
+            except Exception as e:
+                logger.debug(f"Root cause analyzer failed: {e}")
+        
+        # Intelligent fallback analysis based on fault type
+        analysis_templates = {
+            "network_issue": {
+                "root_cause": f"Network connectivity issue with {service}",
+                "explanation": f"The service {service} is not responding on its expected port. This could be due to: the service not running, firewall blocking the port, or network misconfiguration.",
+                "solution": f"1. Check if {service} is running: docker ps | grep {service}\n2. Verify network connectivity: curl -v http://localhost:<port>\n3. Check container logs: docker logs {service}\n4. Restart the container: docker restart {service}",
+                "prevention": "Set up health checks, configure auto-restart policies, implement connection monitoring"
+            },
+            "cpu_exhaustion": {
+                "root_cause": "High CPU usage detected on the system",
+                "explanation": "CPU usage has exceeded the threshold. This could indicate resource-intensive processes, infinite loops, or insufficient CPU allocation.",
+                "solution": "1. Identify high-CPU processes: top -c\n2. Check for resource leaks in applications\n3. Consider scaling up resources or optimizing code\n4. Kill problematic processes if needed",
+                "prevention": "Implement CPU limits on containers, set up autoscaling, optimize application performance"
+            },
+            "memory_exhaustion": {
+                "root_cause": "High memory usage detected on the system", 
+                "explanation": "Memory usage has exceeded the threshold. This could indicate memory leaks, large data processing, or insufficient RAM.",
+                "solution": "1. Check memory by process: ps aux --sort=-%mem | head\n2. Look for memory leaks in applications\n3. Clear caches: sync; echo 3 > /proc/sys/vm/drop_caches\n4. Consider adding more RAM",
+                "prevention": "Set memory limits on containers, monitor memory trends, implement proper garbage collection"
+            },
+            "service_crash": {
+                "root_cause": f"Service {service} has crashed or stopped",
+                "explanation": f"The {service} container/service is no longer running. This could be due to application errors, resource constraints, or configuration issues.",
+                "solution": f"1. Check service logs: docker logs {service}\n2. Inspect exit code: docker inspect {service}\n3. Restart the service: docker start {service}\n4. Check for resource limits",
+                "prevention": "Configure restart policies, implement health checks, set up monitoring alerts"
+            }
+        }
+        
+        # Get appropriate analysis or default
+        default_analysis = {
+            "root_cause": f"Issue detected: {fault_type} on {service}",
+            "explanation": f"A {fault_type} issue was detected affecting {service}. Details: {message}",
+            "solution": f"1. Check {service} status and logs\n2. Verify configuration\n3. Restart if needed\n4. Monitor for recurrence",
+            "prevention": "Implement monitoring, alerts, and auto-recovery mechanisms"
+        }
+        
+        analysis = analysis_templates.get(fault_type, default_analysis)
         
         return {
             "success": True,
-            "analysis": {
-                "root_cause": f"Service {service} experiencing {fault_type}",
-                "explanation": f"The {fault_type} issue on {service} may be caused by resource constraints, network issues, or service misconfiguration.",
-                "solution": f"1. Check {service} logs for errors\n2. Verify network connectivity\n3. Review resource usage\n4. Restart the service if needed",
-                "prevention": "Implement monitoring alerts, resource limits, and health checks"
-            },
-            "confidence": 0.60
+            "analysis": analysis,
+            "confidence": 0.70
         }
     except Exception as e:
         logger.error(f"Error analyzing fault: {e}", exc_info=True)
@@ -1640,6 +1673,7 @@ async def analyze_fault(fault_index: int):
             "error": str(e),
             "analysis": None
         }
+
 
 @app.get("/api/scaling/templates")
 async def get_scaling_templates():

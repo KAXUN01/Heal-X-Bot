@@ -1432,6 +1432,101 @@ async def get_auto_healer_status():
             }
         }
 
+@app.get("/api/services")
+async def get_services():
+    """Get running services status"""
+    try:
+        services = []
+        
+        # Add container monitor services if available
+        if container_monitor:
+            try:
+                containers = container_monitor.get_all_containers_status()
+                if containers and isinstance(containers, list):
+                    for container in containers:
+                        if isinstance(container, dict):
+                            services.append({
+                                "name": container.get('name', 'unknown'),
+                                "status": container.get('status', 'unknown'),
+                                "type": "container",
+                                "health": "healthy" if container.get('status') == 'running' else "unhealthy"
+                            })
+            except Exception as e:
+                logger.debug(f"Error getting container services: {e}")
+        
+        # Add critical services if available
+        if critical_services_monitor:
+            try:
+                # Try different methods to get service list
+                if hasattr(critical_services_monitor, 'get_service_list'):
+                    service_list = critical_services_monitor.get_service_list()
+                    if service_list and isinstance(service_list, dict):
+                        for category, category_services in service_list.items():
+                            if isinstance(category_services, list):
+                                for service in category_services:
+                                    if isinstance(service, dict):
+                                        services.append({
+                                            "name": service.get('name', 'unknown'),
+                                            "status": "running" if service.get('active') else "stopped",
+                                            "type": "systemd",
+                                            "category": category,
+                                            "health": "healthy" if service.get('active') else "unhealthy"
+                                        })
+            except Exception as e:
+                logger.debug(f"Error getting critical services: {e}")
+        
+        # Return safe response even if no services found
+        return {
+            "success": True,
+            "services": services,
+            "total": len(services),
+            "running": len([s for s in services if s.get('status') == 'running']),
+            "stopped": len([s for s in services if s.get('status') == 'stopped'])
+        }
+    except Exception as e:
+        logger.error(f"Error getting services: {e}", exc_info=True)
+        return {
+            "success": True,
+            "error": str(e),
+            "services": [],
+            "total": 0,
+            "running": 0,
+            "stopped": 0
+        }
+
+@app.get("/api/config")
+async def get_config():
+    """Get system configuration"""
+    try:
+        return {
+            "success": True,
+            "config": {
+                "monitoring": {
+                    "enabled": True,
+                    "interval": 30,
+                    "fault_detection": fault_detector is not None,
+                    "service_monitoring": critical_services_monitor is not None,
+                    "container_monitoring": container_monitor is not None,
+                    "resource_monitoring": resource_monitor is not None
+                },
+                "auto_healing": {
+                    "enabled": auto_healer is not None,
+                    "auto_execute": False
+                },
+                "notifications": {
+                    "discord_enabled": True,
+                    "email_enabled": False
+                }
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting config: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "config": {}
+        }
+
 # ML Performance History
 ml_performance_history = {
     "timestamps": [],

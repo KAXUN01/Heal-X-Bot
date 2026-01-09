@@ -7641,11 +7641,11 @@ def initialize_cloud_components():
         )
         
         root_cause_analyzer = initialize_root_cause_analyzer(
-            groq_analyzer=_groq_analyzer
+            groq_analyzer=_ai_analyzer
         )
         
         auto_healer = initialize_auto_healer(
-            groq_analyzer=_groq_analyzer,
+            groq_analyzer=_ai_analyzer,
             container_healer=container_healer,
             root_cause_analyzer=root_cause_analyzer,
             discord_notifier=discord_notifier,

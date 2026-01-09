@@ -39,13 +39,13 @@ class FaultDetector:
         self.detected_faults = []
         self.max_fault_history = 100
         
-        # Service ports to check
+        # Service ports to check - Actual Heal-X-Bot services
         self.service_ports = {
-            'load-balancer': 80,
-            'web-server': 8081,
-            'api-server': 8082,
-            'database': 5432,
-            'cache': 6379
+            'healing-dashboard': 5001,    # Healing Dashboard API
+            'monitoring-server': 5000,    # Main Monitoring Server
+            'ddos-model': 8080,           # ML DDoS Detection Model
+            'nginx-container': 80,        # Nginx Web Server Container
+            'mysql-container': 3306       # MySQL Database Container
         }
         
         logger.info("Fault Detector initialized")

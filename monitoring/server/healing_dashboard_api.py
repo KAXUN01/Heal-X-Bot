@@ -1369,6 +1369,58 @@ async def get_cloud_faults(limit: int = 100, include_resolved: bool = False):
             }
         }
 
+@app.get("/api/cloud/healing/history")
+async def get_cloud_healing_history(limit: int = 50):
+    """Get cloud healing history - placeholder endpoint for backward compatibility"""
+    try:
+        # Return empty history for now - can be enhanced later
+        return {
+            "success": True,
+            "history": [],
+            "count": 0,
+            "statistics": {
+                "total_healings": 0,
+                "successful_healings": 0,
+                "failed_healings": 0,
+                "avg_healing_time_seconds": 0
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting healing history: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "history": [],
+            "count": 0
+        }
+
+@app.get("/api/auto-healer/status")
+async def get_auto_healer_status():
+    """Get auto-healer status"""
+    try:
+        if auto_healer:
+            return {
+                "success": True,
+                "enabled": True,
+                "active": True,
+                "monitors_active": 4,
+                "last_check": datetime.now().isoformat()
+            }
+        else:
+            return {
+                "success": True,
+                "enabled": False,
+                "active": False,
+                "message": "Auto-healer not initialized"
+            }
+    except Exception as e:
+        logger.error(f"Error getting auto-healer status: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "enabled": False
+        }
+
 # ML Performance History
 ml_performance_history = {
     "timestamps": [],

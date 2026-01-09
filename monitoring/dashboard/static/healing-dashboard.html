@@ -10487,8 +10487,11 @@
                         return;
                     }
 
-                    // Show loading state
-                    container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);"><i class="fas fa-spinner fa-spin"></i> Loading active faults...</div>';
+                    // Only show loading on first load (when no faults exist yet)
+                    const isFirstLoad = allFaults.length === 0 && !container.querySelector('.fault-card');
+                    if (isFirstLoad) {
+                        container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);"><i class="fas fa-spinner fa-spin"></i> Loading active faults...</div>';
+                    }
 
                     try {
                         const controller = new AbortController();
@@ -10499,7 +10502,10 @@
 
                         if (!response.ok) {
                             if (response.status === 404 || response.status === 503) {
-                                container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);"><i class="fas fa-info-circle"></i> Fault detection service unavailable. Please check backend configuration.</div>';
+                                // Only update UI if it was first load
+                                if (isFirstLoad) {
+                                    container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);"><i class="fas fa-info-circle"></i> Fault detection service unavailable. Please check backend configuration.</div>';
+                                }
                                 isUpdatingFaults = false;
                                 return;
                             }
@@ -10509,15 +10515,9 @@
                         const data = await response.json();
 
                         if (!data.success) {
-                            container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-secondary);"><i class="fas fa-info-circle"></i> ${data.error || 'Unable to load faults'}</div>`;
-                            isUpdatingFaults = false;
-                            return;
-                        }
-
-                        if (!data.faults || data.faults.length === 0) {
-                            allFaults = [];
-                            currentFaultsPage = 1;
-                            renderFaultsPage();
+                            if (isFirstLoad) {
+                                container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--text-secondary);"><i class="fas fa-info-circle"></i> ${data.error || 'Unable to load faults'}</div>`;
+                            }
                             isUpdatingFaults = false;
                             return;
                         }
@@ -10526,36 +10526,61 @@
                         const seenFaults = new Set();
                         const uniqueFaults = [];
 
-                        data.faults.forEach(fault => {
-                            // Create unique key: type + service + timestamp (rounded to nearest minute to catch near-duplicates)
-                            const faultTimestamp = fault.timestamp ? new Date(fault.timestamp).getTime() : 0;
-                            const roundedTimestamp = Math.floor(faultTimestamp / 60000) * 60000; // Round to nearest minute
-                            const uniqueKey = `${fault.type || 'unknown'}_${fault.service || fault.resource || 'unknown'}_${roundedTimestamp}`;
+                        if (data.faults && data.faults.length > 0) {
+                            data.faults.forEach(fault => {
+                                // Create unique key: type + service + timestamp (rounded to nearest minute to catch near-duplicates)
+                                const faultTimestamp = fault.timestamp ? new Date(fault.timestamp).getTime() : 0;
+                                const roundedTimestamp = Math.floor(faultTimestamp / 60000) * 60000; // Round to nearest minute
+                                const uniqueKey = `${fault.type || 'unknown'}_${fault.service || fault.resource || 'unknown'}_${roundedTimestamp}`;
 
-                            if (!seenFaults.has(uniqueKey)) {
-                                seenFaults.add(uniqueKey);
-                                uniqueFaults.push(fault);
+                                if (!seenFaults.has(uniqueKey)) {
+                                    seenFaults.add(uniqueKey);
+                                    uniqueFaults.push(fault);
+                                }
+                            });
+                        }
+
+                        // Create a hash of the new faults to compare with existing
+                        const createFaultsHash = (faults) => {
+                            return faults.map(f => `${f.type}_${f.service || f.resource}_${f.severity}`).sort().join('|');
+                        };
+
+                        const newHash = createFaultsHash(uniqueFaults);
+                        const currentHash = createFaultsHash(allFaults);
+
+                        // Only update if there are actual changes
+                        if (newHash !== currentHash) {
+                            console.log('Faults changed, updating display...');
+                            allFaults = uniqueFaults;
+                            // Preserve current page if possible, otherwise reset to page 1
+                            const maxPage = Math.ceil(allFaults.length / FAULTS_PER_PAGE) || 1;
+                            if (currentFaultsPage > maxPage) {
+                                currentFaultsPage = 1;
                             }
-                        });
-
-                        allFaults = uniqueFaults;
-                        currentFaultsPage = 1; // Reset to first page when new data loads
-                        renderFaultsPage();
+                            renderFaultsPage();
+                        } else {
+                            console.log('No changes in faults, keeping current state');
+                        }
 
                     } catch (error) {
                         console.error('Error loading active faults:', error);
 
-                        if (error.name === 'AbortError') {
-                            container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--accent-yellow);"><i class="fas fa-clock"></i> Request timeout - service may be slow to respond</div>';
-                        } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-                            container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);"><i class="fas fa-unlink"></i> Unable to connect to fault detection service</div>';
-                        } else {
-                            container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--accent-red);"><i class="fas fa-exclamation-circle"></i> Error loading faults: ${error.message}</div>`;
+                        // Only show error on first load, keep current state otherwise
+                        if (isFirstLoad) {
+                            if (error.name === 'AbortError') {
+                                container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--accent-yellow);"><i class="fas fa-clock"></i> Request timeout - service may be slow to respond</div>';
+                            } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                                container.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);"><i class="fas fa-unlink"></i> Unable to connect to fault detection service</div>';
+                            } else {
+                                container.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--accent-red);"><i class="fas fa-exclamation-circle"></i> Error loading faults: ${error.message}</div>`;
+                            }
                         }
+                        // On subsequent loads, just log the error and keep current state
                     } finally {
                         isUpdatingFaults = false;
                     }
                 }
+
 
                 // Make changeFaultsPage globally accessible
                 window.changeFaultsPage = changeFaultsPage;

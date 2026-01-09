@@ -9817,7 +9817,7 @@
                             if (loadingIndicator) loadingIndicator.style.display = 'none';
                             if (configForm) configForm.style.display = 'flex';
                             if (isAutoHealingTabActive()) {
-                                showNotification(`Failed to load configuration: ${data.message || 'Unknown error'} - using defaults`, 'error');
+                                console.warn(`Failed to load configuration: ${data.message || 'Unknown error'} - using defaults`);
                             }
 
                             // Set default values

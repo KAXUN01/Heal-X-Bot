@@ -1203,9 +1203,16 @@ async def get_cloud_faults(limit: int = 100, include_resolved: bool = False):
                 detected_faults = fault_detector.get_detected_faults(limit=100)
                 if detected_faults:
                     for fault in detected_faults:
-                        # Ensure fault has required fields
-                        if 'timestamp' not in fault:
+                        # Ensure fault has all required fields
+                        if 'timestamp' not in fault or not fault['timestamp']:
                             fault['timestamp'] = datetime.now().isoformat()
+                        if 'service' not in fault or not fault['service']:
+                            # Try to infer service from other fields
+                            fault['service'] = fault.get('container', fault.get('resource', fault.get('type', 'unknown')))
+                        if 'message' not in fault:
+                            fault['message'] = fault.get('description', f"{fault.get('type', 'Issue')} detected")
+                        if 'description' not in fault:
+                            fault['description'] = fault.get('message', f"{fault.get('type', 'Issue')} detected")
                         fault['real_fault'] = True
                         fault['source'] = 'fault_detector'
                     faults.extend(detected_faults)
@@ -1252,15 +1259,26 @@ async def get_cloud_faults(limit: int = 100, include_resolved: bool = False):
                 anomalies = resource_monitor.detect_resource_anomalies()
                 if anomalies:
                     for anomaly in anomalies:
+                        # Determine resource type from fault type
+                        fault_type = anomaly.get('type', 'resource_exhaustion')
+                        resource_name = fault_type.replace('_exhaustion', '').replace('_full', '').upper()
+                        
+                        # Create descriptive message
+                        value = anomaly.get('value', 0)
+                        threshold = anomaly.get('threshold', 90)
+                        message = anomaly.get('message', f'{resource_name} usage is {value}% (threshold: {threshold}%)')
+                        
                         fault = {
-                            "id": f"resource-{anomaly.get('type', 'unknown')}-{int(time.time())}",
-                            "type": anomaly.get('type', 'resource_exhaustion'),
+                            "id": f"resource-{fault_type}-{int(time.time())}",
+                            "type": fault_type,
                             "severity": anomaly.get('severity', 'high'),
-                            "description": anomaly.get('message', 'Resource threshold exceeded'),
-                            "value": anomaly.get('value'),
-                            "threshold": anomaly.get('threshold'),
+                            "description": message,
+                            "message": message,
+                            "service": resource_name,  # Use resource type as service name
+                            "resource": resource_name,
+                            "value": value,
+                            "threshold": threshold,
                             "timestamp": anomaly.get('timestamp', datetime.now().isoformat()),
-                            "resource": anomaly.get('type', 'unknown').replace('_exhaustion', '').replace('_full', ''),
                             "real_fault": True,
                             "source": "resource_monitor"
                         }

@@ -1396,29 +1396,40 @@ async def get_cloud_healing_history(limit: int = 50):
 
 @app.get("/api/auto-healer/status")
 async def get_auto_healer_status():
-    """Get auto-healer status"""
+    """Get auto-healer status and configuration"""
     try:
         if auto_healer:
-            return {
-                "success": True,
-                "enabled": True,
-                "active": True,
-                "monitors_active": 4,
-                "last_check": datetime.now().isoformat()
+            # Get actual configuration from auto_healer if it has these attributes
+            auto_healer_config = {
+                "enabled": getattr(auto_healer, 'enabled', True),
+                "auto_execute": getattr(auto_healer, 'auto_execute', False),
+                "monitoring_interval": getattr(auto_healer, 'monitoring_interval', 60),
+                "max_attempts": getattr(auto_healer, 'max_attempts', 3)
             }
         else:
-            return {
-                "success": True,
-                "enabled": False,
-                "active": False,
-                "message": "Auto-healer not initialized"
+            # Default configuration when auto_healer is not initialized
+            auto_healer_config = {
+                "enabled": True,
+                "auto_execute": False,
+                "monitoring_interval": 60,
+                "max_attempts": 3
             }
+        
+        return {
+            "status": "success",
+            "auto_healer": auto_healer_config
+        }
     except Exception as e:
         logger.error(f"Error getting auto-healer status: {e}", exc_info=True)
         return {
-            "success": False,
+            "status": "error",
             "error": str(e),
-            "enabled": False
+            "auto_healer": {
+                "enabled": True,
+                "auto_execute": False,
+                "monitoring_interval": 60,
+                "max_attempts": 3
+            }
         }
 
 # ML Performance History

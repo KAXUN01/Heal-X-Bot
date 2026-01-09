@@ -4174,7 +4174,7 @@
 
                         if (!response.ok) {
                             if (response.status === 404 || response.status === 503) {
-                                showNotification('❌ Cloud simulation service unavailable', 'error');
+                                console.error('Cloud simulation service unavailable');
                                 return;
                             }
                             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -4192,11 +4192,11 @@
                         }
                     } catch (error) {
                         if (error.name === 'AbortError') {
-                            showNotification('❌ Request timeout - service may be unavailable', 'error');
+                            console.warn('Request timeout - service may be unavailable');
                         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-                            showNotification('❌ Unable to connect to cloud simulation service', 'error');
+                            console.error('Unable to connect to cloud simulation service');
                         } else {
-                            showNotification(`❌ Error injecting fault: ${error.message}`, 'error');
+                            console.error(`Error injecting fault: ${error.message}`);
                         }
                     }
                 }
@@ -4215,7 +4215,7 @@
 
                         if (!response.ok) {
                             if (response.status === 404 || response.status === 503) {
-                                showNotification('❌ Cloud simulation service unavailable', 'error');
+                                console.error('Cloud simulation service unavailable');
                                 return;
                             }
                             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -4230,11 +4230,11 @@
                         }
                     } catch (error) {
                         if (error.name === 'AbortError') {
-                            showNotification('❌ Request timeout - service may be unavailable', 'error');
+                            console.warn('Request timeout - service may be unavailable');
                         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
-                            showNotification('❌ Unable to connect to cloud simulation service', 'error');
+                            console.error('Unable to connect to cloud simulation service');
                         } else {
-                            showNotification(`❌ Error cleaning up faults: ${error.message}`, 'error');
+                            console.error(`Error cleaning up faults: ${error.message}`);
                         }
                     }
                 }
@@ -9678,7 +9678,7 @@
                                     statusEl.innerHTML = '<i class="fas fa-clock"></i> Timeout';
                                     statusEl.style.color = 'var(--accent-yellow)';
                                 }
-                                showNotification('Request timeout - service may be slow to respond', 'warning');
+                                console.warn('Request timeout - service may be slow to respond');
                             }
                         } else if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
                             if (isAutoHealingTabActive()) {
@@ -9686,7 +9686,7 @@
                                     statusEl.innerHTML = '<i class="fas fa-unlink"></i> Offline';
                                     statusEl.style.color = 'var(--accent-red)';
                                 }
-                                showNotification('Unable to connect to auto-healing service', 'error');
+                                console.warn('Unable to connect to auto-healing service');
                             }
                         } else {
                             console.error('Error updating auto-healing dashboard:', error);

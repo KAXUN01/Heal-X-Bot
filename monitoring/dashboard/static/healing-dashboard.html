@@ -9749,7 +9749,7 @@
                                 if (loadingIndicator) loadingIndicator.style.display = 'none';
                                 if (configForm) configForm.style.display = 'flex';
                                 if (isAutoHealingTabActive()) {
-                                    showNotification('Auto-healer service unavailable - using default values', 'warning');
+                                    console.warn('Auto-healer service unavailable - using default values');
                                 }
 
                                 // Set default values
@@ -9845,12 +9845,12 @@
 
                         if (error.name === 'AbortError') {
                             if (isAutoHealingTabActive()) {
-                                showNotification('Configuration load timeout - using default values', 'warning');
+                                console.warn('Configuration load timeout - using default values');
                             }
                         } else {
                             console.error('Error loading auto-healing configuration:', error);
                             if (isAutoHealingTabActive()) {
-                                showNotification('Failed to load configuration - using default values', 'error');
+                                console.warn('Failed to load configuration - using default values');
                             }
                         }
 

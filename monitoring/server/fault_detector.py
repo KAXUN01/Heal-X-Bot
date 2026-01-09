@@ -159,10 +159,17 @@ class FaultDetector:
         anomalies = self.resource_monitor.detect_resource_anomalies()
         
         for anomaly in anomalies:
+            # Extract resource type from fault type
+            fault_type = anomaly.get('type', 'resource_exhaustion')
+            resource_name = fault_type.replace('_exhaustion', '').replace('_full', '').upper()
+            
             fault = {
-                'type': anomaly['type'],
+                'type': fault_type,
                 'severity': anomaly['severity'],
+                'service': resource_name,  # CPU, MEMORY, or DISK
+                'resource': resource_name,
                 'message': anomaly['message'],
+                'description': anomaly['message'],
                 'value': anomaly['value'],
                 'threshold': anomaly['threshold'],
                 'timestamp': datetime.now().isoformat(),
@@ -171,6 +178,7 @@ class FaultDetector:
             faults.append(fault)
         
         return faults
+
     
     def detect_network_issues(self) -> List[Dict[str, Any]]:
         """
@@ -184,12 +192,15 @@ class FaultDetector:
         # Check each service port
         for service_name, port in self.service_ports.items():
             if not self._check_port_connectivity('localhost', port):
+                message = f"Service {service_name} is not reachable on port {port}"
                 fault = {
                     'type': 'network_issue',
                     'severity': 'high',
                     'service': service_name,
+                    'resource': service_name,
                     'port': port,
-                    'message': f"Service {service_name} is not reachable on port {port}",
+                    'message': message,
+                    'description': message,
                     'timestamp': datetime.now().isoformat()
                 }
                 faults.append(fault)

@@ -1588,6 +1588,119 @@ async def get_config():
             "config": {}
         }
 
+@app.post("/api/cloud/faults/{fault_index}/analyze")
+async def analyze_fault(fault_index: int):
+    """Analyze a fault using AI"""
+    try:
+        # Get the fault from allFaults (frontend sends index)
+        if fault_detector:
+            faults = fault_detector.get_detected_faults(limit=100)
+            if 0 <= fault_index < len(faults):
+                fault = faults[fault_index]
+            else:
+                # Create a default fault for analysis
+                fault = {
+                    "type": "unknown",
+                    "service": "unknown",
+                    "message": "Fault not found"
+                }
+        else:
+            fault = {"type": "unknown", "service": "unknown", "message": "Fault detector not available"}
+        
+        # Try to use Groq analyzer if available
+        if _groq_analyzer:
+            try:
+                analysis = _groq_analyzer.analyze_fault(fault)
+                return {
+                    "success": True,
+                    "analysis": analysis,
+                    "confidence": analysis.get('confidence', 0.75)
+                }
+            except Exception as e:
+                logger.error(f"Groq analysis failed: {e}")
+        
+        # Fallback analysis
+        fault_type = fault.get('type', 'unknown')
+        service = fault.get('service', 'unknown')
+        
+        return {
+            "success": True,
+            "analysis": {
+                "root_cause": f"Service {service} experiencing {fault_type}",
+                "explanation": f"The {fault_type} issue on {service} may be caused by resource constraints, network issues, or service misconfiguration.",
+                "solution": f"1. Check {service} logs for errors\n2. Verify network connectivity\n3. Review resource usage\n4. Restart the service if needed",
+                "prevention": "Implement monitoring alerts, resource limits, and health checks"
+            },
+            "confidence": 0.60
+        }
+    except Exception as e:
+        logger.error(f"Error analyzing fault: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "analysis": None
+        }
+
+@app.get("/api/scaling/templates")
+async def get_scaling_templates():
+    """Get auto-scaling templates"""
+    try:
+        return {
+            "success": True,
+            "templates": [
+                {
+                    "id": "cpu-scale",
+                    "name": "CPU-Based Scaling",
+                    "description": "Scale based on CPU usage thresholds",
+                    "trigger": {"metric": "cpu", "threshold": 80},
+                    "action": {"scale_up": 2, "scale_down": 1}
+                },
+                {
+                    "id": "memory-scale",
+                    "name": "Memory-Based Scaling",
+                    "description": "Scale based on memory usage thresholds",
+                    "trigger": {"metric": "memory", "threshold": 85},
+                    "action": {"scale_up": 2, "scale_down": 1}
+                },
+                {
+                    "id": "request-scale",
+                    "name": "Request-Based Scaling",
+                    "description": "Scale based on request rate",
+                    "trigger": {"metric": "requests_per_second", "threshold": 1000},
+                    "action": {"scale_up": 3, "scale_down": 1}
+                }
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Error getting scaling templates: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e),
+            "templates": []
+        }
+
+@app.get("/api/scaling/status")
+async def get_scaling_status():
+    """Get auto-scaling status"""
+    try:
+        return {
+            "success": True,
+            "status": {
+                "enabled": False,
+                "current_instances": 1,
+                "min_instances": 1,
+                "max_instances": 10,
+                "active_policy": None
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error getting scaling status: {e}", exc_info=True)
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
 # ML Performance History
 ml_performance_history = {
     "timestamps": [],

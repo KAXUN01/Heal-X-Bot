@@ -8144,12 +8144,43 @@ async def analyze_fault_with_ai(fault_id: int):
         except:
             metrics = None
         
-        # Analyze fault with AI
-        analysis_result = current_analyzer.analyze_cloud_fault(
-            fault,
-            container_logs=None,
-            system_metrics=metrics
-        )
+        # Analyze fault with AI - run in thread pool with timeout to avoid blocking
+        try:
+            import concurrent.futures
+            loop = asyncio.get_event_loop()
+            
+            def run_groq_analysis():
+                return current_analyzer.analyze_cloud_fault(
+                    fault,
+                    container_logs=None,
+                    system_metrics=metrics
+                )
+            
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                analysis_result = await asyncio.wait_for(
+                    loop.run_in_executor(pool, run_groq_analysis),
+                    timeout=20.0  # 20 second timeout
+                )
+        except asyncio.TimeoutError:
+            logger.warning("Groq analysis timed out after 20 seconds")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": "AI analysis timed out. The Groq API is taking longer than expected. Please try again.",
+                    "fault": fault
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error during Groq analysis: {e}", exc_info=True)
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": f"AI analysis failed: {str(e)}",
+                    "fault": fault
+                }
+            )
         
         # Validate analysis_result is a dict (handle cases where it might be None or wrong type)
         if not isinstance(analysis_result, dict):

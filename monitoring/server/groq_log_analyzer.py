@@ -30,8 +30,9 @@ class GroqLogAnalyzer:
             try:
                 # Initialize Groq client
                 self.client = Groq(api_key=self.api_key)
-                # Use llama-3.3-70b-versatile model (latest high-performance model)
-                self.model_name = "llama-3.3-70b-versatile"
+                # Use llama-3.1-8b-instant model (fast for real-time analysis)
+                # Fallback models: mixtral-8x7b-32768, llama-3.3-70b-versatile (slower but more accurate)
+                self.model_name = "llama-3.1-8b-instant"
                 logger.info(f"Groq client initialized successfully with {self.model_name}")
                     
             except Exception as e:
@@ -611,11 +612,11 @@ Log #{i}:
             thread = threading.Thread(target=api_call)
             thread.daemon = True
             thread.start()
-            thread.join(timeout=15)  # Increased timeout for Llama 3 70B model
+            thread.join(timeout=10)  # 10 second timeout for faster feedback
             
             if thread.is_alive():
                 # Request timed out
-                logger.warning(f"Groq API call ({self.model_name}) timed out after 15 seconds")
+                logger.warning(f"Groq API call ({self.model_name}) timed out after 10 seconds")
                 return {
                     'status': 'error',
                     'message': 'Analysis timed out. The AI model is taking longer than expected. Please try again.'

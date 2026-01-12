@@ -1614,9 +1614,11 @@ async def get_config():
             "config": {}
         }
 
-@app.post("/api/cloud/faults/{fault_index}/analyze")
-async def analyze_fault(fault_index: int):
-    """Analyze a fault using AI"""
+# Note: This endpoint is kept for backward compatibility but the main analyze endpoint
+# is at /api/cloud/faults/{fault_id}/analyze (defined later with full Groq integration)
+@app.post("/api/cloud/faults/{fault_index}/analyze-basic")
+async def analyze_fault_basic(fault_index: int):
+    """Basic fault analysis - for fallback when AI is not available"""
     try:
         # Get the fault from allFaults (frontend sends index)
         fault = None
@@ -1635,6 +1637,22 @@ async def analyze_fault(fault_index: int):
         fault_type = fault.get('type', 'unknown')
         service = fault.get('service', 'unknown')
         message = fault.get('message', fault.get('description', 'No details available'))
+        
+        # Try to use Groq analyzer directly if available
+        from groq_log_analyzer import groq_analyzer as current_groq
+        if current_groq and hasattr(current_groq, 'client') and current_groq.client:
+            try:
+                metrics = get_system_metrics()
+                analysis_result = current_groq.analyze_cloud_fault(fault, system_metrics=metrics)
+                if analysis_result.get('status') == 'success':
+                    return {
+                        "success": True,
+                        "analysis": analysis_result.get('analysis', {}),
+                        "confidence": analysis_result.get('analysis', {}).get('confidence', 0.75),
+                        "ai_powered": True
+                    }
+            except Exception as e:
+                logger.debug(f"Direct Groq analysis failed: {e}")
         
         # Try to use root_cause_analyzer if available and services are initialized
         if root_cause_analyzer and _services_initialized:
@@ -4002,6 +4020,18 @@ async def startup_event():
         # Initialize cloud simulation components in background (don't block startup)
         async def init_cloud_components_async():
             try:
+                # Wait for log services to be initialized first (max 30 seconds)
+                # This ensures _ai_analyzer is ready before cloud components use it
+                wait_count = 0
+                while not _services_initialized and wait_count < 60:
+                    await asyncio.sleep(0.5)
+                    wait_count += 1
+                
+                if not _services_initialized:
+                    logger.warning("⚠️ Services not initialized after 30s, proceeding with cloud components anyway")
+                else:
+                    logger.info("✅ Services initialized, now initializing cloud components")
+                
                 # Run synchronous function in executor to avoid blocking
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(None, initialize_cloud_components)

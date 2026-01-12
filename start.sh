@@ -306,6 +306,10 @@ fi
         log_success "Google Generative AI installed successfully"
     fi
     
+    # Install Groq client explicitly (to ensure it's available)
+    log_info "Installing Groq client..."
+    python3 -m pip install "groq>=0.4.0" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || log_warning "Failed to install Groq client"
+    
     log_success "Dependencies installed"
 }
 

@@ -8075,99 +8075,92 @@ async def analyze_fault_with_ai(fault_id: int):
                 content={"success": False, "error": f"Fault not found (requested: {fault_id}, available: {len(faults) if faults else 0})"}
             )
         
+        if not faults or fault_id >= len(faults):
+            return JSONResponse(
+                status_code=404,
+                content={"success": False, "error": f"Fault not found (requested: {fault_id}, available: {len(faults) if faults else 0})"}
+            )
+        
         fault = faults[fault_id]
         
-        # Reload .env file to get latest API key
-        load_dotenv(dotenv_path=str(env_path_abs), override=True)
-        
-        # Check if Groq analyzer is available and properly configured
-        # Import fresh to get latest state
-        from groq_log_analyzer import groq_analyzer as current_analyzer
-        
-        # Get API key from environment
-        api_key = os.getenv('GROQ_API_KEY')
-        
-        # Try to initialize/reinitialize if needed
-        if not current_analyzer or (current_analyzer and (not hasattr(current_analyzer, 'client') or current_analyzer.client is None)):
-            if api_key and api_key != "your_groq_api_key_here" and len(api_key) >= 20:
-                try:
-                    logger.info("Attempting to initialize Groq analyzer with API key from .env")
-                    initialize_groq_analyzer(api_key=api_key)
-                    from groq_log_analyzer import groq_analyzer as current_analyzer
-                    logger.info(f"Groq analyzer initialized: {current_analyzer is not None}, client: {current_analyzer.client is not None if current_analyzer else 'N/A'}")
-                except Exception as e:
-                    logger.error(f"Failed to initialize Groq analyzer: {e}", exc_info=True)
-                    return JSONResponse(
-                        status_code=200,
-                        content={
-                            "success": False,
-                            "error": f"AI analyzer initialization failed: {str(e)}\n\nPlease check:\n1. Your GROQ_API_KEY is valid\n2. You have internet connectivity\n3. The API key has proper permissions",
-                            "fault": fault
-                        }
-                    )
-        
-        # Check if analyzer has valid client
-        if not current_analyzer or not hasattr(current_analyzer, 'client') or current_analyzer.client is None:
-            if not api_key or api_key == "your_groq_api_key_here" or len(api_key) < 20:
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "success": False,
-                        "error": "AI analyzer not available. Please configure GROQ_API_KEY in your .env file.\n\nGet your API key:\n1. Visit: https://console.groq.com/keys\n2. Sign in or create an account\n3. Click 'Create API Key'\n4. Copy the key and add to .env file:\n   GROQ_API_KEY=your_actual_key_here\n5. Restart the monitoring server or reload this page",
-                        "fault": fault,
-                        "setup_instructions": {
-                            "title": "Setup GROQ_API_KEY",
-                            "steps": [
-                                "Visit: https://console.groq.com/keys",
-                                "Sign in or create an account",
-                                "Click 'Create API Key'",
-                                "Copy the key and add to .env file: GROQ_API_KEY=your_actual_key_here",
-                                "Restart the monitoring server or reload this page"
-                            ]
-                        }
+        # Define the heavy lifting function to run in a thread
+        def perform_full_analysis():
+            # 1. Load env (blocking I/O)
+            load_dotenv(dotenv_path=str(env_path_abs), override=True)
+            
+            # 2. Get API Key
+            api_key = os.getenv('GROQ_API_KEY')
+            
+            # 3. Initialize/Get Analyzer (may involve blocking checks)
+            from groq_log_analyzer import groq_analyzer as analyzer
+            
+            if not analyzer or not hasattr(analyzer, 'client') or analyzer.client is None:
+                if api_key and api_key != "your_groq_api_key_here" and len(api_key) >= 20:
+                    try:
+                        initialize_groq_analyzer(api_key=api_key)
+                        from groq_log_analyzer import groq_analyzer as analyzer
+                    except Exception as e:
+                        return {"error": f"Initialization failed: {e}", "success": False}
+            
+            # Recheck
+            if not analyzer or not hasattr(analyzer, 'client') or analyzer.client is None:
+                return {
+                    "error": "AI analyzer not available. Check GROQ_API_KEY in .env",
+                    "success": False,
+                    "setup_instructions": {
+                         "title": "Setup GROQ_API_KEY",
+                         "steps": ["Add GROQ_API_KEY to .env", "Restart server"]
                     }
-                )
-            else:
-                return JSONResponse(
-                    status_code=200,
-                    content={
-                        "success": False,
-                        "error": f"AI analyzer initialization failed even though API key is configured.\n\nAPI key length: {len(api_key)} characters\n\nPlease check:\n1. Your GROQ_API_KEY is valid and not expired\n2. You have internet connectivity\n3. Restart the monitoring server",
-                        "fault": fault
-                    }
-                )
-        
-        # Use the current analyzer directly (no local shadowing of global)
-        # Get system metrics for better analysis
-        try:
-            metrics = get_system_metrics()
-        except:
-            metrics = None
-        
-        # Analyze fault with AI - run in thread pool with timeout to avoid blocking
+                }
+
+            # 4. Get Metrics (BLOCKS for 1 second!)
+            try:
+                # This calls psutil.cpu_percent(interval=1) which blocks!
+                # Must be run in thread pool
+                metrics = get_system_metrics()
+            except:
+                metrics = None
+                
+            # 5. Run Analysis
+            return analyzer.analyze_cloud_fault(
+                fault,
+                container_logs=None,
+                system_metrics=metrics
+            )
+
+        # Run everything in thread pool with timeout
         try:
             import concurrent.futures
             loop = asyncio.get_event_loop()
             
-            def run_groq_analysis():
-                return current_analyzer.analyze_cloud_fault(
-                    fault,
-                    container_logs=None,
-                    system_metrics=metrics
-                )
-            
+            # Increase timeout to 25s (frontend is 30s)
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 analysis_result = await asyncio.wait_for(
-                    loop.run_in_executor(pool, run_groq_analysis),
-                    timeout=20.0  # 20 second timeout
+                    loop.run_in_executor(pool, perform_full_analysis),
+                    timeout=25.0 
                 )
+                
+            # Handle internal errors returned by the background task
+            if isinstance(analysis_result, dict) and not analysis_result.get("success", True) and "error" in analysis_result:
+                 return JSONResponse(status_code=200, content={**analysis_result, "fault": fault})
+
         except asyncio.TimeoutError:
-            logger.warning("Groq analysis timed out after 20 seconds")
+            logger.warning("Full analysis pipeline timed out after 25 seconds")
             return JSONResponse(
                 status_code=200,
                 content={
                     "success": False,
-                    "error": "AI analysis timed out. The Groq API is taking longer than expected. Please try again.",
+                    "error": "AI analysis timed out. The system is getting metrics or calling Groq API too slowly.",
+                    "fault": fault
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error during async analysis: {e}", exc_info=True)
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": f"AI analysis failed: {str(e)}",
                     "fault": fault
                 }
             )

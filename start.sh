@@ -309,6 +309,31 @@ fi
     log_success "Dependencies installed"
 }
 
+check_critical_dependencies() {
+    log_info "Checking critical dependencies..."
+    
+    local critical_packages=("fastapi" "uvicorn" "websockets" "psutil" "aiohttp")
+    local missing_packages=()
+    
+    for pkg in "${critical_packages[@]}"; do
+        if ! python3 -c "import $pkg" 2>/dev/null; then
+            missing_packages+=($pkg)
+        fi
+    done
+    
+    if [ ${#missing_packages[@]} -gt 0 ]; then
+        log_warning "Missing packages: ${missing_packages[*]}"
+        log_info "Installing missing critical dependencies..."
+        python3 -m pip install ${missing_packages[*]} 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || {
+            log_error "Failed to install critical dependencies"
+            exit 1
+        }
+        log_success "Critical dependencies installed"
+    else
+        log_success "All critical dependencies are available"
+    fi
+}
+
 setup_env_file() {
     if [ ! -f "$ENV_FILE" ] && [ -f "$ENV_TEMPLATE" ]; then
         log_warning ".env file not found, creating from template..."
@@ -731,6 +756,7 @@ main() {
         check_project_structure
         setup_env_file
         setup_venv
+        check_critical_dependencies
         load_resource_profile
         check_ports
         

@@ -384,8 +384,34 @@ def initialize_log_services():
     except Exception as e:
         logger.error(f"Fluent Bit reader not available: {e}", exc_info=True)
 
-# Initialize on startup
-initialize_log_services()
+# Defer initialization to startup event so health endpoint is ready immediately
+_services_initialized = False
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services in background after FastAPI is ready"""
+    global _services_initialized
+    import asyncio
+    # Run in background so health endpoint responds immediately
+    asyncio.create_task(async_initialize_services())
+
+async def async_initialize_services():
+    """Async wrapper for initialization - runs in background"""
+    global _services_initialized
+    import asyncio
+    # Small delay to ensure FastAPI is fully ready
+    await asyncio.sleep(0.5)
+    try:
+        # Run synchronous initialization in thread pool
+        import concurrent.futures
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            await loop.run_in_executor(pool, initialize_log_services)
+        _services_initialized = True
+        logger.info("All services initialized successfully")
+    except Exception as e:
+        logger.error(f"Error during async service initialization: {e}")
+        _services_initialized = False
 
 # Import scaling modules (after logger is initialized)
 try:

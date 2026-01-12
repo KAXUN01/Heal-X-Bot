@@ -11482,14 +11482,7 @@
                         }
                     }, 30000);
 
-                    // Load auto-healing config every 30 seconds (only when tab is active)
-                    setInterval(() => {
-                        const autoHealingTab = document.getElementById('auto-healing');
-                        if (autoHealingTab && autoHealingTab.classList.contains('active') &&
-                            (typeof autoHealingDemoActive === 'undefined' || !autoHealingDemoActive)) {
-                            loadAutoHealingConfig();
-                        }
-                    }, 30000);
+
 
                     // Cloud simulation fault detection (only when tab is active)
                     setInterval(async () => {

@@ -1949,7 +1949,8 @@ manager = ConnectionManager()
 def get_system_metrics() -> Dict[str, Any]:
     """Get current system metrics"""
     try:
-        cpu_percent = psutil.cpu_percent(interval=1)
+        # interval=None is non-blocking (returns usage since last call)
+        cpu_percent = psutil.cpu_percent(interval=None)
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
         net_io = psutil.net_io_counters()

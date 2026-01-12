@@ -407,8 +407,19 @@ async def async_initialize_services():
         loop = asyncio.get_event_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:
             await loop.run_in_executor(pool, initialize_log_services)
+            # Initialize cloud components (FaultDetector, etc.) in background
+            await loop.run_in_executor(pool, initialize_cloud_components)
         _services_initialized = True
         logger.info("All services initialized successfully")
+        
+        # Start scaling monitor in background if available and enabled
+        if SCALING_AVAILABLE and scaling_monitor and scaling_config.get('enabled', True):
+            try:
+                # Run in thread pool to avoid blocking
+                await loop.run_in_executor(pool, scaling_monitor.start_monitoring)
+                logger.info("✅ Scaling monitor started in background")
+            except Exception as e:
+                logger.error(f"Error starting scaling monitor: {e}")
     except Exception as e:
         logger.error(f"Error during async service initialization: {e}")
         _services_initialized = False
@@ -580,9 +591,13 @@ if SCALING_AVAILABLE:
         )
         
         # Start monitoring if enabled
+        # Start monitoring if enabled - MOVED TO STARTUP EVENT
         if scaling_config.get('enabled', True):
-            scaling_monitor.start_monitoring()
-            logger.info("✅ Scaling monitor started")
+            # Check if it was already started to avoid duplicates
+            if not scaling_monitor.monitoring_active:
+                logger.info("Scaling monitor configured (will start in background)")
+            else:
+                logger.info("Scaling monitor already active")
         else:
             logger.info("⚠️  Scaling monitor disabled in config")
             

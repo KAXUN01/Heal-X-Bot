@@ -1636,16 +1636,26 @@ async def analyze_fault(fault_index: int):
         service = fault.get('service', 'unknown')
         message = fault.get('message', fault.get('description', 'No details available'))
         
-        # Try to use root_cause_analyzer if available
-        if root_cause_analyzer:
+        # Try to use root_cause_analyzer if available and services are initialized
+        if root_cause_analyzer and _services_initialized:
             try:
-                analysis = await root_cause_analyzer.analyze_fault(fault)
-                if analysis:
-                    return {
-                        "success": True,
-                        "analysis": analysis,
-                        "confidence": analysis.get('confidence', 0.75)
-                    }
+                import concurrent.futures
+                loop = asyncio.get_event_loop()
+                # Run synchronous analysis in thread pool with 10s timeout
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    try:
+                        analysis = await asyncio.wait_for(
+                            loop.run_in_executor(pool, lambda: root_cause_analyzer.analyze_fault(fault)),
+                            timeout=10.0
+                        )
+                        if analysis:
+                            return {
+                                "success": True,
+                                "analysis": analysis,
+                                "confidence": analysis.get('confidence', 0.75)
+                            }
+                    except asyncio.TimeoutError:
+                        logger.warning("Root cause analyzer timed out after 10 seconds")
             except Exception as e:
                 logger.debug(f"Root cause analyzer failed: {e}")
         
@@ -7693,18 +7703,9 @@ def initialize_cloud_components():
         logger.error(f"Error initializing cloud components: {e}", exc_info=True)
 
 # ============================================================================
-# FastAPI Startup Event - Initialize All Monitors
+# Cloud components are initialized in the startup event handler at line 3990
+# which runs initialize_cloud_components() in background (non-blocking).
 # ============================================================================
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize all monitoring components when the API server starts"""
-    logger.info("🚀 Starting Heal-X-Bot Dashboard API...")
-    
-    # Initialize cloud monitoring components
-    initialize_cloud_components()
-    
-    logger.info("✅ All monitoring systems initialized and ready")
 
 # WebSocket connection manager
 class ConnectionManager:

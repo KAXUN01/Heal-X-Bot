@@ -32,11 +32,10 @@ class GeminiLogAnalyzer:
                 # Try fastest models first: gemini-2.5-flash-lite-preview-09-2025 is the user's preferred model
                 # Fallback to other fast models if needed
                 model_priority = [
-                    "gemini-2.5-flash-lite-preview-09-2025",  # User's preferred model
-                    "gemini-2.5-flash",      # Latest and most capable model
-                    "gemini-1.5-flash",      # Reliable fallback
+                    "gemini-1.5-pro",        # Best for reasoning and detailed analysis
+                    "gemini-1.5-flash",      # Good balance of speed and capability
                     "gemini-2.0-flash-exp",  # Experimental fast model
-                    "gemini-2.0-flash-lite"  # Fallback
+                    "gemini-2.5-flash-lite-preview-09-2025" # Fallback
                 ]
                 
                 model_initialized = False

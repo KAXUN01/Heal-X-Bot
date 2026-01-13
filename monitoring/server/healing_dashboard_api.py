@@ -7857,6 +7857,32 @@ async def get_detected_faults(limit: int = 50):
             content={"success": False, "error": str(e), "faults": [], "statistics": {}}
         )
 
+@app.delete("/api/cloud/faults")
+async def clear_detected_faults():
+    """Clear all detected faults"""
+    try:
+        if not fault_detector:
+            return JSONResponse(
+                status_code=503,
+                content={"success": False, "error": "Fault detector not initialized"}
+            )
+        
+        # Clear the detected faults list
+        fault_detector.detected_faults = []
+        logger.info("All detected faults cleared")
+        
+        return {
+            "success": True,
+            "message": "All faults cleared",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error clearing faults: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
 @app.get("/api/cloud/resources")
 async def get_resource_metrics():
     """Get current resource metrics"""
@@ -8065,7 +8091,7 @@ async def get_gemini_status():
 
 @app.post("/api/cloud/faults/{fault_id}/analyze")
 async def analyze_fault_with_ai(fault_id: int):
-    """Analyze a fault using AI to get healing instructions"""
+    """Analyze a fault using Groq AI to get healing instructions"""
     try:
         # Check if fault_detector is initialized
         if fault_detector is None:
@@ -8091,233 +8117,166 @@ async def analyze_fault_with_ai(fault_id: int):
                 content={"success": False, "error": f"Fault not found (requested: {fault_id}, available: {len(faults) if faults else 0})"}
             )
         
-        if not faults or fault_id >= len(faults):
-            return JSONResponse(
-                status_code=404,
-                content={"success": False, "error": f"Fault not found (requested: {fault_id}, available: {len(faults) if faults else 0})"}
-            )
-        
         fault = faults[fault_id]
         
-        # Define the heavy lifting function to run in a thread
-        def perform_full_analysis():
-            # 1. Load env (blocking I/O)
-            load_dotenv(dotenv_path=str(env_path_abs), override=True)
-            
-            # 2. Get API Key
-            api_key = os.getenv('GROQ_API_KEY')
-            
-            # 3. Initialize/Get Analyzer (may involve blocking checks)
-            from groq_log_analyzer import groq_analyzer as analyzer
-            
-            if not analyzer or not hasattr(analyzer, 'client') or analyzer.client is None:
-                if api_key and api_key != "your_groq_api_key_here" and len(api_key) >= 20:
-                    try:
-                        initialize_groq_analyzer(api_key=api_key)
-                        from groq_log_analyzer import groq_analyzer as analyzer
-                    except Exception as e:
-                        return {"error": f"Initialization failed: {e}", "success": False}
-            
-            # Recheck
-            if not analyzer or not hasattr(analyzer, 'client') or analyzer.client is None:
-                return {
-                    "error": "AI analyzer not available. Check GROQ_API_KEY in .env",
+        # Get Groq API key
+        load_dotenv(dotenv_path=str(env_path_abs), override=True)
+        api_key = os.getenv('GROQ_API_KEY')
+        
+        if not api_key or api_key == "your_groq_api_key_here" or len(api_key) < 20:
+            return JSONResponse(
+                status_code=200,
+                content={
                     "success": False,
+                    "error": "AI analyzer not available. Check GROQ_API_KEY in .env",
+                    "fault": fault,
                     "setup_instructions": {
-                         "title": "Setup GROQ_API_KEY",
-                         "steps": ["Add GROQ_API_KEY to .env", "Restart server"]
+                        "title": "Setup GROQ_API_KEY",
+                        "steps": ["Get API key from console.groq.com", "Add GROQ_API_KEY=your_key to .env", "Restart server"]
                     }
                 }
-
-            # 4. Get Metrics (BLOCKS for 1 second!)
-            try:
-                # This calls psutil.cpu_percent(interval=1) which blocks!
-                # Must be run in thread pool
-                metrics = get_system_metrics()
-            except:
-                metrics = None
-                
-            # 5. Run Analysis
-            return analyzer.analyze_cloud_fault(
-                fault,
-                container_logs=None,
-                system_metrics=metrics
             )
-
-        # Run everything in thread pool with timeout
+        
+        # Direct Groq API call
         try:
-            import concurrent.futures
-            loop = asyncio.get_event_loop()
+            from groq import Groq
+            client = Groq(api_key=api_key)
             
-            # Increase timeout to 25s (frontend is 30s)
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                analysis_result = await asyncio.wait_for(
-                    loop.run_in_executor(pool, perform_full_analysis),
-                    timeout=25.0 
-                )
-                
-            # Handle internal errors returned by the background task
-            if isinstance(analysis_result, dict) and not analysis_result.get("success", True) and "error" in analysis_result:
-                 return JSONResponse(status_code=200, content={**analysis_result, "fault": fault})
+            fault_type = fault.get('type', 'unknown')
+            service = fault.get('service', fault.get('resource', 'unknown'))
+            reason = fault.get('reason', '')
+            severity = fault.get('severity', 'medium')
+            
+            prompt = f"""You are a Linux system administrator. Analyze this fault and provide SPECIFIC executable commands to fix it.
 
-        except asyncio.TimeoutError:
-            logger.warning("Full analysis pipeline timed out after 25 seconds")
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "error": "AI analysis timed out. The system is getting metrics or calling Groq API too slowly.",
-                    "fault": fault
-                }
-            )
-        except Exception as e:
-            logger.error(f"Error during async analysis: {e}", exc_info=True)
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "error": f"AI analysis failed: {str(e)}",
-                    "fault": fault
-                }
-            )
-        except Exception as e:
-            logger.error(f"Error during Groq analysis: {e}", exc_info=True)
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "error": f"AI analysis failed: {str(e)}",
-                    "fault": fault
-                }
-            )
-        
-        # Validate analysis_result is a dict (handle cases where it might be None or wrong type)
-        if not isinstance(analysis_result, dict):
-            logger.error(f"analyze_cloud_fault returned non-dict: {type(analysis_result)}, value: {analysis_result}")
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "error": f"AI analysis returned invalid result type: {type(analysis_result).__name__}",
-                    "fault": fault
-                }
-            )
-        
-        if analysis_result.get("status") != "success":
-            return JSONResponse(
-                status_code=200,
-                content={
-                    "success": False,
-                    "error": analysis_result.get("message", "AI analysis failed"),
-                    "fault": fault
-                }
-            )
-        
-        # Determine if auto-healing is possible
-        analysis = analysis_result.get("analysis", {})
-        # Validate analysis is a dict (handle cases where it might be a float or other type)
-        if not isinstance(analysis, dict):
-            logger.error(f"analysis_result['analysis'] is not a dict: {type(analysis)}, value: {analysis}")
-            # If analysis is a float (confidence value), treat it as missing analysis
-            analysis = {}
-        
-        solution = analysis.get("solution", "")
-        confidence = analysis.get("confidence", 0)
-        # Ensure confidence is a number, not a dict
-        if not isinstance(confidence, (int, float)):
-            logger.warning(f"confidence is not a number: {type(confidence)}, value: {confidence}")
-            confidence = 0
-        
-        # Check if solution contains executable commands that can be auto-healed
-        auto_healable = False
-        healing_steps = []
-        
-        if solution and confidence >= 50:  # Minimum confidence threshold
-            # Check for common auto-healable actions
-            solution_lower = solution.lower()
-            auto_healable_keywords = [
-                "restart", "restart service", "systemctl restart", "service restart",
-                "clear cache", "free disk", "clean", "kill process", "kill -9",
-                "reload", "reload config", "systemctl reload", "systemctl start",
-                "systemctl stop", "systemctl enable", "systemctl disable"
+FAULT DETAILS:
+- Type: {fault_type}
+- Service/Resource: {service}
+- Severity: {severity}
+- Reason: {reason}
+
+Respond in this EXACT format:
+
+🔍 ROOT CAUSE: [1 sentence about why this specific issue occurred]
+
+💡 FIX COMMANDS:
+```bash
+# Commands specific to {fault_type} on {service}
+[command 1]
+[command 2]
+[command 3 if needed]
+```
+
+🛡️ PREVENTION: [1 sentence prevention tip]
+
+CRITICAL RULES:
+1. Commands MUST be relevant to the SPECIFIC fault type "{fault_type}" and service "{service}"
+2. Use the actual service name "{service}" in your commands, NOT generic placeholders
+3. Do NOT give docker commands for systemd services or vice versa
+
+FAULT-SPECIFIC COMMAND EXAMPLES:
+- For disk_pressure/disk_full on DISK: use df -h, du -sh /*, sudo find / -size +100M, sudo apt-get clean, sudo journalctl --vacuum-size=100M
+- For service_failed on a service: use sudo systemctl status {service}, sudo journalctl -u {service} -n 50, sudo systemctl restart {service}
+- For cpu_exhaustion: use top -bn1, ps aux --sort=-%cpu | head, sudo systemctl restart [high-cpu-service]
+- For memory_exhaustion: use free -h, ps aux --sort=-%mem | head, sudo sync && echo 3 > /proc/sys/vm/drop_caches
+- For network_issue: use ping -c 4 8.8.8.8, sudo systemctl restart NetworkManager, ip addr show
+- For docker container issues: use docker ps -a, docker logs {service}, docker restart {service}
+
+Generate 3-6 commands that directly address {fault_type} on {service}."""
+
+            # Try multiple models in case of rate limits
+            models_to_try = [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-8b-instant",
+                "gemma2-9b-it",
+                "mixtral-8x7b-32768"
             ]
             
-            if any(keyword in solution_lower for keyword in auto_healable_keywords):
-                auto_healable = True
-                # Extract healing steps from solution - handle various formats
-                lines = solution.split('\n')
-                current_step = ""
-                
-                for line in lines:
-                    line = line.strip()
-                    if not line:
-                        if current_step:
-                            healing_steps.append(current_step)
-                            current_step = ""
+            ai_response = None
+            last_error = None
+            
+            for model in models_to_try:
+                try:
+                    response = client.chat.completions.create(
+                        model=model,
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.3,
+                        max_tokens=300,
+                        timeout=30.0
+                    )
+                    ai_response = response.choices[0].message.content
+                    logger.info(f"AI analysis successful with model: {model}")
+                    break
+                except Exception as model_error:
+                    last_error = model_error
+                    error_str = str(model_error)
+                    if "rate_limit" in error_str.lower() or "429" in error_str:
+                        logger.warning(f"Rate limit hit for {model}, trying next model...")
                         continue
-                    
-                    # Check for step indicators
-                    is_step = False
-                    step_text = line
-                    
-                    # Remove common step prefixes
-                    if line.startswith('-') or line.startswith('*') or line.startswith('•'):
-                        step_text = line[1:].strip()
-                        is_step = True
-                    elif line.startswith('1.') or line.startswith('2.') or line.startswith('3.') or \
-                         line.startswith('4.') or line.startswith('5.') or line.startswith('6.') or \
-                         line.startswith('7.') or line.startswith('8.') or line.startswith('9.'):
-                        step_text = line.split('.', 1)[1].strip() if '.' in line else line
-                        is_step = True
-                    elif line[0].isdigit() and len(line) > 1 and line[1] in ['.', ')', '-']:
-                        step_text = line.split(line[1], 1)[1].strip() if len(line) > 2 else line[2:].strip()
-                        is_step = True
-                    elif any(keyword in line.lower() for keyword in auto_healable_keywords):
-                        is_step = True
-                    
-                    if is_step and step_text:
-                        # Clean up the step text
-                        step_text = step_text.strip()
-                        if step_text and step_text not in healing_steps:
-                            healing_steps.append(step_text)
-                
-                # If no structured steps found, try to extract from full solution
-                if not healing_steps and solution:
-                    # Look for command patterns
-                    import re
-                    commands = re.findall(r'(?:sudo\s+)?(?:systemctl|service|kill|restart|clear|clean|reload)\s+[^\n]+', solution, re.IGNORECASE)
-                    if commands:
-                        healing_steps = [cmd.strip() for cmd in commands[:10]]  # Limit to 10 steps
-                    elif len(solution) < 500:  # If solution is short, use it as a single step
-                        healing_steps = [solution]
-        
-        result = {
-            "success": True,
-            "fault": fault,
-            "analysis": {
-                "root_cause": analysis.get("root_cause", ""),
-                "why": analysis.get("why", ""),
-                "solution": solution,
-                "prevention": analysis.get("prevention", ""),
-                "confidence": confidence,
-                "full_analysis": analysis.get("full_analysis", "")
-            },
-            "auto_healable": auto_healable,
-            "healing_steps": healing_steps if auto_healable else [],
-            "manual_instructions": solution if not auto_healable else "",
-            "timestamp": datetime.now().isoformat()
-        }
-        
-        return JSONResponse(
-            status_code=200,
-            content=result
-        )
-        
+                    else:
+                        # Non-rate-limit error, don't try other models
+                        raise model_error
+            
+            if ai_response is None:
+                raise last_error or Exception("All models failed")
+            
+            # Parse response
+            root_cause = ""
+            solution = ""
+            prevention = ""
+            commands = []
+            
+            # Extract commands from code blocks
+            import re
+            code_block_match = re.search(r'```(?:bash|sh)?\n(.*?)```', ai_response, re.DOTALL)
+            if code_block_match:
+                commands_text = code_block_match.group(1).strip()
+                commands = [cmd.strip() for cmd in commands_text.split('\n') if cmd.strip() and not cmd.strip().startswith('#')]
+            
+            lines = ai_response.split('\n')
+            for line in lines:
+                if '🔍 ROOT CAUSE:' in line or 'ROOT CAUSE:' in line:
+                    root_cause = line.split(':', 1)[1].strip() if ':' in line else line
+                elif '🛡️ PREVENTION:' in line or 'PREVENTION:' in line:
+                    prevention = line.split(':', 1)[1].strip() if ':' in line else line
+            
+            # Use commands as the solution if available
+            solution = '\n'.join(commands) if commands else ""
+            
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": True,
+                    "fault": fault,
+                    "analysis": {
+                        "root_cause": root_cause or ai_response,
+                        "solution": solution,
+                        "prevention": prevention,
+                        "commands": commands  # New field with executable commands
+                    },
+                    "healing_steps": commands if commands else [],
+                    "healing_commands": commands,  # Explicit commands list
+                    "auto_healable": fault_type in ('service_crash', 'service_failed', 'disk_full', 'memory_exhaustion'),
+                    "raw_response": ai_response
+                }
+            )
+            
+        except Exception as e:
+            logger.error(f"Groq API error: {e}", exc_info=True)
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "success": False,
+                    "error": f"Groq API error: {str(e)}",
+                    "fault": fault
+                }
+            )
+    
     except Exception as e:
-        logger.error(f"Error analyzing fault with AI: {e}", exc_info=True)
+        logger.error(f"Error analyzing fault: {e}", exc_info=True)
         return JSONResponse(
             status_code=500,
-            content={"success": False, "error": f"Internal server error: {str(e)}"}
+            content={"success": False, "error": str(e)}
         )
 
 @app.post("/api/cloud/faults/{fault_id}/analyze-and-heal")

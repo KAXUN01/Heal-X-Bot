@@ -79,6 +79,7 @@ class AutoHealer:
         # Map action types to handlers
         self.action_handlers = {
             'restart_service': self.system_actions.restart_service,
+            'start_failed_service': self.system_actions.start_failed_service,
             'fix_permissions': self.system_actions.fix_permissions,
             'clear_cache': self.system_actions.clear_cache,
             'rotate_logs': self.system_actions.rotate_logs,
@@ -492,14 +493,36 @@ class AutoHealer:
             logger.info(f"📋 STEP 2: DETERMINING HEALING ACTION")
             healing_action = None
             
-            if fault_type == 'service_crash':
-                # Try to restart the container
-                container_name = service if service.startswith('cloud-sim-') else f'cloud-sim-{service}'
-                healing_action = {
-                    'type': 'restart_container',
-                    'container': container_name,
-                    'description': f'Restart crashed container {container_name}'
-                }
+            if fault_type in ('service_crash', 'service_failed'):
+                # Check if this is a systemd service (not a Docker container)
+                # Systemd service names typically don't start with 'cloud-sim-' and may end with '.service'
+                is_systemd_service = (
+                    not service.startswith('cloud-sim-') and
+                    (service.endswith('.service') or 
+                     service in ['apport-autoreport', 'cron', 'ssh', 'nginx', 'apache2', 
+                                'docker', 'postgresql', 'mysql', 'redis', 'fail2ban', 'rsyslog'] or
+                     '-' not in service or  # Simple service names are often systemd
+                     'systemd' in service.lower())
+                )
+                
+                if is_systemd_service:
+                    # Use systemd restart action
+                    service_name = service.replace('.service', '')
+                    healing_action = {
+                        'type': 'start_failed_service',
+                        'service': service_name,
+                        'description': f'Restart failed systemd service {service_name}'
+                    }
+                    logger.info(f"   Detected systemd service: {service_name}")
+                else:
+                    # It's a Docker container
+                    container_name = service if service.startswith('cloud-sim-') else f'cloud-sim-{service}'
+                    healing_action = {
+                        'type': 'restart_container',
+                        'container': container_name,
+                        'description': f'Restart crashed container {container_name}'
+                    }
+                    logger.info(f"   Detected Docker container: {container_name}")
             elif fault_type == 'cpu_exhaustion':
                 healing_action = {
                     'type': 'cleanup_resources',
@@ -571,7 +594,10 @@ class AutoHealer:
                         
                         
                         # Generate manual instructions
-                        from ..core.config import get_config
+                        try:
+                            from ..core.config import get_config
+                        except ImportError:
+                            from core.config import get_config
                         config = get_config()
                         healing_result['manual_instructions'] = generate_manual_instructions(
                             fault, analysis, config.project_root
@@ -585,7 +611,10 @@ class AutoHealer:
                     healing_result['error_message'] = action_result.error or 'Healing action failed'
                     
                     # Generate manual instructions
-                    from ..core.config import get_config
+                    try:
+                        from ..core.config import get_config
+                    except ImportError:
+                        from core.config import get_config
                     config = get_config()
                     healing_result['manual_instructions'] = generate_manual_instructions(
                         fault, analysis, config.project_root
@@ -597,7 +626,10 @@ class AutoHealer:
             else:
                 # Auto-execute disabled or no action determined
                 healing_result['status'] = 'pending_approval' if not self.auto_execute else 'no_action'
-                from ..core.config import get_config
+                try:
+                    from ..core.config import get_config
+                except ImportError:
+                    from core.config import get_config
                 config = get_config()
                 healing_result['manual_instructions'] = generate_manual_instructions(
                     fault, analysis, config.project_root
@@ -607,7 +639,10 @@ class AutoHealer:
             logger.error(f"Error during cloud fault healing: {e}")
             healing_result['error_message'] = str(e)
             healing_result['status'] = 'exception'
-            from ..core.config import get_config
+            try:
+                from ..core.config import get_config
+            except ImportError:
+                from core.config import get_config
             config = get_config()
             healing_result['manual_instructions'] = generate_manual_instructions(fault, None, config.project_root)
         

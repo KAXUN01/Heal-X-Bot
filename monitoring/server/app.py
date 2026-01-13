@@ -969,8 +969,22 @@ def initialize_services():
         ai_analyzer = None
         ai_analyzer_type = None
         
-        # Try Gemini first (user preference)
-        if gemini_key:
+        # Try Groq first (User requested priority)
+        if groq_key:
+            try:
+                groq_log_analyzer_service = initialize_groq_analyzer(api_key=groq_key)
+                ai_analyzer = groq_log_analyzer_service
+                if ai_analyzer and ai_analyzer.client:
+                    ai_analyzer_type = 'groq'
+                    print(f"✅ Groq AI analyzer initialized (model: {ai_analyzer.model_name})")
+                else:
+                    ai_analyzer = None
+            except Exception as e:
+                print(f"⚠️  Failed to initialize Groq analyzer: {e}")
+                ai_analyzer = None
+
+        # Fallback to Gemini if Groq not available
+        if not ai_analyzer and gemini_key:
             try:
                 from gemini_log_analyzer import GeminiLogAnalyzer
                 ai_analyzer = GeminiLogAnalyzer(api_key=gemini_key)
@@ -981,20 +995,6 @@ def initialize_services():
                     ai_analyzer = None
             except Exception as e:
                 print(f"⚠️  Failed to initialize Gemini analyzer: {e}")
-                ai_analyzer = None
-        
-        # Fallback to Groq if Gemini not available
-        if not ai_analyzer and groq_key:
-            try:
-                groq_log_analyzer_service = initialize_groq_analyzer(api_key=groq_key)
-                ai_analyzer = groq_log_analyzer_service
-                if ai_analyzer and ai_analyzer.client:
-                    ai_analyzer_type = 'groq'
-                    print("✅ Groq AI analyzer initialized (fallback from Gemini)")
-                else:
-                    ai_analyzer = None
-            except Exception as e:
-                print(f"⚠️  Failed to initialize Groq analyzer: {e}")
                 ai_analyzer = None
         
         # Set groq_analyzer alias for backward compatibility

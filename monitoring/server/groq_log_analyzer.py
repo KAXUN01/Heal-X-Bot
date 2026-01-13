@@ -30,9 +30,9 @@ class GroqLogAnalyzer:
             try:
                 # Initialize Groq client
                 self.client = Groq(api_key=self.api_key)
-                # Use llama-3.1-8b-instant model (fast for real-time analysis)
-                # Fallback models: mixtral-8x7b-32768, llama-3.3-70b-versatile (slower but more accurate)
-                self.model_name = "llama-3.1-8b-instant"
+                # Use llama-3.3-70b-versatile model (better reasoning capabilities)
+                # Fallback models: llama-3.1-8b-instant (faster)
+                self.model_name = "llama-3.3-70b-versatile"
                 logger.info(f"Groq client initialized successfully with {self.model_name}")
                     
             except Exception as e:
@@ -238,7 +238,7 @@ class GroqLogAnalyzer:
                     'timestamp': datetime.now().isoformat(),
                     'analysis': {
                         'root_cause': self._extract_root_cause(response['text']),
-                        'why': self._extract_why_section(response['text']),
+                        # 'why' field removed to prevent duplication in UI
                         'solution': self._extract_solution(response['text']),
                         'prevention': self._extract_prevention(response['text']),
                         'confidence': self._estimate_confidence(response['text']),
@@ -289,19 +289,19 @@ CONTAINER LOGS:
 {logs_summary}
 
 Analyze this service crash and provide:
-
+ 
 🔍 ROOT CAUSE:
-[Identify the most likely cause of the crash - OOM kill, application error, resource exhaustion, etc.]
-
+[Identify the most likely cause - OOM kill, application error, etc.]
+ 
 💡 IMMEDIATE FIX:
-[2-3 concrete steps to recover the service]
-
+[1-2 concrete steps to recover]
+ 
 🛡️ PREVENTION:
-[How to prevent this from happening again]
-
+[1 sentence on how to prevent this]
+ 
 CONFIDENCE: [Rate your confidence 0-100%]
-
-Be specific and actionable. Focus on Docker container recovery.
+ 
+Keep it EXTREMELY concise (max 2 sentences per section).
 """
     
     def _create_resource_exhaustion_prompt(self, fault: Dict[str, Any],
@@ -334,19 +334,19 @@ SYSTEM METRICS:
 {metrics_summary}
 
 Analyze this resource exhaustion and provide:
-
+ 
 🔍 ROOT CAUSE:
-[Why is this resource exhausted? Identify the cause - memory leak, too many processes, disk full, etc.]
-
+[Identify the cause - memory leak, etc.]
+ 
 💡 IMMEDIATE FIX:
-[2-3 concrete steps to free up resources immediately]
-
+[1-2 concrete steps to free up resources]
+ 
 🛡️ PREVENTION:
-[How to prevent resource exhaustion in the future]
-
+[1 sentence on prevention]
+ 
 CONFIDENCE: [Rate your confidence 0-100%]
-
-Be specific and actionable. Focus on immediate recovery.
+ 
+Keep it EXTREMELY concise (max 2 sentences per section).
 """
     
     def _create_network_issue_prompt(self, fault: Dict[str, Any],
@@ -364,19 +364,19 @@ NETWORK FAULT:
 - Issue: Service not reachable
 
 Analyze this network connectivity issue and provide:
-
+ 
 🔍 ROOT CAUSE:
-[Why is the service not reachable? Container down, firewall blocking, port conflict, etc.]
-
+[Why is the service not reachable?]
+ 
 💡 IMMEDIATE FIX:
-[2-3 concrete steps to restore connectivity]
-
+[1-2 concrete steps to restore connectivity]
+ 
 🛡️ PREVENTION:
-[How to prevent network issues in the future]
-
+[1 sentence on prevention]
+ 
 CONFIDENCE: [Rate your confidence 0-100%]
-
-Be specific and actionable. Focus on Docker networking.
+ 
+Keep it EXTREMELY concise (max 2 sentences per section).
 """
     
     def _create_generic_fault_prompt(self, fault: Dict[str, Any]) -> str:
@@ -388,17 +388,19 @@ FAULT DETAILS:
 {json.dumps(fault, indent=2)}
 
 Analyze this fault and provide:
-
+ 
 🔍 ROOT CAUSE:
 [Identify the root cause]
-
+ 
 💡 IMMEDIATE FIX:
-[2-3 concrete steps to resolve]
-
+[1-2 concrete steps to resolve]
+ 
 🛡️ PREVENTION:
-[How to prevent this in the future]
-
+[1 sentence on prevention]
+ 
 CONFIDENCE: [Rate your confidence 0-100%]
+
+Keep it EXTREMELY concise (max 2 sentences per section).
 """
     
     def _estimate_confidence(self, analysis_text: str) -> float:
@@ -686,30 +688,43 @@ Log #{i}:
     
     def _extract_why_section(self, text: str) -> str:
         """Extract WHAT HAPPENED section from analysis"""
-        return self._extract_section(text, "WHAT HAPPENED", "QUICK FIX")
+        # Map root cause to "why" for compatibility
+        return self._extract_root_cause(text)
     
     def _extract_how_section(self, text: str) -> str:
         """Extract HOW section from analysis (legacy support)"""
-        return self._extract_section(text, "WHAT HAPPENED", "QUICK FIX")
+        return self._extract_section(text, "💡 IMMEDIATE FIX", "IMMEDIATE FIX")
     
     def _extract_root_cause(self, text: str) -> str:
         """Extract root cause from analysis"""
-        return self._extract_section(text, "WHAT HAPPENED", "QUICK FIX")
+        # Try different variations of the header
+        for header in ["🔍 ROOT CAUSE", "ROOT CAUSE", "WHAT HAPPENED", "🔍 WHAT HAPPENED"]:
+            content = self._extract_section(text, header, "IMMEDIATE FIX")
+            if content and content != "Not found in analysis":
+                return content
+        return "Not found in analysis"
     
     def _extract_solution(self, text: str) -> str:
         """Extract solution from analysis"""
-        return self._extract_section(text, "QUICK FIX", "PREVENTION")
+        for header in ["💡 IMMEDIATE FIX", "IMMEDIATE FIX", "QUICK FIX", "💡 QUICK FIX"]:
+            content = self._extract_section(text, header, "PREVENTION")
+            if content and content != "Not found in analysis":
+                return content
+        return "Not found in analysis"
     
     def _extract_prevention(self, text: str) -> str:
         """Extract prevention measures from analysis"""
         # Get everything after PREVENTION marker
-        prevention = self._extract_section(text, "PREVENTION", "END_OF_ANALYSIS")
-        if not prevention:
-            # Try alternate extraction - get last section
-            parts = text.split("🛡️")
-            if len(parts) > 1:
-                prevention = parts[-1].strip()
-        return prevention
+        for header in ["🛡️ PREVENTION", "PREVENTION"]:
+            content = self._extract_section(text, header, "CONFIDENCE")
+            if content and content != "Not found in analysis":
+                return content
+        
+        # Try alternate extraction - get last section
+        parts = text.split("🛡️")
+        if len(parts) > 1:
+            return parts[-1].split("CONFIDENCE")[0].strip()
+        return "Not found in analysis"
     
     def _extract_common_issues(self, text: str) -> str:
         """Extract common issues from pattern analysis"""

@@ -7679,6 +7679,7 @@
                 }
 
                 function updateLogStats() {
+                    // Update stats from local array (for quick visual feedback)
                     const total = allSystemLogs.length;
                     const services = new Set(allSystemLogs.map(log => log.service)).size;
                     const errors = allSystemLogs.filter(log => {
@@ -7694,6 +7695,9 @@
                     document.getElementById('totalServicesCount').textContent = services.toLocaleString();
                     document.getElementById('errorLogsCount').textContent = errors.toLocaleString();
                     document.getElementById('warningLogsCount').textContent = warnings.toLocaleString();
+
+                    // Also fetch real total from API for more accurate stats
+                    fetchRealLogStats();
                 }
 
                 function updateFilteredLogStats() {
@@ -7710,19 +7714,70 @@
                     document.getElementById('warningLogsCount').textContent = warnings.toLocaleString();
                 }
 
-                async function updateSystemLogStats() {
+                async function fetchRealLogStats() {
                     try {
-                        const response = await fetch('/api/system-logs/statistics');
+                        // Fetch from centralized logger statistics API
+                        const response = await fetch('/api/central-logs/statistics');
                         const data = await response.json();
 
-                        if (data.status === 'success') {
-                            // Stats loaded successfully
-                            console.log('System log statistics loaded:', data.statistics);
+                        if (data.status === 'success' && data.statistics) {
+                            const stats = data.statistics;
+
+                            // Update total logs with real count
+                            const totalLogs = stats.total_logs_collected || 0;
+                            const totalServices = stats.total_services || Object.keys(stats.logs_by_service || {}).length || 0;
+
+                            document.getElementById('totalLogsCount').textContent = totalLogs.toLocaleString();
+                            document.getElementById('totalServicesCount').textContent = totalServices.toLocaleString();
+
+                            console.log('Real log statistics:', {
+                                total: totalLogs,
+                                services: totalServices,
+                                lastCollection: stats.last_collection_time
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error fetching real log stats:', error);
+                    }
+                }
+
+                async function updateSystemLogStats() {
+                    try {
+                        const response = await fetch('/api/central-logs/statistics');
+                        const data = await response.json();
+
+                        if (data.status === 'success' && data.statistics) {
+                            const stats = data.statistics;
+
+                            // Update all stats cards with real data
+                            const totalLogs = stats.total_logs_collected || 0;
+                            const totalServices = stats.total_services || Object.keys(stats.logs_by_service || {}).length || 0;
+
+                            document.getElementById('totalLogsCount').textContent = totalLogs.toLocaleString();
+                            document.getElementById('totalServicesCount').textContent = totalServices.toLocaleString();
+
+                            // Also update errors/warnings from loaded logs
+                            const errors = allSystemLogs.filter(log => {
+                                const level = (log.level || 'INFO').toUpperCase();
+                                return level === 'ERROR' || level === 'ERR' || level === 'CRITICAL' || level === 'CRIT';
+                            }).length;
+                            const warnings = allSystemLogs.filter(log => {
+                                const level = (log.level || 'INFO').toUpperCase();
+                                return level === 'WARNING' || level === 'WARN';
+                            }).length;
+
+                            document.getElementById('errorLogsCount').textContent = errors.toLocaleString();
+                            document.getElementById('warningLogsCount').textContent = warnings.toLocaleString();
+
+                            console.log('System log statistics updated:', stats);
                         }
                     } catch (error) {
                         console.error('Error loading system log stats:', error);
                     }
                 }
+
+                // Auto-refresh stats every 10 seconds
+                setInterval(updateSystemLogStats, 10000);
 
                 /**
                  * Sanitize log entry to protect user privacy before sending to LLM

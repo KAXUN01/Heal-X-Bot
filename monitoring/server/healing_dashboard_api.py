@@ -1455,40 +1455,73 @@ async def get_cloud_healing_history(limit: int = 50):
 
 @app.get("/api/auto-healer/status")
 async def get_auto_healer_status():
-    """Get auto-healer status and configuration"""
+    """Get auto-healer status, configuration, history and statistics"""
     try:
         if auto_healer:
-            # Get actual configuration from auto_healer if it has these attributes
             auto_healer_config = {
                 "enabled": getattr(auto_healer, 'enabled', True),
                 "auto_execute": getattr(auto_healer, 'auto_execute', False),
                 "monitoring_interval": getattr(auto_healer, 'monitoring_interval', 60),
                 "max_attempts": getattr(auto_healer, 'max_attempts', 3)
             }
+            
+            # Get healing history
+            history = []
+            if hasattr(auto_healer, 'get_healing_history'):
+                try:
+                    history = auto_healer.get_healing_history(limit=50)
+                except Exception as e:
+                    logger.warning(f"Failed to get healing history: {e}")
+            
+            # Calculate statistics
+            total_healed = len([h for h in history if h.get('status') == 'healed'])
+            total_failed = len([h for h in history if h.get('status') == 'failed'])
+            total_pending = len([h for h in history if h.get('status') == 'in_progress'])
+            
+            statistics = {
+                "total_healed": total_healed,
+                "total_failed": total_failed,
+                "total_pending": total_pending,
+                "total_actions": len(history),
+                "success_rate": round((total_healed / max(len(history), 1)) * 100, 1)
+            }
         else:
-            # Default configuration when auto_healer is not initialized
             auto_healer_config = {
                 "enabled": True,
                 "auto_execute": False,
                 "monitoring_interval": 60,
                 "max_attempts": 3
             }
+            history = []
+            statistics = {
+                "total_healed": 0,
+                "total_failed": 0,
+                "total_pending": 0,
+                "total_actions": 0,
+                "success_rate": 0
+            }
         
         return {
             "status": "success",
-            "auto_healer": auto_healer_config
+            "success": True,
+            "auto_healer": auto_healer_config,
+            "history": history,
+            "statistics": statistics
         }
     except Exception as e:
         logger.error(f"Error getting auto-healer status: {e}", exc_info=True)
         return {
             "status": "error",
+            "success": False,
             "error": str(e),
             "auto_healer": {
                 "enabled": True,
                 "auto_execute": False,
                 "monitoring_interval": 60,
                 "max_attempts": 3
-            }
+            },
+            "history": [],
+            "statistics": {}
         }
 
 @app.get("/api/services")
@@ -7968,27 +8001,54 @@ async def get_healing_history(limit: int = 50):
 
 @app.get("/api/auto-healer/status")
 async def get_auto_healer_status():
-    """Get auto-healer status and configuration"""
+    """Get auto-healer status, configuration, history and statistics"""
     try:
         if not auto_healer:
             return JSONResponse(
                 status_code=503,
                 content={
                     "status": "error",
+                    "success": False,
                     "message": "Auto-healer not initialized",
-                    "auto_healer": None
+                    "auto_healer": None,
+                    "history": [],
+                    "statistics": {}
                 }
             )
         
+        # Get healing history
+        history = []
+        if hasattr(auto_healer, 'get_healing_history'):
+            try:
+                history = auto_healer.get_healing_history(limit=50)
+            except Exception as e:
+                logger.warning(f"Failed to get healing history: {e}")
+        
+        # Calculate statistics from history
+        total_healed = len([h for h in history if h.get('status') == 'healed'])
+        total_failed = len([h for h in history if h.get('status') == 'failed'])
+        total_pending = len([h for h in history if h.get('status') == 'in_progress'])
+        
+        statistics = {
+            "total_healed": total_healed,
+            "total_failed": total_failed,
+            "total_pending": total_pending,
+            "total_actions": len(history),
+            "success_rate": round((total_healed / max(len(history), 1)) * 100, 1)
+        }
+        
         return {
             "status": "success",
+            "success": True,
             "auto_healer": {
                 "enabled": getattr(auto_healer, 'enabled', True),
                 "auto_execute": getattr(auto_healer, 'auto_execute', True),
                 "monitoring": getattr(auto_healer, 'running', False),
                 "max_attempts": getattr(auto_healer, 'max_healing_attempts', 3),
                 "monitoring_interval": getattr(auto_healer, 'monitoring_interval', 60)
-            }
+            },
+            "history": history,
+            "statistics": statistics
         }
     except Exception as e:
         logger.error(f"Error getting auto-healer status: {e}")
@@ -7996,8 +8056,11 @@ async def get_auto_healer_status():
             status_code=500,
             content={
                 "status": "error",
+                "success": False,
                 "message": str(e),
-                "auto_healer": None
+                "auto_healer": None,
+                "history": [],
+                "statistics": {}
             }
         )
 

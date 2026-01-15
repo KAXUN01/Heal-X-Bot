@@ -100,11 +100,19 @@ class GroqLogAnalyzer:
                 'analysis': error_msg
             }
         
-        # Check cache first
-        cache_key = f"{log_entry.get('service', '')}_{log_entry.get('message', '')[:100]}"
-        if cache_key in self.analysis_cache:
-            logger.info("Returning cached analysis")
-            return self.analysis_cache[cache_key]
+        # Check cache first (use robust hash key)
+        # CACHING DISABLED per user request - always get fresh analysis
+        import hashlib
+        msg_str = log_entry.get('message', '')
+        service_str = log_entry.get('service', '')
+        
+        # Create a unique hash of the full content
+        content_hash = hashlib.md5(f"{service_str}_{msg_str}".encode()).hexdigest()
+        cache_key = f"analysis_{content_hash}"
+        # Cache check disabled:
+        # if cache_key in self.analysis_cache:
+        #     logger.info("Returning cached analysis")
+        #     return self.analysis_cache[cache_key]
         
         # Prepare prompt for Groq
         prompt = self._create_analysis_prompt(log_entry)

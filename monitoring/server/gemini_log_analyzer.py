@@ -139,10 +139,22 @@ class GeminiLogAnalyzer:
             }
         
         # Check cache first
-        cache_key = f"{log_entry.get('service', '')}_{log_entry.get('message', '')[:100]}"
-        if cache_key in self.analysis_cache:
-            logger.info("Returning cached analysis")
-            return self.analysis_cache[cache_key]
+        # CACHING DISABLED per user request - always get fresh analysis
+        # Create a more specific cache key to avoid collisions
+        # Use MD5 hash of the message to handle long messages while ensuring uniqueness
+        import hashlib
+        msg_hash = hashlib.md5(log_entry.get('message', '').encode()).hexdigest()
+        service_name = log_entry.get('service', 'unknown')
+        cache_key = f"{service_name}_{msg_hash}"
+        
+        logger.info(f"Service: {service_name} - Proceeding to AI analysis (caching disabled)")
+        
+        # Cache check disabled:
+        # if cache_key in self.analysis_cache:
+        #     logger.info(f"⚡ Cache HIT for {service_name}")
+        #     return self.analysis_cache[cache_key]
+        
+        logger.info(f"💨 Fetching fresh analysis for {service_name}")
         
         # Prepare prompt for Gemini
         prompt = self._create_analysis_prompt(log_entry)

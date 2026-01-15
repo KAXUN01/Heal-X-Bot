@@ -310,6 +310,10 @@ fi
     log_info "Installing Groq client..."
     python3 -m pip install "groq>=0.4.0" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || log_warning "Failed to install Groq client"
     
+    # Install FastAPI and web framework dependencies (required for healing dashboard)
+    log_info "Installing FastAPI and web framework dependencies..."
+    python3 -m pip install fastapi uvicorn pydantic python-dotenv psutil requests docker 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || log_warning "Failed to install FastAPI dependencies"
+    
     log_success "Dependencies installed"
 }
 

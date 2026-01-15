@@ -10447,13 +10447,18 @@
                             severity === 'high' ? '🟠' :
                                 severity === 'medium' ? '🟡' : '🔵';
 
+                        let timestamp = 'Unknown time';
                         try {
                             const faultDate = new Date(fault.timestamp);
-                            const timeStr = faultDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                            const dateStr = faultDate.toLocaleDateString();
-                            const timestamp = `${dateStr} ${timeStr}`;
+                            if (!isNaN(faultDate.getTime())) {
+                                const timeStr = faultDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                const dateStr = faultDate.toLocaleDateString();
+                                timestamp = `${dateStr} ${timeStr}`;
+                            } else {
+                                timestamp = fault.timestamp || 'Unknown time';
+                            }
                         } catch (e) {
-                            var timestamp = fault.timestamp || 'Unknown time';
+                            timestamp = fault.timestamp || 'Unknown time';
                         }
 
                         return `

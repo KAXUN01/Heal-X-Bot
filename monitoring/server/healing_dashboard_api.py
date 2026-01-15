@@ -270,16 +270,12 @@ def initialize_log_services():
     except Exception as e:
         logger.warning(f"System log collector not available: {e}")
     
-    try:
-        # centralized_logger is a global variable from the module
-        initialize_centralized_logging()
-        logger.info("Centralized logger initialized")
-    except Exception as e:
-        logger.warning(f"Centralized logger not available: {e}")
-    
-    # Initialize AI analyzer - prefer Gemini if available, fallback to Groq
+    logger.info("Initializing AI Analyzer...")
     gemini_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
     groq_key = os.getenv('GROQ_API_KEY')
+    
+    logger.info(f"AI Keys Status: Gemini={'Present' if gemini_key else 'Missing'}, Groq={'Present' if groq_key else 'Missing'}")
+    logger.info(f"Libraries Status: GEMINI_AVAILABLE={GEMINI_AVAILABLE}, GROQ_AVAILABLE={GROQ_AVAILABLE}")
     
     # Try Gemini first (user preference)
     if gemini_key and GEMINI_AVAILABLE:
@@ -316,7 +312,13 @@ def initialize_log_services():
         except Exception as e:
             logger.warning(f"Groq analyzer initialization failed: {e}")
             _ai_analyzer = None
-    
+            
+    try:
+        # centralized_logger is a global variable from the module
+        initialize_centralized_logging()
+        logger.info("Centralized logger initialized")
+    except Exception as e:
+        logger.warning(f"Centralized logger not available: {e}")
     # Log final status
     if not _ai_analyzer:
         if not gemini_key and not groq_key:
@@ -4084,7 +4086,7 @@ async def check_scheduled_cleanup():
             logger.error(f"Error in scheduled cleanup check: {e}", exc_info=True)
 
 @app.on_event("startup")
-async def startup_event():
+async def startup_monitoring_loops():
     """Start background tasks and initialize cloud components"""
     try:
         # Start monitoring loop (non-blocking)
@@ -5562,7 +5564,12 @@ async def analyze_single_log(request: GroqAnalyzeRequest):
                 "message": "No log entry provided"
             }
         
-        logger.info(f"Analyzing log entry with {_analyzer_type.upper()}: service={log_entry.get('service')}, message={log_entry.get('message', '')[:50]}")
+        # Enhanced logging for debugging analysis mismatches
+        logger.info(f"🔍 ANALYSIS REQUEST RECEIVED:")
+        logger.info(f"   Service: {log_entry.get('service')}")
+        logger.info(f"   Message: {log_entry.get('message', '')[:200]}...")
+        logger.info(f"   Full Entry: {json.dumps(log_entry)}")
+        logger.info(f"Analyzing log entry with {_analyzer_type.upper()}")
         
         # Try to analyze the log with current analyzer
         try:
@@ -8213,34 +8220,47 @@ async def get_gemini_status():
     return status
 
 @app.post("/api/cloud/faults/{fault_id}/analyze")
-async def analyze_fault_with_ai(fault_id: int):
+async def analyze_fault_with_ai(fault_id: int, request: Request):
     """Analyze a fault using Groq AI to get healing instructions"""
     try:
-        # Check if fault_detector is initialized
-        if fault_detector is None:
-            logger.warning("Fault detector not initialized")
-            return JSONResponse(
-                status_code=503,
-                content={"success": False, "error": "Fault detector not initialized"}
-            )
-        
-        # Get faults safely
+        # Get fault data from request body (sent by frontend)
+        # This ensures we analyze the EXACT fault the user clicked on
         try:
-            faults = fault_detector.get_detected_faults(limit=100)
+            body = await request.json()
+            fault = body if body else None
+            logger.info(f"🔍 FAULT ANALYSIS: Received fault data from frontend: type={fault.get('type') if fault else 'None'}, service={fault.get('service') if fault else 'None'}")
         except Exception as e:
-            logger.error(f"Error getting detected faults: {e}", exc_info=True)
-            return JSONResponse(
-                status_code=500,
-                content={"success": False, "error": f"Error retrieving faults: {str(e)}"}
-            )
+            logger.warning(f"Could not parse request body: {e}")
+            fault = None
         
-        if not faults or fault_id >= len(faults):
-            return JSONResponse(
-                status_code=404,
-                content={"success": False, "error": f"Fault not found (requested: {fault_id}, available: {len(faults) if faults else 0})"}
-            )
-        
-        fault = faults[fault_id]
+        # Fallback to fetching from fault_detector if no body provided (backwards compatibility)
+        if not fault or not fault.get('type'):
+            logger.info("No fault data in body, falling back to fault_detector")
+            # Check if fault_detector is initialized
+            if fault_detector is None:
+                logger.warning("Fault detector not initialized")
+                return JSONResponse(
+                    status_code=503,
+                    content={"success": False, "error": "Fault detector not initialized"}
+                )
+            
+            # Get faults safely
+            try:
+                faults = fault_detector.get_detected_faults(limit=100)
+            except Exception as e:
+                logger.error(f"Error getting detected faults: {e}", exc_info=True)
+                return JSONResponse(
+                    status_code=500,
+                    content={"success": False, "error": f"Error retrieving faults: {str(e)}"}
+                )
+            
+            if not faults or fault_id >= len(faults):
+                return JSONResponse(
+                    status_code=404,
+                    content={"success": False, "error": f"Fault not found (requested: {fault_id}, available: {len(faults) if faults else 0})"}
+                )
+            
+            fault = faults[fault_id]
         
         # Get Groq API key
         load_dotenv(dotenv_path=str(env_path_abs), override=True)

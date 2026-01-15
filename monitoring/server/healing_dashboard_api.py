@@ -26,7 +26,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Callable
-from collections import defaultdict, Counter
+from collections import defaultdict, Counter, deque
 import logging
 import re
 import requests
@@ -2002,15 +2002,44 @@ def get_system_metrics() -> Dict[str, Any]:
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
         net_io = psutil.net_io_counters()
+
+        # Get extended metrics from global monitors
+        error_count = 0
+        warning_count = 0
+        service_failures = 0
+        
+        try:
+            # Access global monitors safely
+            global_vars = globals()
+            sys_collector = global_vars.get('system_log_collector')
+            crit_monitor = global_vars.get('critical_services_monitor')
+            
+            if sys_collector:
+                errors = sys_collector.get_recent_logs(level='ERROR', limit=100)
+                error_count = len(errors)
+                warnings = sys_collector.get_recent_logs(level='WARNING', limit=100)
+                warning_count = len(warnings)
+                
+            if crit_monitor:
+                issues = crit_monitor.get_critical_issues()
+                service_failures = len(issues)
+        except Exception as e:
+            logger.error(f"Error fetching extended metrics: {e}")
         
         return {
             "cpu": cpu_percent,
+            "cpu_percent": cpu_percent,
             "memory": memory.percent,
+            "memory_percent": memory.percent,
             "disk": disk.percent,
+            "disk_percent": disk.percent,
             "network": {
                 "bytes_sent": net_io.bytes_sent,
                 "bytes_recv": net_io.bytes_recv
             },
+            "error_count": error_count,
+            "warning_count": warning_count,
+            "service_failures": service_failures,
             "timestamp": datetime.now().isoformat()
         }
     except Exception as e:
@@ -5818,12 +5847,17 @@ async def analyze_service_health(service_name: str, limit: int = 50):
 async def quick_analyze_recent_errors():
     """Quick analysis of recent errors from centralized logs or Fluent Bit"""
     try:
-        from groq_log_analyzer import groq_analyzer as _groq_analyzer
+        # Use the global AI analyzer (Gemini or Groq) initialized at startup
+        global _ai_analyzer, _analyzer_type
         
-        if not _groq_analyzer:
+        if not _ai_analyzer:
+            # Try to initialize if not already done
+            initialize_log_services()
+            
+        if not _ai_analyzer:
             return {
                 "status": "error",
-                "message": "Groq analyzer not initialized. Please configure GROQ_API_KEY."
+                "message": "AI analyzer not initialized. Set GEMINI_API_KEY or GROQ_API_KEY in .env file"
             }
         
         # Try to get logs from centralized logger first
@@ -5870,12 +5904,18 @@ async def quick_analyze_recent_errors():
                     "recommendations": "Continue monitoring system health.",
                     "full_analysis": "No recent errors or warnings found in the logs."
                 },
-                "logs_analyzed": 0
+                "logs_analyzed": 0,
+                "analyzer_used": _analyzer_type
             }
         
         # Analyze errors (limit to 10 most recent)
-        analysis = _groq_analyzer.analyze_multiple_logs(error_logs[:10], limit=10)
+        # Both Gemini and Groq analyzers support analyze_multiple_logs
+        analysis = _ai_analyzer.analyze_multiple_logs(error_logs[:10], limit=10)
         
+        # Add metadata about which analyzer was used
+        if isinstance(analysis, dict):
+            analysis["analyzer_used"] = _analyzer_type
+            
         return analysis
     
     except Exception as e:
@@ -6861,6 +6901,10 @@ def load_predictive_model():
 
 predictive_model = load_predictive_model()
 
+# Initialize prediction history (last 20 points)
+# Store as list of dicts: {'time': iso_string, 'value': risk_percentage}
+prediction_history = deque(maxlen=20)
+
 @app.get("/api/predict-failure-risk")
 async def predict_failure_risk():
     """Get current failure risk score based on system metrics"""
@@ -6905,11 +6949,6 @@ async def predict_failure_risk():
         # Get current system metrics
         metrics = get_system_metrics()
         
-        # Add log pattern metrics
-        metrics['error_count'] = 0  # Would be calculated from logs
-        metrics['warning_count'] = 0
-        metrics['service_failures'] = 0
-        
         # Predict risk
         result = predictive_model.predict_failure_risk(metrics)
         
@@ -6918,6 +6957,19 @@ async def predict_failure_risk():
             result['timestamp'] = datetime.now().isoformat()
         if 'risk_percentage' not in result:
             result['risk_percentage'] = result.get('risk_score', 0.0) * 100
+            
+        # Save to history for timeline
+        try:
+            prediction_history.append({
+                "time": datetime.now().strftime('%H:%M:%S'),
+                "value": float(result.get('risk_percentage', 0.0)),
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.error(f"Error appending to history: {e}")
+            
+        if 'risk_level' not in result:
+            risk_score = result.get('risk_score', 0.0)
         if 'risk_level' not in result:
             risk_score = result.get('risk_score', 0.0)
             if risk_score > 0.7:
@@ -6943,6 +6995,14 @@ async def predict_failure_risk():
             "is_high_risk": False,
             "risk_level": "Unknown"
         }
+
+@app.get("/api/prediction-history")
+async def get_prediction_history():
+    """Get historical prediction data for timeline"""
+    return {
+        "history": list(prediction_history),
+        "count": len(prediction_history)
+    }
 
 @app.get("/api/get-early-warnings")
 async def get_early_warnings():

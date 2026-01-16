@@ -1779,66 +1779,6 @@ async def analyze_fault_basic(fault_index: int):
         }
 
 
-@app.get("/api/scaling/templates")
-async def get_scaling_templates():
-    """Get auto-scaling templates"""
-    try:
-        return {
-            "success": True,
-            "templates": [
-                {
-                    "id": "cpu-scale",
-                    "name": "CPU-Based Scaling",
-                    "description": "Scale based on CPU usage thresholds",
-                    "trigger": {"metric": "cpu", "threshold": 80},
-                    "action": {"scale_up": 2, "scale_down": 1}
-                },
-                {
-                    "id": "memory-scale",
-                    "name": "Memory-Based Scaling",
-                    "description": "Scale based on memory usage thresholds",
-                    "trigger": {"metric": "memory", "threshold": 85},
-                    "action": {"scale_up": 2, "scale_down": 1}
-                },
-                {
-                    "id": "request-scale",
-                    "name": "Request-Based Scaling",
-                    "description": "Scale based on request rate",
-                    "trigger": {"metric": "requests_per_second", "threshold": 1000},
-                    "action": {"scale_up": 3, "scale_down": 1}
-                }
-            ]
-        }
-    except Exception as e:
-        logger.error(f"Error getting scaling templates: {e}", exc_info=True)
-        return {
-            "success": False,
-            "error": str(e),
-            "templates": []
-        }
-
-@app.get("/api/scaling/status")
-async def get_scaling_status():
-    """Get auto-scaling status"""
-    try:
-        return {
-            "success": True,
-            "status": {
-                "enabled": False,
-                "current_instances": 1,
-                "min_instances": 1,
-                "max_instances": 10,
-                "active_policy": None
-            }
-        }
-    except Exception as e:
-        logger.error(f"Error getting scaling status: {e}", exc_info=True)
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-
 # ML Performance History
 ml_performance_history = {
     "timestamps": [],

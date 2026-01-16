@@ -2027,9 +2027,7 @@
                             <div
                                 style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
                                 <div>
-                                    <h2 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                                        <i class="fas fa-exclamation-triangle"></i> Active Alerts
-                                    </h2>
+
                                     <p style="color: var(--text-secondary); margin: 0;">Critical issues requiring
                                         immediate
                                         attention</p>
@@ -2516,7 +2514,6 @@
                     </div>
 
                     <div id="disk" class="tab-content">
-                        <h2 style="margin-bottom: 1.5rem;">Disk Cleanup Management</h2>
 
                         <!-- Disk Usage Stats Card -->
                         <div class="card" style="margin-bottom: 1.5rem;">
@@ -3128,9 +3125,7 @@
                 <!-- Auto Scaling Tab -->
                 <div id="auto-scaling" class="tab-content">
                     <div style="margin-bottom: 2rem;">
-                        <h2 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                            📈 Automatic Scaling
-                        </h2>
+
                         <p style="color: var(--text-secondary); margin: 0;">Monitor resources and scale automatically
                             with admin
                             approval</p>
@@ -8405,8 +8400,8 @@
                             data = await cachedFetch('/api/critical-services/issues', {}, 5000).catch(() => null);
                         }
 
-                        // Fetch Discord alerts
-                        const discordAlertsData = await cachedFetch('/api/alerts/discord', {}, 5000).catch(() => null);
+                        // Fetch Discord alerts from monitoring-server (port 5000) where they are recorded
+                        const discordAlertsData = await cachedFetch('http://localhost:5000/api/alerts/discord', {}, 5000).catch(() => null);
                         let discordAlerts = [];
 
                         if (discordAlertsData && discordAlertsData.status === 'success' && discordAlertsData.alerts) {
@@ -8561,7 +8556,7 @@
                                         </div>
                                     </td>
                                 </tr>
-```
+                                `;
                             });
 
                             tbody.innerHTML = html;

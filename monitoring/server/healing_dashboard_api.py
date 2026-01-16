@@ -3503,9 +3503,21 @@ def send_discord_alert(message: str, severity: str = "info", embed_data: Dict[st
         # Check response status
         if response.status_code == 204:
             logger.debug(f"Discord notification sent successfully (severity: {severity})")
+            # Record alert to manager for display in Active Alerts page
+            try:
+                manager = get_discord_alert_manager()
+                manager.record_alert(message, severity, embed_data)
+            except Exception as e:
+                logger.debug(f"Failed to record alert: {e}")
             return True
         elif response.status_code in [200, 201]:
             logger.debug(f"Discord notification sent successfully (severity: {severity})")
+            # Record alert to manager for display in Active Alerts page
+            try:
+                manager = get_discord_alert_manager()
+                manager.record_alert(message, severity, embed_data)
+            except Exception as e:
+                logger.debug(f"Failed to record alert: {e}")
             return True
         else:
             error_msg = f"Discord webhook returned status {response.status_code}"

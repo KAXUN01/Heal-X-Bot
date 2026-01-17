@@ -1541,7 +1541,7 @@ async def get_services():
                 services.append({
                     "name": container.name,
                     "status": container.status,
-                    "type": "container",
+                    "type": "docker",
                     "health": "healthy" if container.status == 'running' else "unhealthy",
                     "image": container.image.tags[0] if container.image.tags else "unknown"
                 })
@@ -1558,7 +1558,7 @@ async def get_services():
                                 services.append({
                                     "name": container.get('name', 'unknown'),
                                     "status": container.get('status', 'unknown'),
-                                    "type": "container",
+                                    "type": "docker",
                                     "health": "healthy" if container.get('status') == 'running' else "unhealthy"
                                 })
                 except Exception as e:

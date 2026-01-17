@@ -6334,7 +6334,7 @@
                                 const statusClass = 'running';
                                 const statusText = 'Running';
                                 const serviceType = service.type || 'systemd';
-                                const typeLabel = serviceType === 'docker' ? '🐳 Docker' : serviceType === 'kubernetes' ? '☸️ Kubernetes' : '⚙️ Systemd';
+                                const typeLabel = (serviceType === 'docker' || serviceType === 'container') ? '🐳 Docker' : serviceType === 'kubernetes' ? '☸️ Kubernetes' : serviceType === 'api' ? '🔌 API' : serviceType === 'ml' ? '🤖 ML' : '⚙️ Systemd';
 
                                 return `
                             <div class="service-item" style="border-left: 4px solid var(--accent-green); margin-bottom: 0.75rem;">
@@ -6379,7 +6379,7 @@
                                 const statusClass = 'stopped';
                                 const statusText = service.status || 'Stopped';
                                 const serviceType = service.type || 'systemd';
-                                const typeLabel = serviceType === 'docker' ? '🐳 Docker' : serviceType === 'kubernetes' ? '☸️ Kubernetes' : '⚙️ Systemd';
+                                const typeLabel = (serviceType === 'docker' || serviceType === 'container') ? '🐳 Docker' : serviceType === 'kubernetes' ? '☸️ Kubernetes' : serviceType === 'api' ? '🔌 API' : serviceType === 'ml' ? '🤖 ML' : '⚙️ Systemd';
 
                                 return `
                             <div class="service-item" style="border-left: 4px solid var(--accent-red); margin-bottom: 0.75rem;">

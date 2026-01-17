@@ -8401,7 +8401,7 @@
                         }
 
                         // Fetch Discord alerts from monitoring-server (port 5000) where they are recorded
-                        const discordAlertsData = await cachedFetch('http://localhost:5000/api/alerts/discord', {}, 5000).catch(() => null);
+                        const discordAlertsData = await cachedFetch('/api/alerts/discord', {}, 5000).catch(() => null);
                         let discordAlerts = [];
 
                         if (discordAlertsData && discordAlertsData.status === 'success' && discordAlertsData.alerts) {

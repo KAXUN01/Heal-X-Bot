@@ -596,7 +596,7 @@ if SCALING_AVAILABLE:
         # Start monitoring if enabled - MOVED TO STARTUP EVENT
         if scaling_config.get('enabled', True):
             # Check if it was already started to avoid duplicates
-            if not scaling_monitor.monitoring_active:
+            if not scaling_monitor.is_monitoring:
                 logger.info("Scaling monitor configured (will start in background)")
             else:
                 logger.info("Scaling monitor already active")

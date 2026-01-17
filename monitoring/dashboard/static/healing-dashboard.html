@@ -3125,10 +3125,49 @@
                                 <!-- Pagination / Load More -->
                                 <div id="logsPagination"
                                     style="padding: 1.25rem; border-top: 1px solid var(--border-color); display: none; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; background: linear-gradient(135deg, rgba(59, 130, 246, 0.03) 0%, rgba(59, 130, 246, 0.01) 100%);">
+
+                                    <!-- Page Info -->
                                     <div style="font-size: 0.875rem; color: var(--text-primary); font-weight: 500;">
                                         Showing <span id="logsPageInfo"
-                                            style="font-weight: 600; color: var(--accent-blue);">0</span> logs
+                                            style="font-weight: 600; color: var(--accent-blue);">0</span>
                                     </div>
+
+                                    <!-- Pagination Controls -->
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <!-- First Page Button -->
+                                        <button id="firstPageBtn" class="btn" onclick="goToFirstPage()"
+                                            style="padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 0.375rem; transition: all 0.2s; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); cursor: pointer;"
+                                            title="First Page">
+                                            <i class="fas fa-angle-double-left"></i>
+                                        </button>
+
+                                        <!-- Previous Button -->
+                                        <button id="prevPageBtn" class="btn" onclick="changeLogsPage(-1)"
+                                            style="padding: 0.5rem 1rem; font-size: 0.875rem; border-radius: 0.375rem; transition: all 0.2s; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); cursor: pointer;">
+                                            <i class="fas fa-chevron-left" style="margin-right: 0.25rem;"></i> Prev
+                                        </button>
+
+                                        <!-- Page Numbers -->
+                                        <div id="pageNumbersContainer"
+                                            style="display: flex; gap: 0.25rem; align-items: center;">
+                                            <!-- Page numbers will be dynamically generated -->
+                                        </div>
+
+                                        <!-- Next Button -->
+                                        <button id="nextPageBtn" class="btn" onclick="changeLogsPage(1)"
+                                            style="padding: 0.5rem 1rem; font-size: 0.875rem; border-radius: 0.375rem; transition: all 0.2s; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); cursor: pointer;">
+                                            Next <i class="fas fa-chevron-right" style="margin-left: 0.25rem;"></i>
+                                        </button>
+
+                                        <!-- Last Page Button -->
+                                        <button id="lastPageBtn" class="btn" onclick="goToLastPage()"
+                                            style="padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 0.375rem; transition: all 0.2s; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); cursor: pointer;"
+                                            title="Last Page">
+                                            <i class="fas fa-angle-double-right"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Load More Button (for server-side pagination) -->
                                     <button id="loadMoreLogsBtn" class="btn" onclick="loadMoreLogs()"
                                         style="padding: 0.625rem 1.25rem; font-size: 0.875rem; border-radius: 0.375rem; transition: all 0.2s; background: var(--accent-blue); color: white; border: none; cursor: pointer; display: none;">
                                         <i class="fas fa-download" style="margin-right: 0.5rem;"></i> Load More
@@ -7568,8 +7607,12 @@
                     const levelFilter = document.getElementById('logLevelFilter')?.value || '';
                     const sourceFilter = document.getElementById('logSourceFilter')?.value || '';
 
-                    // Client-side pagination logic removed in favor of Load More
-                    // logsPerPage = ...
+                    // Read logsPerPage from the selector
+                    const perPageSelector = document.getElementById('logsPerPage');
+                    if (perPageSelector) {
+                        logsPerPage = parseInt(perPageSelector.value, 10) || 10;
+                    }
+
 
                     // Apply all filters
                     filteredSystemLogs = allSystemLogs.filter(log => {
@@ -7770,10 +7813,11 @@
                     if (!pagination) return;
 
                     const totalLogs = filteredSystemLogs.length;
-                    const totalPages = Math.ceil(totalLogs / logsPerPage);
-                    const startIndex = (logsCurrentPage - 1) * logsPerPage + 1;
+                    const totalPages = Math.ceil(totalLogs / logsPerPage) || 1;
+                    const startIndex = totalLogs > 0 ? (logsCurrentPage - 1) * logsPerPage + 1 : 0;
                     const endIndex = Math.min(logsCurrentPage * logsPerPage, totalLogs);
 
+                    // Update page info text
                     const info = document.getElementById('logsPageInfo');
                     if (info) {
                         if (totalLogs > 0) {
@@ -7782,16 +7826,105 @@
                             info.textContent = '0 logs';
                         }
                     }
+
+                    // Update button states
+                    const firstBtn = document.getElementById('firstPageBtn');
+                    const prevBtn = document.getElementById('prevPageBtn');
+                    const nextBtn = document.getElementById('nextPageBtn');
+                    const lastBtn = document.getElementById('lastPageBtn');
+
+                    const isFirstPage = logsCurrentPage <= 1;
+                    const isLastPage = logsCurrentPage >= totalPages;
+
+                    if (firstBtn) {
+                        firstBtn.disabled = isFirstPage;
+                        firstBtn.style.opacity = isFirstPage ? '0.5' : '1';
+                        firstBtn.style.cursor = isFirstPage ? 'not-allowed' : 'pointer';
+                    }
+                    if (prevBtn) {
+                        prevBtn.disabled = isFirstPage;
+                        prevBtn.style.opacity = isFirstPage ? '0.5' : '1';
+                        prevBtn.style.cursor = isFirstPage ? 'not-allowed' : 'pointer';
+                    }
+                    if (nextBtn) {
+                        nextBtn.disabled = isLastPage;
+                        nextBtn.style.opacity = isLastPage ? '0.5' : '1';
+                        nextBtn.style.cursor = isLastPage ? 'not-allowed' : 'pointer';
+                    }
+                    if (lastBtn) {
+                        lastBtn.disabled = isLastPage;
+                        lastBtn.style.opacity = isLastPage ? '0.5' : '1';
+                        lastBtn.style.cursor = isLastPage ? 'not-allowed' : 'pointer';
+                    }
+
+                    // Generate page numbers
+                    const pageNumbersContainer = document.getElementById('pageNumbersContainer');
+                    if (pageNumbersContainer) {
+                        let pagesHtml = '';
+                        const maxVisiblePages = 5;
+                        let startPage = Math.max(1, logsCurrentPage - Math.floor(maxVisiblePages / 2));
+                        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+                        // Adjust start if we're near the end
+                        if (endPage - startPage + 1 < maxVisiblePages) {
+                            startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                        }
+
+                        // Show first page and ellipsis if needed
+                        if (startPage > 1) {
+                            pagesHtml += `<button class="btn" onclick="goToPage(1)" style="padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 0.375rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); cursor: pointer; min-width: 2.5rem;">1</button>`;
+                            if (startPage > 2) {
+                                pagesHtml += `<span style="padding: 0 0.25rem; color: var(--text-secondary);">...</span>`;
+                            }
+                        }
+
+                        // Generate visible page buttons
+                        for (let i = startPage; i <= endPage; i++) {
+                            const isActive = i === logsCurrentPage;
+                            pagesHtml += `<button class="btn" onclick="goToPage(${i})" style="padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 0.375rem; background: ${isActive ? 'var(--accent-blue)' : 'var(--bg-tertiary)'}; color: ${isActive ? 'white' : 'var(--text-primary)'}; border: 1px solid ${isActive ? 'var(--accent-blue)' : 'var(--border-color)'}; cursor: pointer; min-width: 2.5rem; font-weight: ${isActive ? '600' : '400'};">${i}</button>`;
+                        }
+
+                        // Show last page and ellipsis if needed
+                        if (endPage < totalPages) {
+                            if (endPage < totalPages - 1) {
+                                pagesHtml += `<span style="padding: 0 0.25rem; color: var(--text-secondary);">...</span>`;
+                            }
+                            pagesHtml += `<button class="btn" onclick="goToPage(${totalPages})" style="padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 0.375rem; background: var(--bg-tertiary); color: var(--text-primary); border: 1px solid var(--border-color); cursor: pointer; min-width: 2.5rem;">${totalPages}</button>`;
+                        }
+
+                        pageNumbersContainer.innerHTML = pagesHtml;
+                    }
                 }
 
 
 
                 function changeLogsPage(direction) {
-                    const totalPages = Math.ceil(filteredSystemLogs.length / logsPerPage);
+                    const totalPages = Math.ceil(filteredSystemLogs.length / logsPerPage) || 1;
                     logsCurrentPage += direction;
                     logsCurrentPage = Math.max(1, Math.min(logsCurrentPage, totalPages));
                     displayLogs();
                     // Scroll to top of table
+                    document.getElementById('logsTableBody')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+
+                function goToPage(page) {
+                    const totalPages = Math.ceil(filteredSystemLogs.length / logsPerPage) || 1;
+                    logsCurrentPage = Math.max(1, Math.min(page, totalPages));
+                    displayLogs();
+                    // Scroll to top of table
+                    document.getElementById('logsTableBody')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+
+                function goToFirstPage() {
+                    logsCurrentPage = 1;
+                    displayLogs();
+                    document.getElementById('logsTableBody')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+
+                function goToLastPage() {
+                    const totalPages = Math.ceil(filteredSystemLogs.length / logsPerPage) || 1;
+                    logsCurrentPage = totalPages;
+                    displayLogs();
                     document.getElementById('logsTableBody')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
 

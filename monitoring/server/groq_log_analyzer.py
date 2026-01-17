@@ -622,11 +622,11 @@ Log #{i}:
             thread = threading.Thread(target=api_call)
             thread.daemon = True
             thread.start()
-            thread.join(timeout=10)  # 10 second timeout for faster feedback
+            thread.join(timeout=30)  # 30 second timeout for remote servers
             
             if thread.is_alive():
                 # Request timed out
-                logger.warning(f"Groq API call ({self.model_name}) timed out after 10 seconds")
+                logger.warning(f"Groq API call ({self.model_name}) timed out after 30 seconds")
                 return {
                     'status': 'error',
                     'message': 'Analysis timed out. The AI model is taking longer than expected. Please try again.'

@@ -1861,6 +1861,128 @@
                     </div>
                 </div>
 
+                <!-- Create Scaling Template Modal -->
+                <div id="createTemplateModal" class="modal-overlay" style="display: none;"
+                    onclick="closeCreateTemplateModal(event)">
+                    <div class="modal-content" onclick="event.stopPropagation()" style="max-width: 600px;">
+                        <div class="modal-header">
+                            <div class="modal-title">
+                                <span>📝</span>
+                                <span>Create Scaling Template</span>
+                            </div>
+                            <button class="modal-close" onclick="closeCreateTemplateModal()">✕</button>
+                        </div>
+                        <div class="modal-body" style="padding: 1.5rem;">
+                            <form id="createTemplateForm" onsubmit="submitCreateTemplate(event)">
+                                <!-- Basic Info -->
+                                <div style="margin-bottom: 1.5rem;">
+                                    <h4 style="margin: 0 0 1rem 0; color: var(--text-primary);">Basic Information</h4>
+                                    <div style="margin-bottom: 1rem;">
+                                        <label
+                                            style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 500;">Template
+                                            Name *</label>
+                                        <input type="text" id="templateName" required
+                                            style="width: 100%; padding: 0.75rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary);"
+                                            placeholder="e.g., High Performance">
+                                    </div>
+                                    <div style="margin-bottom: 1rem;">
+                                        <label
+                                            style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 500;">Description</label>
+                                        <textarea id="templateDescription" rows="2"
+                                            style="width: 100%; padding: 0.75rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary); resize: vertical;"
+                                            placeholder="Brief description of this template"></textarea>
+                                    </div>
+                                </div>
+
+                                <!-- Resource Limits -->
+                                <div style="margin-bottom: 1.5rem;">
+                                    <h4 style="margin: 0 0 1rem 0; color: var(--text-primary);">Total Resource Limits
+                                    </h4>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                        <div>
+                                            <label
+                                                style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 500;">CPU
+                                                Cores *</label>
+                                            <input type="number" id="templateCpuCores" required min="1" max="128"
+                                                value="2"
+                                                style="width: 100%; padding: 0.75rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary);">
+                                        </div>
+                                        <div>
+                                            <label
+                                                style="display: block; margin-bottom: 0.5rem; color: var(--text-secondary); font-weight: 500;">Memory
+                                                (GB) *</label>
+                                            <input type="number" id="templateMemoryGb" required min="1" max="512"
+                                                value="4"
+                                                style="width: 100%; padding: 0.75rem; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 6px; color: var(--text-primary);">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Service Allocations -->
+                                <div style="margin-bottom: 1.5rem;">
+                                    <h4 style="margin: 0 0 1rem 0; color: var(--text-primary);">Service Allocations</h4>
+
+                                    <!-- Model Service -->
+                                    <div
+                                        style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+                                        <h5 style="margin: 0 0 0.75rem 0; color: var(--accent-blue);">🤖 Model Service
+                                        </h5>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                            <div>
+                                                <label
+                                                    style="display: block; margin-bottom: 0.25rem; color: var(--text-secondary); font-size: 0.9rem;">CPUs</label>
+                                                <input type="text" id="modelCpus" value="1"
+                                                    style="width: 100%; padding: 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                                                    placeholder="e.g., 1 or 0.5">
+                                            </div>
+                                            <div>
+                                                <label
+                                                    style="display: block; margin-bottom: 0.25rem; color: var(--text-secondary); font-size: 0.9rem;">Memory</label>
+                                                <input type="text" id="modelMemory" value="2G"
+                                                    style="width: 100%; padding: 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                                                    placeholder="e.g., 2G or 512M">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Server Service -->
+                                    <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px;">
+                                        <h5 style="margin: 0 0 0.75rem 0; color: var(--accent-green);">🖥️ Server
+                                            Service</h5>
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                            <div>
+                                                <label
+                                                    style="display: block; margin-bottom: 0.25rem; color: var(--text-secondary); font-size: 0.9rem;">CPUs</label>
+                                                <input type="text" id="serverCpus" value="1"
+                                                    style="width: 100%; padding: 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                                                    placeholder="e.g., 1 or 0.5">
+                                            </div>
+                                            <div>
+                                                <label
+                                                    style="display: block; margin-bottom: 0.25rem; color: var(--text-secondary); font-size: 0.9rem;">Memory</label>
+                                                <input type="text" id="serverMemory" value="1G"
+                                                    style="width: 100%; padding: 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary);"
+                                                    placeholder="e.g., 1G or 512M">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Submit Buttons -->
+                                <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+                                    <button type="button" class="btn btn-secondary" onclick="closeCreateTemplateModal()"
+                                        style="padding: 0.75rem 1.5rem;">
+                                        Cancel
+                                    </button>
+                                    <button type="submit" class="btn btn-primary" style="padding: 0.75rem 1.5rem;">
+                                        <i class="fas fa-plus"></i> Create Template
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="header">
                     <h1>🛡️ Heal-X Dashboard</h1>
                     <div class="status-badge healthy status-badge-update" id="systemStatusMain">
@@ -12181,8 +12303,94 @@
                 }
 
                 function showCreateTemplateModal() {
-                    showNotification('Template creation feature coming soon', 'info');
+                    const modal = document.getElementById('createTemplateModal');
+                    if (modal) {
+                        modal.style.display = 'flex';
+                        // Reset form
+                        document.getElementById('createTemplateForm').reset();
+                        // Set default values
+                        document.getElementById('templateCpuCores').value = '2';
+                        document.getElementById('templateMemoryGb').value = '4';
+                        document.getElementById('modelCpus').value = '1';
+                        document.getElementById('modelMemory').value = '2G';
+                        document.getElementById('serverCpus').value = '1';
+                        document.getElementById('serverMemory').value = '1G';
+                    }
                 }
+
+                function closeCreateTemplateModal(event) {
+                    if (event && event.target !== event.currentTarget) return;
+                    const modal = document.getElementById('createTemplateModal');
+                    if (modal) {
+                        modal.style.display = 'none';
+                    }
+                }
+
+                async function submitCreateTemplate(event) {
+                    event.preventDefault();
+
+                    const name = document.getElementById('templateName').value.trim();
+                    const description = document.getElementById('templateDescription').value.trim();
+                    const cpuCores = parseInt(document.getElementById('templateCpuCores').value);
+                    const memoryGb = parseInt(document.getElementById('templateMemoryGb').value);
+                    const modelCpus = document.getElementById('modelCpus').value.trim();
+                    const modelMemory = document.getElementById('modelMemory').value.trim();
+                    const serverCpus = document.getElementById('serverCpus').value.trim();
+                    const serverMemory = document.getElementById('serverMemory').value.trim();
+
+                    if (!name) {
+                        showNotification('Please enter a template name', 'warning');
+                        return;
+                    }
+
+                    if (!cpuCores || cpuCores < 1) {
+                        showNotification('Please enter valid CPU cores', 'warning');
+                        return;
+                    }
+
+                    if (!memoryGb || memoryGb < 1) {
+                        showNotification('Please enter valid memory', 'warning');
+                        return;
+                    }
+
+                    const templateData = {
+                        name: name,
+                        description: description || null,
+                        cpu_cores: cpuCores,
+                        memory_gb: memoryGb,
+                        services: {
+                            model: {
+                                cpus: modelCpus || '1',
+                                memory: modelMemory || '2G'
+                            },
+                            server: {
+                                cpus: serverCpus || '1',
+                                memory: serverMemory || '1G'
+                            }
+                        }
+                    };
+
+                    try {
+                        const response = await fetch('/api/scaling/templates', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(templateData)
+                        });
+                        const data = await response.json();
+
+                        if (response.ok && data.success) {
+                            showNotification(`Template "${name}" created successfully!`, 'success');
+                            closeCreateTemplateModal();
+                            loadScalingTemplates(); // Refresh templates list
+                        } else {
+                            showNotification('Error creating template: ' + (data.detail || data.error || 'Unknown error'), 'error');
+                        }
+                    } catch (error) {
+                        console.error('Error creating template:', error);
+                        showNotification('Error creating template: ' + error.message, 'error');
+                    }
+                }
+
 
                 function startScalingStatusUpdates() {
                     // Clear existing interval
@@ -12259,6 +12467,8 @@
                 window.handleChangePassword = handleChangePassword;
                 window.deleteTemplate = deleteTemplate;
                 window.showCreateTemplateModal = showCreateTemplateModal;
+                window.closeCreateTemplateModal = closeCreateTemplateModal;
+                window.submitCreateTemplate = submitCreateTemplate;
             </script>
     </div> <!-- Close container -->
     </main> <!-- Close main-content -->

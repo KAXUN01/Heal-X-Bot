@@ -1,5 +1,5 @@
 {
-  "last_updated": "2025-01-19T00:00:00",
+  "last_updated": "2026-01-17T13:28:00",
   "templates": [
     {
       "id": "low",
@@ -49,6 +49,57 @@
         "server": {
           "cpus": "1",
           "memory": "2G"
+        }
+      }
+    },
+    {
+      "id": "ultra",
+      "name": "Ultra Performance",
+      "description": "Enterprise-grade allocation for AI/ML intensive workloads",
+      "cpu_cores": 8,
+      "memory_gb": 16,
+      "services": {
+        "model": {
+          "cpus": "4",
+          "memory": "8G"
+        },
+        "server": {
+          "cpus": "2",
+          "memory": "4G"
+        }
+      }
+    },
+    {
+      "id": "development",
+      "name": "Development Mode",
+      "description": "Lightweight allocation for development and testing",
+      "cpu_cores": 1,
+      "memory_gb": 1,
+      "services": {
+        "model": {
+          "cpus": "0.25",
+          "memory": "512M"
+        },
+        "server": {
+          "cpus": "0.25",
+          "memory": "256M"
+        }
+      }
+    },
+    {
+      "id": "microservices",
+      "name": "Microservices Optimized",
+      "description": "Balanced allocation optimized for containerized microservices",
+      "cpu_cores": 6,
+      "memory_gb": 12,
+      "services": {
+        "model": {
+          "cpus": "2",
+          "memory": "6G"
+        },
+        "server": {
+          "cpus": "2",
+          "memory": "3G"
         }
       }
     }

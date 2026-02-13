@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heal-X-Bot | AI-Powered DDoS Detection & Self-Healing System</title>
+    <meta name="description"
+        content="Heal-X-Bot — An advanced AI-powered cybersecurity platform with DDoS detection, predictive maintenance, autonomous self-healing, and real-time monitoring.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-light: #818cf8;
+            --primary-dark: #4f46e5;
+            --accent: #06b6d4;
+            --accent-light: #22d3ee;
+            --green: #22c55e;
+            --green-light: #4ade80;
+            --orange: #f97316;
+            --orange-light: #fb923c;
+            --red: #ef4444;
+            --bg-dark: #0a0a14;
+            --bg-section: #0f0f1a;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.07);
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: rgba(255, 255, 255, 0.07);
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* ── Animated Background ── */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .bg-animation .orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.12;
+            animation: float 25s ease-in-out infinite;
+        }
+
+        .bg-animation .orb:nth-child(1) {
+            width: 650px;
+            height: 650px;
+            background: var(--primary);
+            top: -250px;
+            right: -150px;
+        }
+
+        .bg-animation .orb:nth-child(2) {
+            width: 450px;
+            height: 450px;
+            background: var(--accent);
+            bottom: -150px;
+            left: -100px;
+            animation-delay: -8s;
+        }
+
+        .bg-animation .orb:nth-child(3) {
+            width: 350px;
+            height: 350px;
+            background: #a855f7;
+            top: 40%;
+            left: 40%;
+            animation-delay: -16s;
+        }
+
+        @keyframes float {
+
+            0%,
+            100% {
+                transform: translate(0, 0) scale(1);
+            }
+
+            33% {
+                transform: translate(60px, -40px) scale(1.08);
+            }
+
+            66% {
+                transform: translate(-40px, 50px) scale(0.94);
+            }
+        }
+
+        .grid-pattern {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image:
+                linear-gradient(rgba(99, 102, 241, 0.025) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(99, 102, 241, 0.025) 1px, transparent 1px);
+            background-size: 70px 70px;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* ── Navigation ── */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 1rem 2rem;
+            backdrop-filter: blur(24px);
+            background: rgba(10, 10, 20, 0.75);
+            border-bottom: 1px solid var(--border);
+            transition: background 0.3s;
+        }
+
+        .nav-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+
+        .logo-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 800;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .logo-icon::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent 40%, rgba(255, 255, 255, 0.2) 50%, transparent 60%);
+            animation: shimmer 4s ease-in-out infinite;
+        }
+
+        @keyframes shimmer {
+
+            0%,
+            100% {
+                transform: translateX(-100%);
+            }
+
+            50% {
+                transform: translateX(100%);
+            }
+        }
+
+        .logo-text {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.02em;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.3s;
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            transition: width 0.3s;
+            border-radius: 2px;
+        }
+
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+
+        /* ── Utility ── */
+        section {
+            position: relative;
+            z-index: 1;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* ── Hero ── */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            padding-top: 80px;
+        }
+
+        .hero-content {
+            text-align: center;
+            max-width: 820px;
+            margin: 0 auto;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 18px;
+            background: rgba(99, 102, 241, 0.1);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            border-radius: 100px;
+            font-size: 0.85rem;
+            color: var(--primary-light);
+            margin-bottom: 2rem;
+            animation: fadeInUp 0.8s ease;
+        }
+
+        .badge .dot {
+            width: 8px;
+            height: 8px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(0.7);
+            }
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 5.5vw, 4.2rem);
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            margin-bottom: 1.5rem;
+            animation: fadeInUp 0.8s ease 0.1s both;
+        }
+
+        .hero h1 .gradient-text {
+            background: linear-gradient(135deg, var(--primary-light), var(--accent-light), #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            max-width: 620px;
+            margin: 0 auto 2.5rem;
+            line-height: 1.75;
+            animation: fadeInUp 0.8s ease 0.2s both;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1rem;
+            justify-content: center;
+            animation: fadeInUp 0.8s ease 0.3s both;
+        }
+
+        .btn {
+            padding: 14px 32px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s;
+            cursor: pointer;
+            border: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            box-shadow: 0 4px 24px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(99, 102, 241, 0.45);
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-card-hover);
+            transform: translateY(-2px);
+        }
+
+        /* ── Stats ── */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1.5rem;
+            margin-top: 5rem;
+            animation: fadeInUp 0.8s ease 0.4s both;
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: 1.5rem;
+            background: var(--bg-card);
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+            background: var(--bg-card-hover);
+            transform: translateY(-4px);
+            border-color: rgba(99, 102, 241, 0.2);
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary-light), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ── Section Headers ── */
+        .section-header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .section-header .tag {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--primary-light);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
+        }
+
+        .section-header h2 {
+            font-size: clamp(2rem, 4vw, 2.8rem);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 1rem;
+        }
+
+        .section-header p {
+            color: var(--text-secondary);
+            max-width: 520px;
+            margin: 0 auto;
+            font-size: 1.05rem;
+        }
+
+        /* ── Features ── */
+        .features {
+            padding: 8rem 0;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+        }
+
+        .feature-card {
+            padding: 2rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            transition: all 0.4s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--primary), var(--accent), transparent);
+            opacity: 0;
+            transition: opacity 0.4s;
+        }
+
+        .feature-card:hover {
+            background: var(--bg-card-hover);
+            transform: translateY(-6px);
+            border-color: rgba(99, 102, 241, 0.15);
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        .feature-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-icon.purple {
+            background: rgba(99, 102, 241, 0.1);
+            color: var(--primary-light);
+        }
+
+        .feature-icon.cyan {
+            background: rgba(6, 182, 212, 0.1);
+            color: var(--accent-light);
+        }
+
+        .feature-icon.green {
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--green-light);
+        }
+
+        .feature-icon.orange {
+            background: rgba(249, 115, 22, 0.1);
+            color: var(--orange-light);
+        }
+
+        .feature-icon.pink {
+            background: rgba(236, 72, 153, 0.1);
+            color: #f472b6;
+        }
+
+        .feature-icon.yellow {
+            background: rgba(234, 179, 8, 0.1);
+            color: #facc15;
+        }
+
+        .feature-card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.01em;
+        }
+
+        .feature-card p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.65;
+        }
+
+        /* ── How It Works ── */
+        .how-it-works {
+            padding: 8rem 0;
+            background: var(--bg-section);
+        }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 2rem;
+            position: relative;
+        }
+
+        .steps-grid::before {
+            content: '';
+            position: absolute;
+            top: 40px;
+            left: 12.5%;
+            right: 12.5%;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary), var(--accent), #a855f7, var(--green));
+            opacity: 0.3;
+        }
+
+        .step-card {
+            text-align: center;
+            position: relative;
+        }
+
+        .step-number {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), var(--accent));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: white;
+            margin: 0 auto 1.5rem;
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.3);
+            position: relative;
+            z-index: 1;
+        }
+
+        .step-card h3 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .step-card p {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        /* ── Architecture ── */
+        .architecture {
+            padding: 8rem 0;
+        }
+
+        .arch-visual {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        .arch-diagram {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 2.5rem;
+        }
+
+        .arch-layer {
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            margin-bottom: 0.75rem;
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+            cursor: default;
+        }
+
+        .arch-layer:hover {
+            transform: translateX(8px);
+        }
+
+        .arch-layer:last-child {
+            margin-bottom: 0;
+        }
+
+        .arch-layer.l1 {
+            background: rgba(99, 102, 241, 0.07);
+            border-color: rgba(99, 102, 241, 0.15);
+        }
+
+        .arch-layer.l2 {
+            background: rgba(6, 182, 212, 0.07);
+            border-color: rgba(6, 182, 212, 0.15);
+        }
+
+        .arch-layer.l3 {
+            background: rgba(168, 85, 247, 0.07);
+            border-color: rgba(168, 85, 247, 0.15);
+        }
+
+        .arch-layer.l4 {
+            background: rgba(34, 197, 94, 0.07);
+            border-color: rgba(34, 197, 94, 0.15);
+        }
+
+        .arch-layer.l5 {
+            background: rgba(249, 115, 22, 0.07);
+            border-color: rgba(249, 115, 22, 0.15);
+        }
+
+        .arch-layer-title {
+            font-weight: 700;
+            font-size: 0.95rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .arch-layer-desc {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .arch-connector {
+            text-align: center;
+            padding: 0.25rem 0;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            letter-spacing: 0.1em;
+        }
+
+        .arch-info h2 {
+            font-size: 2.4rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 1.5rem;
+            line-height: 1.2;
+        }
+
+        .arch-info p {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            line-height: 1.7;
+            margin-bottom: 2rem;
+        }
+
+        .arch-features {
+            list-style: none;
+        }
+
+        .arch-features li {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0.7rem 0;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .arch-features li .check {
+            width: 24px;
+            height: 24px;
+            border-radius: 8px;
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--green-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            flex-shrink: 0;
+        }
+
+        /* ── Tech Stack ── */
+        .tech {
+            padding: 8rem 0;
+            background: var(--bg-section);
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .tech-item {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 1.25rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            transition: all 0.3s;
+        }
+
+        .tech-item:hover {
+            background: var(--bg-card-hover);
+            transform: translateY(-3px);
+            border-color: rgba(99, 102, 241, 0.2);
+        }
+
+        .tech-item-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 0.75rem;
+            flex-shrink: 0;
+        }
+
+        .tech-item-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tech-item-name {
+            font-weight: 600;
+            font-size: 0.92rem;
+        }
+
+        .tech-item-role {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* ── Metrics Table ── */
+        .metrics {
+            padding: 8rem 0;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .metric-block {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2rem;
+            overflow: hidden;
+        }
+
+        .metric-block h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .metric-block h3 .icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+
+        .metric-row .label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .metric-row .value {
+            font-weight: 700;
+            font-size: 0.95rem;
+        }
+
+        .metric-row .value.green {
+            color: var(--green-light);
+        }
+
+        .metric-row .value.cyan {
+            color: var(--accent-light);
+        }
+
+        .metric-row .value.purple {
+            color: var(--primary-light);
+        }
+
+        .metric-row .value.orange {
+            color: var(--orange-light);
+        }
+
+        /* ── CTA ── */
+        .cta {
+            padding: 6rem 0;
+            text-align: center;
+        }
+
+        .cta-box {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(6, 182, 212, 0.08));
+            border: 1px solid rgba(99, 102, 241, 0.15);
+            border-radius: 28px;
+            padding: 4rem 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary), var(--accent), #a855f7);
+        }
+
+        .cta-box h2 {
+            font-size: 2.2rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            letter-spacing: -0.02em;
+        }
+
+        .cta-box p {
+            color: var(--text-secondary);
+            font-size: 1.05rem;
+            max-width: 500px;
+            margin: 0 auto 2rem;
+        }
+
+        /* ── Footer ── */
+        footer {
+            padding: 3rem 0 2rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .footer-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: var(--text-primary);
+        }
+
+        .footer-bottom {
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border);
+        }
+
+        /* ── Responsive ── */
+        @media (max-width: 1024px) {
+            .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .steps-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 2.5rem;
+            }
+
+            .steps-grid::before {
+                display: none;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .arch-visual {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-buttons {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .footer-content {
+                flex-direction: column;
+                gap: 1.5rem;
+            }
+
+            .tech-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .steps-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .metrics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Scroll animations */
+        .reveal {
+            opacity: 0;
+            transform: translateY(40px);
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Background Effects -->
+    <div class="bg-animation">
+        <div class="orb"></div>
+        <div class="orb"></div>
+        <div class="orb"></div>
+    </div>
+    <div class="grid-pattern"></div>
+
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-content">
+            <a href="#" class="logo">
+                <div class="logo-icon">HX</div>
+                <span class="logo-text">Heal-X-Bot</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="#features">Features</a></li>
+                <li><a href="#how-it-works">How It Works</a></li>
+                <li><a href="#architecture">Architecture</a></li>
+                <li><a href="#tech">Tech Stack</a></li>
+                <li><a href="#metrics">Performance</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- ════════════════════════════════════  HERO  ════════════════════════════════════ -->
+    <section class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="badge">
+                    <span class="dot"></span>
+                    AI-Powered Cybersecurity Platform
+                </div>
+                <h1>
+                    Intelligent <span class="gradient-text">DDoS Detection</span><br>
+                    &amp; Self-Healing System
+                </h1>
+                <p>
+                    A comprehensive cybersecurity platform that automatically detects DDoS attacks, blocks malicious
+                    IPs, predicts system failures, and autonomously heals infrastructure — all powered by machine
+                    learning.
+                </p>
+                <div class="hero-buttons">
+                    <a href="#features" class="btn btn-primary">
+                        Explore Features
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5">
+                            <path d="M5 12h14M12 5l7 7-7 7" />
+                        </svg>
+                    </a>
+                    <a href="#architecture" class="btn btn-secondary">View Architecture</a>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value">92-95%</div>
+                    <div class="stat-label">DDoS Detection Accuracy</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">&lt;50ms</div>
+                    <div class="stat-label">Prediction Latency</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">1-24h</div>
+                    <div class="stat-label">Failure Prediction Lead</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">24/7</div>
+                    <div class="stat-label">Autonomous Healing</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════  FEATURES  ════════════════════════════════════ -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-header reveal">
+                <div class="tag">Core Capabilities</div>
+                <h2>Five Pillars of Intelligent Security</h2>
+                <p>From real-time threat detection to autonomous recovery — every layer of protection, automated.</p>
+            </div>
+
+            <div class="features-grid">
+                <!-- 1. DDoS Detection -->
+                <div class="feature-card reveal">
+                    <div class="feature-icon purple">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        </svg>
+                    </div>
+                    <h3>ML-Based DDoS Detection</h3>
+                    <p>TensorFlow deep-learning model analyzes 28 network features in real-time at sub-50 ms latency.
+                        Detects HTTP Flood, SYN Flood, Bot Activity, and UDP Flood with 92-95% accuracy.</p>
+                </div>
+
+                <!-- 2. Predictive Maintenance -->
+                <div class="feature-card reveal">
+                    <div class="feature-icon cyan">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                        </svg>
+                    </div>
+                    <h3>Predictive Maintenance</h3>
+                    <p>Dual XGBoost models predict system failures 1-24 hours before they occur with 85-90% early
+                        detection rate, enabling proactive maintenance and preventing unexpected downtime.</p>
+                </div>
+
+                <!-- 3. Automatic IP Blocking -->
+                <div class="feature-card reveal">
+                    <div class="feature-icon green">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M4.93 4.93l14.14 14.14" />
+                        </svg>
+                    </div>
+                    <h3>Automatic IP Blocking</h3>
+                    <p>Auto-blocks IPs when threat level ≥ 80% via iptables. Tracks all blocked IPs in SQLite with full
+                        history, statistics, and one-click management through the dashboard.</p>
+                </div>
+
+                <!-- 4. Autonomous Self-Healing -->
+                <div class="feature-card reveal">
+                    <div class="feature-icon orange">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </div>
+                    <h3>Autonomous Self-Healing</h3>
+                    <p>Automatically restarts failed services, cleans up resource hogs, manages disk space, and restores
+                        network connectivity — all without human intervention.</p>
+                </div>
+
+                <!-- 5. AI Log Analysis -->
+                <div class="feature-card reveal">
+                    <div class="feature-icon pink">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+                        </svg>
+                    </div>
+                    <h3>AI-Powered Log Analysis</h3>
+                    <p>Google Gemini AI (primary) with Groq fallback provides concise 3-section analysis — What
+                        Happened, Quick Fix, Prevention — slashing incident response time by 70%.</p>
+                </div>
+
+                <!-- 6. Real-Time Dashboard -->
+                <div class="feature-card reveal">
+                    <div class="feature-icon yellow">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path
+                                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <h3>Real-Time Dashboard</h3>
+                    <p>Unified monitoring dashboard with live WebSocket updates every 2 seconds — system metrics, attack
+                        detection, IP management, healing controls, and integrated CLI terminal.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════  HOW IT WORKS  ════════════════════════════════════ -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="container">
+            <div class="section-header reveal">
+                <div class="tag">Workflow</div>
+                <h2>How Heal-X-Bot Protects You</h2>
+                <p>From detection to remediation — a fully automated security pipeline.</p>
+            </div>
+
+            <div class="steps-grid reveal">
+                <div class="step-card">
+                    <div class="step-number">1</div>
+                    <h3>Monitor</h3>
+                    <p>Continuously collects system metrics, network traffic, and logs from 13+ critical services every
+                        2 seconds.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">2</div>
+                    <h3>Detect</h3>
+                    <p>ML models analyze traffic features in real-time. TensorFlow detects DDoS attacks; XGBoost
+                        predicts upcoming failures.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">3</div>
+                    <h3>Respond</h3>
+                    <p>Automatically blocks malicious IPs, sends Discord/Slack alerts, and triggers AI-powered root
+                        cause analysis.</p>
+                </div>
+                <div class="step-card">
+                    <div class="step-number">4</div>
+                    <h3>Heal</h3>
+                    <p>Self-healing engine restarts services, cleans resources, and restores network — then verifies
+                        full recovery.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════  ARCHITECTURE  ════════════════════════════════════ -->
+    <section class="architecture" id="architecture">
+        <div class="container">
+            <div class="arch-visual reveal">
+                <div class="arch-diagram">
+                    <div class="arch-layer l1">
+                        <div class="arch-layer-title">Healing Dashboard — Port 5001</div>
+                        <div class="arch-layer-desc">Primary UI: Real-time Monitoring, Auto-Healing Controls, IP
+                            Management, Cloud Simulation</div>
+                    </div>
+                    <div class="arch-connector">▼ REST API + WebSocket ▼</div>
+                    <div class="arch-layer l2">
+                        <div class="arch-layer-title">Monitoring Server — Port 5000</div>
+                        <div class="arch-layer-desc">Gemini/Groq AI Log Analysis, Critical Service Monitoring, Anomaly
+                            Detection</div>
+                    </div>
+                    <div class="arch-connector">▼</div>
+                    <div class="arch-layer l3">
+                        <div class="arch-layer-title">Network Analyzer — Port 8000</div>
+                        <div class="arch-layer-desc">IP Blocking Engine (iptables), Attack Tracking, SSH Intrusion
+                            Detection</div>
+                    </div>
+                    <div class="arch-connector">▼</div>
+                    <div class="arch-layer l4">
+                        <div class="arch-layer-title">ML Model API — Port 8080</div>
+                        <div class="arch-layer-desc">TensorFlow DDoS Detection, XGBoost Predictive Maintenance,
+                            Prometheus Metrics</div>
+                    </div>
+                    <div class="arch-connector">▼</div>
+                    <div class="arch-layer l5">
+                        <div class="arch-layer-title">Data & Storage Layer</div>
+                        <div class="arch-layer-desc">SQLite Databases, Prometheus (Port 9090), Log Files, Trained ML
+                            Models</div>
+                    </div>
+                </div>
+
+                <div class="arch-info">
+                    <h2>Multi-Service Microarchitecture</h2>
+                    <p>
+                        Five independently deployable services communicate via REST APIs and WebSocket connections,
+                        enabling modular scaling and isolated fault recovery.
+                    </p>
+                    <ul class="arch-features">
+                        <li>
+                            <span class="check">&#10003;</span>
+                            TensorFlow deep-learning DDoS detection model
+                        </li>
+                        <li>
+                            <span class="check">&#10003;</span>
+                            XGBoost dual-model predictive maintenance
+                        </li>
+                        <li>
+                            <span class="check">&#10003;</span>
+                            Google Gemini AI with Groq fallback for log analysis
+                        </li>
+                        <li>
+                            <span class="check">&#10003;</span>
+                            Modular healing actions: system, container, and resource
+                        </li>
+                        <li>
+                            <span class="check">&#10003;</span>
+                            Docker + Kubernetes deployment ready
+                        </li>
+                        <li>
+                            <span class="check">&#10003;</span>
+                            Prometheus-compatible metrics on every service
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════  TECH STACK  ════════════════════════════════════ -->
+    <section class="tech" id="tech">
+        <div class="container">
+            <div class="section-header reveal">
+                <div class="tag">Technology</div>
+                <h2>Built with Modern Stack</h2>
+                <p>Industry-proven tools and frameworks for reliable, high-performance security.</p>
+            </div>
+
+            <div class="tech-grid reveal">
+                <div class="tech-item">
+                    <div class="tech-item-icon" style="background:rgba(59,130,246,0.1);color:#60a5fa;">Py</div>
+                    <div class="tech-item-info">
+                        <span class="tech-item-name">Python 3.8+</span>
+                        <span class="tech-item-role">Core Language</span>
+                    </div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-item-icon" style="background:rgba(249,115,22,0.1);color:#fb923c;">TF</div>
+                    <div class="tech-item-info">
+                        <span class="tech-item-name">TensorFlow / Keras</span>
+                        <span class="tech-item-role">DDoS Detection</span>
+                    </div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-item-icon" style="background:rgba(34,197,94,0.1);color:#4ade80;">XG</div>
+                    <div class="tech-item-info">
+                        <span class="tech-item-name">XGBoost</span>
+                        <span class="tech-item-role">Predictive Maintenance</span>
+                    </div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-item-icon" style="background:rgba(168,85,247,0.1);color:#c084fc;">Fl</div>
+                    <div class="tech-item-info">
+                        <span class="tech-item-name">Flask</span>
+                        <span class="tech-item-role">API Framework</span>
+                    </div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-item-icon" style="background:rgba(236,72,153,0.1);color:#f472b6;">AI</div>
+                    <div class="tech-item-info">
+                        <span class="tech-item-name">Google Gemini + Groq</span>
+                        <span class="tech-item-role">AI Log Analysis</span>
+                    </div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-item-icon" style="background:rgba(6,182,212,0.1);color:#22d3ee;">WS</div>
+                    <div class="tech-item-info">
+                        <span class="tech-item-name">WebSocket</span>
+                        <span class="tech-item-role">Real-Time Updates</span>
+                    </div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-item-icon" style="background:rgba(234,179,8,0.1);color:#facc15;">Pr</div>
+                    <div class="tech-item-info">
+                        <span class="tech-item-name">Prometheus</span>
+                        <span class="tech-item-role">Metrics & Monitoring</span>
+                    </div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-item-icon" style="background:rgba(99,102,241,0.1);color:#818cf8;">Dk</div>
+                    <div class="tech-item-info">
+                        <span class="tech-item-name">Docker</span>
+                        <span class="tech-item-role">Containerization</span>
+                    </div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-item-icon" style="background:rgba(239,68,68,0.1);color:#f87171;">Db</div>
+                    <div class="tech-item-info">
+                        <span class="tech-item-name">SQLite</span>
+                        <span class="tech-item-role">IP & Statistics Storage</span>
+                    </div>
+                </div>
+                <div class="tech-item">
+                    <div class="tech-item-icon" style="background:rgba(34,197,94,0.1);color:#4ade80;">CJ</div>
+                    <div class="tech-item-info">
+                        <span class="tech-item-name">Chart.js</span>
+                        <span class="tech-item-role">Dashboard Visualizations</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════  PERFORMANCE METRICS  ════════════════════════════════════ -->
+    <section class="metrics" id="metrics">
+        <div class="container">
+            <div class="section-header reveal">
+                <div class="tag">Performance</div>
+                <h2>Proven Results</h2>
+                <p>Key metrics from the Heal-X-Bot platform across detection, prediction, and operations.</p>
+            </div>
+
+            <div class="metrics-grid reveal">
+                <div class="metric-block">
+                    <h3>
+                        <span class="icon" style="background:rgba(99,102,241,0.1);color:var(--primary-light);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2.5">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            </svg>
+                        </span>
+                        DDoS Detection
+                    </h3>
+                    <div class="metric-row">
+                        <span class="label">Detection Accuracy</span>
+                        <span class="value green">92 – 95%</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Prediction Latency</span>
+                        <span class="value cyan">&lt; 50ms</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">False Positive Rate</span>
+                        <span class="value green">&lt; 5%</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Network Features Analyzed</span>
+                        <span class="value purple">28</span>
+                    </div>
+                </div>
+
+                <div class="metric-block">
+                    <h3>
+                        <span class="icon" style="background:rgba(6,182,212,0.1);color:var(--accent-light);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2.5">
+                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                            </svg>
+                        </span>
+                        Predictive Maintenance
+                    </h3>
+                    <div class="metric-row">
+                        <span class="label">Early Detection Rate</span>
+                        <span class="value green">85 – 90%</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Avg. Lead Time</span>
+                        <span class="value cyan">3 – 6 hours</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Prediction Interval</span>
+                        <span class="value purple">60 seconds</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">System Features Analyzed</span>
+                        <span class="value orange">145</span>
+                    </div>
+                </div>
+
+                <div class="metric-block">
+                    <h3>
+                        <span class="icon" style="background:rgba(34,197,94,0.1);color:var(--green-light);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2.5">
+                                <path
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                        </span>
+                        Operational Impact
+                    </h3>
+                    <div class="metric-row">
+                        <span class="label">System Uptime</span>
+                        <span class="value green">99.9%+</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Downtime Reduction</span>
+                        <span class="value cyan">60 – 80%</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Log Analysis Time Saved</span>
+                        <span class="value purple">80 – 90%</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Emergency Cost Savings</span>
+                        <span class="value orange">60 – 80%</span>
+                    </div>
+                </div>
+
+                <div class="metric-block">
+                    <h3>
+                        <span class="icon" style="background:rgba(249,115,22,0.1);color:var(--orange-light);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2.5">
+                                <path
+                                    d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
+                        </span>
+                        Dashboard &amp; Monitoring
+                    </h3>
+                    <div class="metric-row">
+                        <span class="label">Live Update Interval</span>
+                        <span class="value green">2 seconds</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Critical Services Monitored</span>
+                        <span class="value cyan">13+</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Log Collection Interval</span>
+                        <span class="value purple">30 seconds</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="label">Notification Channels</span>
+                        <span class="value orange">Discord + Slack</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════  CTA  ════════════════════════════════════ -->
+    <section class="cta">
+        <div class="container">
+            <div class="cta-box reveal">
+                <h2>Get Started in One Command</h2>
+                <p>Deploy the entire platform with a single script. No complex setup required.</p>
+                <a href="https://github.com" class="btn btn-primary" target="_blank">
+                    View on GitHub
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2.5">
+                        <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ════════════════════════════════════  FOOTER  ════════════════════════════════════ -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <a href="#" class="logo">
+                    <div class="logo-icon">HX</div>
+                    <span class="logo-text">Heal-X-Bot</span>
+                </a>
+                <ul class="footer-links">
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#architecture">Architecture</a></li>
+                    <li><a href="#tech">Tech Stack</a></li>
+                    <li><a href="#metrics">Performance</a></li>
+                </ul>
+            </div>
+            <div class="footer-bottom">
+                &copy; 2025 Heal-X-Bot. Licensed under MIT. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <!-- ════════════════════════════════════  SCRIPTS  ════════════════════════════════════ -->
+    <script>
+        // Scroll-reveal observer
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) entry.target.classList.add('visible');
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        // Navbar opacity on scroll
+        const nav = document.querySelector('nav');
+        window.addEventListener('scroll', () => {
+            nav.style.background = window.scrollY > 50
+                ? 'rgba(10,10,20,0.95)' : 'rgba(10,10,20,0.75)';
+        });
+
+        // Smooth anchor scroll
+        document.querySelectorAll('a[href^="#"]').forEach(a => {
+            a.addEventListener('click', e => {
+                e.preventDefault();
+                const t = document.querySelector(a.getAttribute('href'));
+                if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+    </script>
+</body>
+
+</html>

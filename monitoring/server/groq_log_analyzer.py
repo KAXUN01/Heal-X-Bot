@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 from groq import Groq
+from log_sanitizer import LogSanitizer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -42,6 +43,9 @@ class GroqLogAnalyzer:
         
         # Analysis cache to avoid re-analyzing same issues
         self.analysis_cache = {}
+        
+        # Privacy sanitizer for removing sensitive data before sending to external AI
+        self.sanitizer = LogSanitizer()
         
     def analyze_error_log(self, log_entry: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -122,19 +126,25 @@ class GroqLogAnalyzer:
             response = self._call_groq_api(prompt)
             
             if response.get('status') == 'success':
+                # De-sanitize the response text to restore original values for display
+                response_text = response['text']
+                sanitizer_mapping = response.get('_sanitizer_mapping', {})
+                if sanitizer_mapping:
+                    response_text = self.sanitizer.desanitize(response_text, sanitizer_mapping)
+                
                 # Parse and structure the analysis
                 analysis_result = {
                     'status': 'success',
                     'timestamp': datetime.now().isoformat(),
                     'log_entry': log_entry,
                     'analysis': {
-                        'why': self._extract_why_section(response['text']),
-                        'how': self._extract_how_section(response['text']),
-                        'root_cause': self._extract_root_cause(response['text']),
-                        'solution': self._extract_solution(response['text']),
-                        'prevention': self._extract_prevention(response['text']),
-                        'severity': self._determine_severity(log_entry, response['text']),
-                        'full_analysis': response['text']
+                        'why': self._extract_why_section(response_text),
+                        'how': self._extract_how_section(response_text),
+                        'root_cause': self._extract_root_cause(response_text),
+                        'solution': self._extract_solution(response_text),
+                        'prevention': self._extract_prevention(response_text),
+                        'severity': self._determine_severity(log_entry, response_text),
+                        'full_analysis': response_text
                     }
                 }
                 
@@ -180,16 +190,22 @@ class GroqLogAnalyzer:
             response = self._call_groq_api(prompt)
             
             if response.get('status') == 'success':
+                # De-sanitize the response text
+                response_text = response['text']
+                sanitizer_mapping = response.get('_sanitizer_mapping', {})
+                if sanitizer_mapping:
+                    response_text = self.sanitizer.desanitize(response_text, sanitizer_mapping)
+                
                 return {
                     'status': 'success',
                     'timestamp': datetime.now().isoformat(),
                     'logs_analyzed': len(logs_to_analyze),
                     'pattern_analysis': {
-                        'common_issues': self._extract_common_issues(response['text']),
-                        'timeline': self._extract_timeline(response['text']),
-                        'correlation': self._extract_correlation(response['text']),
-                        'recommendations': self._extract_recommendations(response['text']),
-                        'full_analysis': response['text']
+                        'common_issues': self._extract_common_issues(response_text),
+                        'timeline': self._extract_timeline(response_text),
+                        'correlation': self._extract_correlation(response_text),
+                        'recommendations': self._extract_recommendations(response_text),
+                        'full_analysis': response_text
                     }
                 }
             else:
@@ -239,18 +255,24 @@ class GroqLogAnalyzer:
             response = self._call_groq_api(prompt)
             
             if response.get('status') == 'success':
+                # De-sanitize the response text
+                response_text = response['text']
+                sanitizer_mapping = response.get('_sanitizer_mapping', {})
+                if sanitizer_mapping:
+                    response_text = self.sanitizer.desanitize(response_text, sanitizer_mapping)
+                
                 return {
                     'status': 'success',
                     'fault_type': fault_type,
                     'service': service,
                     'timestamp': datetime.now().isoformat(),
                     'analysis': {
-                        'root_cause': self._extract_root_cause(response['text']),
+                        'root_cause': self._extract_root_cause(response_text),
                         # 'why' field removed to prevent duplication in UI
-                        'solution': self._extract_solution(response['text']),
-                        'prevention': self._extract_prevention(response['text']),
-                        'confidence': self._estimate_confidence(response['text']),
-                        'full_analysis': response['text']
+                        'solution': self._extract_solution(response_text),
+                        'prevention': self._extract_prevention(response_text),
+                        'confidence': self._estimate_confidence(response_text),
+                        'full_analysis': response_text
                     }
                 }
             else:
@@ -466,15 +488,21 @@ Provide a detailed but concise analysis.
             response = self._call_groq_api(prompt)
             
             if response.get('status') == 'success':
+                # De-sanitize the response text
+                response_text = response['text']
+                sanitizer_mapping = response.get('_sanitizer_mapping', {})
+                if sanitizer_mapping:
+                    response_text = self.sanitizer.desanitize(response_text, sanitizer_mapping)
+                
                 return {
                     'status': 'success',
                     'service': service_name,
                     'logs_analyzed': len(logs),
                     'health_analysis': {
-                        'overall_status': self._extract_health_status(response['text']),
-                        'key_issues': self._extract_key_issues(response['text']),
-                        'recommendations': self._extract_recommendations(response['text']),
-                        'full_analysis': response['text']
+                        'overall_status': self._extract_health_status(response_text),
+                        'key_issues': self._extract_key_issues(response_text),
+                        'recommendations': self._extract_recommendations(response_text),
+                        'full_analysis': response_text
                     }
                 }
             else:
@@ -576,6 +604,11 @@ Log #{i}:
             import threading
             import queue
             
+            # Sanitize the prompt to remove sensitive data before sending to external AI
+            sanitized_prompt, sanitizer_mapping = self.sanitizer.sanitize(prompt)
+            logger.info(f"Privacy: Sanitized {len(sanitizer_mapping)} sensitive items before sending to Groq")
+            
+            
             # Use threading with queue for timeout
             result_queue = queue.Queue()
             
@@ -586,7 +619,7 @@ Log #{i}:
                         response = self.client.chat.completions.create(
                             model=self.model_name,
                             messages=[
-                                {"role": "user", "content": prompt}
+                                {"role": "user", "content": sanitized_prompt}
                             ],
                             temperature=0.1,
                             max_tokens=350,
@@ -605,7 +638,7 @@ Log #{i}:
                         response = self.client.chat.completions.create(
                             model=fallback_model,
                             messages=[
-                                {"role": "user", "content": prompt}
+                                {"role": "user", "content": sanitized_prompt}
                             ],
                             temperature=0.1,
                             max_tokens=350,
@@ -649,7 +682,8 @@ Log #{i}:
                 if text:
                     return {
                         'status': 'success',
-                        'text': text
+                        'text': text,
+                        '_sanitizer_mapping': sanitizer_mapping
                     }
                 else:
                     return {

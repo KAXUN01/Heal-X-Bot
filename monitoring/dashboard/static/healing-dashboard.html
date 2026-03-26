@@ -11082,13 +11082,7 @@
                     if (!analysisContent) return;
 
                     const analysis = analysisData.analysis || {};
-                    const confidence = analysis.confidence || 0;
-                    const confidenceColor = confidence >= 80 ? 'var(--accent-green)' :
-                        confidence >= 50 ? 'var(--accent-yellow)' :
-                            'var(--accent-red)';
-                    const confidenceLabel = confidence >= 80 ? 'High' :
-                        confidence >= 50 ? 'Medium' :
-                            'Low';
+
 
                     let html = `
                 <div style="margin-bottom: 1rem;">
@@ -11096,9 +11090,6 @@
                         <h4 style="margin: 0; color: var(--text-primary);">
                             <i class="fas fa-brain"></i> AI Analysis Results
                         </h4>
-                        <span style="padding: 0.25rem 0.75rem; background: ${confidenceColor}; color: white; border-radius: 4px; font-size: 0.8rem; font-weight: bold;">
-                            ${confidenceLabel} Confidence (${confidence}%)
-                        </span>
                     </div>
                 </div>
             `;

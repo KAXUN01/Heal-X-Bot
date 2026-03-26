@@ -5415,10 +5415,19 @@
                                     lastDemoMetrics = data.metrics;
                                     pollAttempts = 0; // Reset counter on success
                                     console.log('✅ Demo metrics polled successfully:', Object.keys(lastDemoMetrics));
-                                    // Only refresh if demo mode is already enabled by user
-                                    if (demoMode) {
-                                        refreshPredictiveMaintenance();
+                                    
+                                    // Auto-enable demo mode since script is running
+                                    if (!demoMode) {
+                                        console.log('🔄 Auto-enabling demo mode from incoming metrics');
+                                        demoMode = true;
+                                        const toggle = document.getElementById('demoModeToggle');
+                                        if (toggle) {
+                                            toggle.checked = true;
+                                        }
                                     }
+                                    
+                                    // Always refresh if we got new demo metrics
+                                    refreshPredictiveMaintenance();
                                 } else if (demoMode) {
                                     // Log when in demo mode but no metrics available
                                     if (pollAttempts === 1 || pollAttempts % 5 === 0) {
@@ -5490,10 +5499,13 @@
                                 if (metricsData.metrics && Object.keys(metricsData.metrics).length > 0) {
                                     lastDemoMetrics = metricsData.metrics;
                                     console.log('✅ Demo metrics available:', lastDemoMetrics);
-                                    // Only use demo metrics if demo mode is manually enabled
-                                    // Don't auto-enable - user must check the checkbox
+                                    
+                                    // Auto-enable demo mode
                                     if (!demoMode) {
-                                        console.log('ℹ️ Demo metrics available, but demo mode is disabled. Check the "Demo Mode" checkbox to use them.');
+                                        console.log('🔄 Auto-enabling demo mode from incoming metrics');
+                                        demoMode = true;
+                                        const toggle = document.getElementById('demoModeToggle');
+                                        if (toggle) toggle.checked = true;
                                     }
                                 } else if (demoMode) {
                                     // In demo mode, if no metrics returned, log but don't clear lastDemoMetrics

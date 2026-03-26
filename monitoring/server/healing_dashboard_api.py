@@ -465,7 +465,7 @@ def load_config():
     }
     
     return {
-    "auto_restart": False,
+    "auto_restart": True,
     "cpu_threshold": 90.0,
     "memory_threshold": 85.0,
     "disk_threshold": 80.0,
@@ -1631,9 +1631,9 @@ async def get_services():
             "stopped": 0
         }
 
-@app.get("/api/config")
-async def get_config():
-    """Get system configuration"""
+@app.get("/api/system-config")
+async def get_system_config():
+    """Get system configuration (monitoring, healing, notifications)"""
     try:
         return {
             "success": True,
@@ -2582,7 +2582,7 @@ def stop_service(service_name: str) -> bool:
         return False
 
 def restart_docker_container(container_name: str) -> bool:
-    """Restart a Docker container"""
+    """Restart a Docker container (handles both running and stopped containers)"""
     if not DOCKER_AVAILABLE:
         logger.error("Docker is not available")
         return False
@@ -2590,7 +2590,17 @@ def restart_docker_container(container_name: str) -> bool:
     try:
         docker_client = docker.from_env()
         container = docker_client.containers.get(container_name)
-        container.restart()
+        container_state = container.status
+        
+        if container_state in ('exited', 'stopped', 'dead', 'created'):
+            # For stopped/exited containers, use start() instead of restart()
+            logger.info(f"🔄 Container {container_name} is {container_state}, starting it...")
+            container.start()
+        else:
+            # For running or other states, use restart()
+            logger.info(f"🔄 Container {container_name} is {container_state}, restarting it...")
+            container.restart()
+        
         logger.info(f"✅ Successfully restarted Docker container: {container_name}")
         return True
     except docker.errors.NotFound:

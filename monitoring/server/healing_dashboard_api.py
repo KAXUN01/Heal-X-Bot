@@ -3956,8 +3956,9 @@ async def monitoring_loop():
                         logger.info(f"🔄 Auto-restarting service: {service_name} (status: {service_status})")
                         restart_service(service_name)
             
-            # Check resource hogs
-            auto_detect_resource_hogs()
+            # Check resource hogs using thread pool to prevent blocking event loop
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, auto_detect_resource_hogs)
             
             # Cleanup old notification history entries (every 100 iterations = ~3.3 minutes)
             if loop_counter % 100 == 0:
@@ -4210,7 +4211,8 @@ async def restart_service_endpoint(service_name: str):
 @app.get("/api/processes/top")
 async def get_top_processes_endpoint(limit: int = 10):
     """Get top processes"""
-    return get_top_processes(limit)
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, get_top_processes, limit)
 
 @app.post("/api/processes/kill")
 async def kill_process_endpoint(data: dict):

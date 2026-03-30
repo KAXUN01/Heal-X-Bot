@@ -5400,15 +5400,15 @@
                                     pollAttempts = 0; // Reset counter on success
                                     console.log('✅ Demo metrics polled successfully:', Object.keys(lastDemoMetrics));
                                     
-                                    // Auto-enable demo mode since script is running
-                                    if (!demoMode) {
-                                        console.log('🔄 Auto-enabling demo mode from incoming metrics');
-                                        demoMode = true;
-                                        const toggle = document.getElementById('demoModeToggle');
-                                        if (toggle) {
-                                            toggle.checked = true;
-                                        }
-                                    }
+                                    // Auto-enable demo mode since script is running - DISABLED
+                                    // if (!demoMode) {
+                                    //     console.log('🔄 Auto-enabling demo mode from incoming metrics');
+                                    //     demoMode = true;
+                                    //     const toggle = document.getElementById('demoModeToggle');
+                                    //     if (toggle) {
+                                    //         toggle.checked = true;
+                                    //     }
+                                    // }
                                     
                                     // Always refresh if we got new demo metrics
                                     refreshPredictiveMaintenance();
@@ -5484,13 +5484,13 @@
                                     lastDemoMetrics = metricsData.metrics;
                                     console.log('✅ Demo metrics available:', lastDemoMetrics);
                                     
-                                    // Auto-enable demo mode
-                                    if (!demoMode) {
-                                        console.log('🔄 Auto-enabling demo mode from incoming metrics');
-                                        demoMode = true;
-                                        const toggle = document.getElementById('demoModeToggle');
-                                        if (toggle) toggle.checked = true;
-                                    }
+                                    // Auto-enable demo mode - DISABLED to prevent always-on demo mode
+                                    // if (!demoMode) {
+                                    //     console.log('🔄 Auto-enabling demo mode from incoming metrics');
+                                    //     demoMode = true;
+                                    //     const toggle = document.getElementById('demoModeToggle');
+                                    //     if (toggle) toggle.checked = true;
+                                    // }
                                 } else if (demoMode) {
                                     // In demo mode, if no metrics returned, log but don't clear lastDemoMetrics
                                     // This preserves the last known demo metrics from polling

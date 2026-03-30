@@ -5392,8 +5392,7 @@
                         if (!predictiveDemoScriptRunning) {
                             if (lastDemoMetrics) {
                                 lastDemoMetrics = null;
-                                console.log('🔴 Predictive demo script stopped -> clearing demo values and using live metrics');
-                                showNotification('🔴 Demo script stopped, dashboard switched to real metrics', 'info');
+                                // Demo script stopped - switch to live metrics silently
                             }
 
                             if (demoMode) {

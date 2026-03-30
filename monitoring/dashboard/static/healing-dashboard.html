@@ -5271,6 +5271,7 @@
                 let demoMode = false;
                 let predictiveDemoScriptRunning = false;
                 let lastDemoMetrics = null;
+                let lastDemoMetricsTimestamp = null;
                 let currentDemoScenario = null;
 
                 async function toggleDemoMode() {
@@ -5279,7 +5280,7 @@
                     console.log('🎭 Demo mode:', demoMode ? 'ON' : 'OFF');
 
                     if (demoMode) {
-                        showNotification('🎭 Demo mode enabling - Starting test scenarios...', 'info');
+                        showNotification('', 'info');
 
                         try {
                             // Start the backend demo script
@@ -5373,35 +5374,23 @@
                             return; // Don't poll if tab is not active
                         }
 
-                        // Check predictive demo script status
-                        try {
-                            const statusResp = await fetch('/api/demo/predictive/status', {
-                                cache: 'no-cache',
-                                headers: { 'Cache-Control': 'no-cache' }
-                            });
-                            if (statusResp.ok) {
-                                const statusData = await statusResp.json();
-                                predictiveDemoScriptRunning = statusData.running || false;
-                            } else {
-                                predictiveDemoScriptRunning = false;
-                            }
-                        } catch (e) {
+                        // Use demo metrics freshness to infer whether script is running
+                        const now = Date.now();
+                        const staleThreshold = 12000; // 12 seconds
+
+                        if (lastDemoMetricsTimestamp && (now - lastDemoMetricsTimestamp > staleThreshold)) {
                             predictiveDemoScriptRunning = false;
-                        }
-
-                        if (!predictiveDemoScriptRunning) {
-                            if (lastDemoMetrics) {
-                                lastDemoMetrics = null;
-                                // Demo script stopped - switch to live metrics silently
-                            }
-
+                            lastDemoMetrics = null;
+                            lastDemoMetricsTimestamp = null;
                             if (demoMode) {
                                 demoMode = false;
                                 const toggle = document.getElementById('demoModeToggle');
                                 if (toggle) toggle.checked = false;
                             }
+                        }
 
-                            // Continue to fetch live metrics via refreshPredictiveMaintenance()
+                        if (!predictiveDemoScriptRunning) {
+                            // Continue to fetch live system metrics
                             refreshPredictiveMaintenance();
                             return;
                         }
@@ -5431,19 +5420,11 @@
                                 const data = await response.json();
                                 if (data.metrics && Object.keys(data.metrics).length > 0) {
                                     lastDemoMetrics = data.metrics;
+                                    lastDemoMetricsTimestamp = Date.now();
+                                    predictiveDemoScriptRunning = true;
                                     pollAttempts = 0; // Reset counter on success
                                     console.log('✅ Demo metrics polled successfully:', Object.keys(lastDemoMetrics));
-                                    
-                                    // Auto-enable demo mode since script is running - DISABLED
-                                    // if (!demoMode) {
-                                    //     console.log('🔄 Auto-enabling demo mode from incoming metrics');
-                                    //     demoMode = true;
-                                    //     const toggle = document.getElementById('demoModeToggle');
-                                    //     if (toggle) {
-                                    //         toggle.checked = true;
-                                    //     }
-                                    // }
-                                    
+
                                     // Always refresh if we got new demo metrics
                                     refreshPredictiveMaintenance();
                                 } else if (demoMode) {

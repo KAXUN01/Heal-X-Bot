@@ -268,31 +268,36 @@ fi
     
     # Fix protobuf compatibility (critical for TensorFlow)
     log_info "Fixing protobuf compatibility for TensorFlow..."
-    # TensorFlow 2.20.0 requires protobuf 5.28.0 specifically
+    # TensorFlow 2.16.1 requires protobuf >= 3.20.3 and < 5.0.0dev
+    # Using protobuf 4.25.3 which is compatible with TensorFlow 2.16.1
     # Uninstall any existing protobuf first, then install correct version
     python3 -m pip uninstall -y protobuf 2>/dev/null || true
-    python3 -m pip install --no-cache-dir "protobuf==5.28.0" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || {
-        log_error "Failed to install protobuf 5.28.0 - TensorFlow may not work"
+    python3 -m pip install --no-cache-dir "protobuf==4.25.3" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || {
+        log_error "Failed to install protobuf 4.25.3 - TensorFlow may not work"
     }
     python3 -m pip install --upgrade "numpy<2" "typing-extensions>=4.12.0" googleapis-common-protos -q 2>/dev/null || true
     
-    # Verify protobuf version and test import
+    # Verify protobuf version and test compatibility
     PROTOBUF_VERSION=$(python3 -m pip show protobuf 2>/dev/null | grep Version | awk '{print $2}' || echo "unknown")
     log_info "Protobuf version: $PROTOBUF_VERSION"
     
-    # Test protobuf import
-    if python3 -c "from google.protobuf import runtime_version" 2>/dev/null; then
-        log_success "Protobuf is compatible with TensorFlow"
+    # Verify protobuf is importable and version is correct
+    if [ "$PROTOBUF_VERSION" = "4.25.3" ] && python3 -c "import google.protobuf" 2>/dev/null; then
+        # Test TensorFlow import if available (optional check)
+        if python3 -c "import tensorflow as tf" 2>/dev/null; then
+            log_success "Protobuf 4.25.3 is compatible with TensorFlow"
+        else
+            log_success "Protobuf 4.25.3 installed successfully (TensorFlow will be checked when imported)"
+        fi
     else
-        log_warning "Protobuf runtime_version not available - TensorFlow may have issues"
-        log_info "Trying to fix by reinstalling protobuf..."
-        python3 -m pip install --force-reinstall --no-deps "protobuf==5.28.0" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || true
+        log_warning "Protobuf version mismatch or import failed - attempting reinstall..."
+        python3 -m pip install --force-reinstall --no-deps "protobuf==4.25.3" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || true
     fi
     
     # Install google-generativeai separately (required for incident bot)
-    # Newer versions (>=0.6.0) should work with protobuf 5.x
+    # Newer versions (>=0.8.0) should work with protobuf 4.x
     log_info "Installing Google Generative AI for incident bot..."
-    if python3 -m pip install "google-generativeai>=0.6.0" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" | grep -q "error\|conflict"; then
+    if python3 -m pip install "google-generativeai>=0.8.0" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" | grep -q "error\|conflict"; then
         log_warning "Google Generative AI installation had conflicts, trying alternative approach..."
         # Try installing with --upgrade to resolve conflicts
         python3 -m pip install "google-generativeai>=0.6.0" --upgrade 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || \
@@ -300,6 +305,14 @@ fi
     else
         log_success "Google Generative AI installed successfully"
     fi
+    
+    # Install Groq client explicitly (to ensure it's available)
+    log_info "Installing Groq client..."
+    python3 -m pip install "groq>=0.4.0" 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || log_warning "Failed to install Groq client"
+    
+    # Install FastAPI and web framework dependencies (required for healing dashboard)
+    log_info "Installing FastAPI and web framework dependencies..."
+    python3 -m pip install fastapi uvicorn pydantic python-dotenv psutil requests docker 2>&1 | tee -a "$LOG_DIR/dependency-install.log" || log_warning "Failed to install FastAPI dependencies"
     
     log_success "Dependencies installed"
 }

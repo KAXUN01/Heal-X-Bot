@@ -31,8 +31,7 @@ class Config:
             load_dotenv(dotenv_path=env_path)
         
         # AI Configuration
-        self.gemini_api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
-        self.google_api_key = os.getenv('GOOGLE_API_KEY')
+        self.groq_api_key = os.getenv('GROQ_API_KEY')
         
         # Slack/Discord Integration
         self.slack_webhook = os.getenv('SLACK_WEBHOOK')
@@ -81,7 +80,7 @@ class Config:
         
         Args:
             required_keys: List of required configuration keys. 
-                          If None, only checks for GEMINI_API_KEY
+                          If None, only checks for GROQ_API_KEY
         
         Returns:
             True if valid, raises ConfigurationError if invalid
@@ -93,12 +92,12 @@ class Config:
         warnings = []
         
         # Check for required API keys if specified
-        if 'gemini_api_key' in required_keys and not self.gemini_api_key:
-            errors.append("GEMINI_API_KEY or GOOGLE_API_KEY is required but not set")
-        elif self.gemini_api_key:
-            # Validate API key format (should start with AIza and be at least 20 chars)
-            if len(self.gemini_api_key) < 20 or not self.gemini_api_key.startswith('AIza'):
-                warnings.append("GEMINI_API_KEY format appears invalid (should start with 'AIza' and be at least 20 characters)")
+        if 'groq_api_key' in required_keys and not self.groq_api_key:
+            errors.append("GROQ_API_KEY is required but not set")
+        elif self.groq_api_key:
+            # Validate API key format (should be at least 20 chars)
+            if len(self.groq_api_key) < 20:
+                warnings.append("GROQ_API_KEY format appears invalid (should be at least 20 characters)")
         
         if 'discord_webhook' in required_keys and not self.discord_webhook:
             errors.append("DISCORD_WEBHOOK is required but not set")
@@ -175,9 +174,9 @@ class Config:
             errors.append(f"Port conflicts detected: {set(duplicates)}")
         
         # Validate API keys format if present
-        if self.gemini_api_key:
-            if len(self.gemini_api_key) < 20 or not self.gemini_api_key.startswith('AIza'):
-                warnings.append("GEMINI_API_KEY format appears invalid")
+        if self.groq_api_key:
+            if len(self.groq_api_key) < 20:
+                warnings.append("GROQ_API_KEY format appears invalid")
         
         if self.discord_webhook and not self.discord_webhook.startswith('https://discord.com/api/webhooks/'):
             warnings.append("DISCORD_WEBHOOK URL format appears invalid")
@@ -215,7 +214,7 @@ class Config:
             Configuration as dictionary (sensitive values masked)
         """
         return {
-            'gemini_api_key': '***' if self.gemini_api_key else None,
+            'groq_api_key': '***' if self.groq_api_key else None,
             'slack_webhook': '***' if self.slack_webhook else None,
             'discord_webhook': '***' if self.discord_webhook else None,
             'aws_region': self.aws_region,

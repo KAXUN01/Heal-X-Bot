@@ -320,15 +320,20 @@ def run_scenario(scenario_key: str, scenario: Dict[str, Any], delay: float = 5.0
 def run_demo_loop(scenario_order: List[str] = None, delay: float = 5.0, loop: bool = False):
     """Run all scenarios in sequence"""
     if scenario_order is None:
-        scenario_order = ["low", "medium", "high", "extreme"]
+        scenario_order = ["extreme"]
     
     print(f"{Colors.BOLD}Starting automated demo...{Colors.ENDC}")
     print(f"{Colors.OKCYAN}Dashboard URL: {DASHBOARD_URL}{Colors.ENDC}")
     print(f"{Colors.OKCYAN}Make sure Demo Mode is enabled in the dashboard!{Colors.ENDC}\n")
     time.sleep(2)
     
+    start_time = time.time()
     iteration = 0
     while True:
+        if time.time() - start_time >= 60:
+            print(f"\n{Colors.OKGREEN}✅ 1 minute elapsed. Stopping demo.{Colors.ENDC}\n")
+            break
+            
         iteration += 1
         if iteration > 1:
             print(f"\n{Colors.BOLD}{Colors.HEADER}🔄 Starting iteration {iteration}{Colors.ENDC}\n")

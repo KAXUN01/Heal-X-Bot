@@ -1,0 +1,108 @@
+{
+  "last_updated": "2026-01-17T13:28:00",
+  "templates": [
+    {
+      "id": "low",
+      "name": "Low Resources",
+      "description": "Minimal resource allocation for resource-constrained systems",
+      "cpu_cores": 1,
+      "memory_gb": 2,
+      "services": {
+        "model": {
+          "cpus": "0.5",
+          "memory": "1G"
+        },
+        "server": {
+          "cpus": "0.5",
+          "memory": "512M"
+        }
+      }
+    },
+    {
+      "id": "medium",
+      "name": "Medium Resources",
+      "description": "Balanced resource allocation (recommended)",
+      "cpu_cores": 2,
+      "memory_gb": 4,
+      "services": {
+        "model": {
+          "cpus": "1",
+          "memory": "2G"
+        },
+        "server": {
+          "cpus": "1",
+          "memory": "1G"
+        }
+      }
+    },
+    {
+      "id": "high",
+      "name": "High Resources",
+      "description": "Maximum resource allocation for high-performance systems",
+      "cpu_cores": 4,
+      "memory_gb": 8,
+      "services": {
+        "model": {
+          "cpus": "2",
+          "memory": "4G"
+        },
+        "server": {
+          "cpus": "1",
+          "memory": "2G"
+        }
+      }
+    },
+    {
+      "id": "ultra",
+      "name": "Ultra Performance",
+      "description": "Enterprise-grade allocation for AI/ML intensive workloads",
+      "cpu_cores": 8,
+      "memory_gb": 16,
+      "services": {
+        "model": {
+          "cpus": "4",
+          "memory": "8G"
+        },
+        "server": {
+          "cpus": "2",
+          "memory": "4G"
+        }
+      }
+    },
+    {
+      "id": "development",
+      "name": "Development Mode",
+      "description": "Lightweight allocation for development and testing",
+      "cpu_cores": 1,
+      "memory_gb": 1,
+      "services": {
+        "model": {
+          "cpus": "0.25",
+          "memory": "512M"
+        },
+        "server": {
+          "cpus": "0.25",
+          "memory": "256M"
+        }
+      }
+    },
+    {
+      "id": "microservices",
+      "name": "Microservices Optimized",
+      "description": "Balanced allocation optimized for containerized microservices",
+      "cpu_cores": 6,
+      "memory_gb": 12,
+      "services": {
+        "model": {
+          "cpus": "2",
+          "memory": "6G"
+        },
+        "server": {
+          "cpus": "2",
+          "memory": "3G"
+        }
+      }
+    }
+  ]
+}
+

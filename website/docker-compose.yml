@@ -1,0 +1,9 @@
+version: "3.8"
+
+services:
+  healxbot-website:
+    build: .
+    container_name: healxbot-website
+    ports:
+      - "80:80"
+    restart: unless-stopped

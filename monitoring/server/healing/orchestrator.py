@@ -40,13 +40,13 @@ class AutoHealer:
     - Logs all healing actions
     """
     
-    def __init__(self, gemini_analyzer=None, system_log_collector=None, 
+    def __init__(self, groq_analyzer=None, system_log_collector=None, 
                  critical_services_monitor=None, container_healer=None,
                  root_cause_analyzer=None, discord_notifier=None, event_emitter=None):
         """Initialize AutoHealer
         
         Args:
-            gemini_analyzer: Gemini AI analyzer instance
+            groq_analyzer: Groq AI analyzer instance
             system_log_collector: System log collector instance
             critical_services_monitor: Critical services monitor instance
             container_healer: Container healer instance
@@ -54,7 +54,7 @@ class AutoHealer:
             discord_notifier: Discord notification function
             event_emitter: Event emitter instance
         """
-        self.gemini_analyzer = gemini_analyzer
+        self.groq_analyzer = groq_analyzer
         self.system_log_collector = system_log_collector
         self.critical_services_monitor = critical_services_monitor
         self.container_healer = container_healer
@@ -79,6 +79,7 @@ class AutoHealer:
         # Map action types to handlers
         self.action_handlers = {
             'restart_service': self.system_actions.restart_service,
+            'start_failed_service': self.system_actions.start_failed_service,
             'fix_permissions': self.system_actions.fix_permissions,
             'clear_cache': self.system_actions.clear_cache,
             'rotate_logs': self.system_actions.rotate_logs,
@@ -219,7 +220,8 @@ class AutoHealer:
             age_seconds = (datetime.now() - error_time).total_seconds()
             if age_seconds > 300:  # 5 minutes
                 return False
-        except:
+        except Exception as e:
+            logger.warning(f"Error parsing timestamp in _should_heal: {e}")
             pass
         
         # Check if we've already tried healing this error
@@ -264,12 +266,12 @@ class AutoHealer:
         
         try:
             # Step 1: Analyze error with AI
-            if not self.gemini_analyzer:
+            if not self.groq_analyzer:
                 healing_result['error_message'] = 'Gemini analyzer not available'
                 self.history.record(healing_result)
                 return healing_result
             
-            analysis = self.gemini_analyzer.analyze_log(error)
+            analysis = self.groq_analyzer.analyze_error_log(error)
             if not analysis:
                 healing_result['error_message'] = 'AI analysis failed'
                 self.history.record(healing_result)
@@ -344,7 +346,7 @@ class AutoHealer:
         
         # Service restart
         if any(keyword in solution_text.lower() for keyword in ['restart', 'reload', 'systemctl']):
-            if 'systemd' in service or any(svc in service for svc in ['docker', 'apache', 'nginx', 'cron']):
+            if 'systemd' in service or any(svc in service for svc in ['docker', 'apache', 'cron']):
                 commands.append({
                     'type': 'restart_service',
                     'service': service,
@@ -451,12 +453,6 @@ class AutoHealer:
         logger.info(f"Timestamp: {start_time.isoformat()}")
         logger.info("="*70)
         
-        print(f"\n{'='*70}")
-        print(f"🔧 HEALING PROCESS STARTED")
-        print(f"{'='*70}")
-        print(f"Fault: {fault_type.upper()}")
-        print(f"Service: {service}")
-        print(f"{'='*70}\n")
         
         healing_result = {
             'timestamp': start_time.isoformat(),
@@ -483,11 +479,6 @@ class AutoHealer:
                 logger.info(f"   Confidence: {confidence:.0%}")
                 logger.info(f"   Classification: {analysis.get('fault_classification', 'Unknown')}")
                 
-                print(f"📊 Root Cause Analysis:")
-                print(f"   Cause: {root_cause}")
-                print(f"   Confidence: {confidence:.0%}")
-                if analysis.get('recommended_actions'):
-                    print(f"   Recommended Actions: {len(analysis.get('recommended_actions', []))} actions identified")
                 
                 # Send Discord notification for healing attempt
                 if self.discord_notifier:
@@ -499,17 +490,39 @@ class AutoHealer:
             
             # Step 2: Determine healing action based on fault type
             logger.info(f"📋 STEP 2: DETERMINING HEALING ACTION")
-            print(f"📋 Determining healing action for {fault_type}...")
+            logger.info(f"📋 STEP 2: DETERMINING HEALING ACTION")
             healing_action = None
             
-            if fault_type == 'service_crash':
-                # Try to restart the container
-                container_name = service if service.startswith('cloud-sim-') else f'cloud-sim-{service}'
-                healing_action = {
-                    'type': 'restart_container',
-                    'container': container_name,
-                    'description': f'Restart crashed container {container_name}'
-                }
+            if fault_type in ('service_crash', 'service_failed'):
+                # Check if this is a systemd service (not a Docker container)
+                # Systemd service names typically don't start with 'cloud-sim-' and may end with '.service'
+                is_systemd_service = (
+                    not service.startswith('cloud-sim-') and
+                    (service.endswith('.service') or 
+                     service in ['apport-autoreport', 'cron', 'ssh', 'nginx', 'apache2', 
+                                'docker', 'postgresql', 'mysql', 'redis', 'fail2ban', 'rsyslog'] or
+                     '-' not in service or  # Simple service names are often systemd
+                     'systemd' in service.lower())
+                )
+                
+                if is_systemd_service:
+                    # Use systemd restart action
+                    service_name = service.replace('.service', '')
+                    healing_action = {
+                        'type': 'start_failed_service',
+                        'service': service_name,
+                        'description': f'Restart failed systemd service {service_name}'
+                    }
+                    logger.info(f"   Detected systemd service: {service_name}")
+                else:
+                    # It's a Docker container
+                    container_name = service if service.startswith('cloud-sim-') else f'cloud-sim-{service}'
+                    healing_action = {
+                        'type': 'restart_container',
+                        'container': container_name,
+                        'description': f'Restart crashed container {container_name}'
+                    }
+                    logger.info(f"   Detected Docker container: {container_name}")
             elif fault_type == 'cpu_exhaustion':
                 healing_action = {
                     'type': 'cleanup_resources',
@@ -537,14 +550,15 @@ class AutoHealer:
                 logger.info(f"   Action: {healing_action.get('type', 'unknown')}")
                 logger.info(f"   Description: {healing_action.get('description', 'No description')}")
                 
-                print(f"⚙️  Executing healing action: {healing_action.get('description', 'Unknown action')}")
+                logger.info(f"   Action: {healing_action.get('type', 'unknown')}")
+                logger.info(f"   Description: {healing_action.get('description', 'No description')}")
                 
                 action_result = self._execute_healing_action(healing_action, fault)
                 healing_result['actions'].append(action_result.to_dict())
                 
                 if action_result.success:
                     logger.info(f"   ✅ Action executed successfully")
-                    print(f"   ✅ Action successful: {action_result.output or 'No output'}")
+                    logger.info(f"   ✅ Action executed successfully: {action_result.output or 'No output'}")
                     
                     # Step 4: Verify healing
                     time.sleep(3)  # Wait for changes to take effect
@@ -563,13 +577,6 @@ class AutoHealer:
                         logger.info(f"Verification: {verification.get('details', 'Verified')}")
                         logger.info("="*70)
                         
-                        print(f"\n{'='*70}")
-                        print(f"✅ HEALING SUCCESSFUL!")
-                        print(f"{'='*70}")
-                        print(f"Fault: {fault_type}")
-                        print(f"Service: {service}")
-                        print(f"Verification: {verification.get('details', 'Verified')}")
-                        print(f"{'='*70}\n")
                         
                         # Send success Discord notification
                         if self.discord_notifier:
@@ -585,14 +592,12 @@ class AutoHealer:
                         logger.warning(f"Reason: {verification.get('details', 'Verification failed')}")
                         logger.warning("="*70)
                         
-                        print(f"\n{'='*70}")
-                        print(f"❌ HEALING VERIFICATION FAILED")
-                        print(f"{'='*70}")
-                        print(f"Reason: {verification.get('details', 'Verification failed')}")
-                        print(f"{'='*70}\n")
                         
                         # Generate manual instructions
-                        from ..core.config import get_config
+                        try:
+                            from ..core.config import get_config
+                        except ImportError:
+                            from core.config import get_config
                         config = get_config()
                         healing_result['manual_instructions'] = generate_manual_instructions(
                             fault, analysis, config.project_root
@@ -606,7 +611,10 @@ class AutoHealer:
                     healing_result['error_message'] = action_result.error or 'Healing action failed'
                     
                     # Generate manual instructions
-                    from ..core.config import get_config
+                    try:
+                        from ..core.config import get_config
+                    except ImportError:
+                        from core.config import get_config
                     config = get_config()
                     healing_result['manual_instructions'] = generate_manual_instructions(
                         fault, analysis, config.project_root
@@ -618,7 +626,10 @@ class AutoHealer:
             else:
                 # Auto-execute disabled or no action determined
                 healing_result['status'] = 'pending_approval' if not self.auto_execute else 'no_action'
-                from ..core.config import get_config
+                try:
+                    from ..core.config import get_config
+                except ImportError:
+                    from core.config import get_config
                 config = get_config()
                 healing_result['manual_instructions'] = generate_manual_instructions(
                     fault, analysis, config.project_root
@@ -628,7 +639,10 @@ class AutoHealer:
             logger.error(f"Error during cloud fault healing: {e}")
             healing_result['error_message'] = str(e)
             healing_result['status'] = 'exception'
-            from ..core.config import get_config
+            try:
+                from ..core.config import get_config
+            except ImportError:
+                from core.config import get_config
             config = get_config()
             healing_result['manual_instructions'] = generate_manual_instructions(fault, None, config.project_root)
         
@@ -646,13 +660,13 @@ class AutoHealer:
         return self.history.get_statistics()
 
 
-def initialize_auto_healer(gemini_analyzer=None, system_log_collector=None, 
+def initialize_auto_healer(groq_analyzer=None, system_log_collector=None, 
                           critical_services_monitor=None, container_healer=None,
                           root_cause_analyzer=None, discord_notifier=None, event_emitter=None):
     """Initialize the auto-healer (singleton pattern)
     
     Args:
-        gemini_analyzer: Gemini AI analyzer instance
+        groq_analyzer: Groq AI analyzer instance
         system_log_collector: System log collector instance
         critical_services_monitor: Critical services monitor instance
         container_healer: Container healer instance
@@ -667,7 +681,7 @@ def initialize_auto_healer(gemini_analyzer=None, system_log_collector=None,
     
     if _auto_healer_instance is None:
         _auto_healer_instance = AutoHealer(
-            gemini_analyzer=gemini_analyzer,
+            groq_analyzer=groq_analyzer,
             system_log_collector=system_log_collector,
             critical_services_monitor=critical_services_monitor,
             container_healer=container_healer,

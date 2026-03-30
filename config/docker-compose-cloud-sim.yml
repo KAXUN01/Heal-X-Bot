@@ -11,12 +11,12 @@ networks:
     driver: bridge
 
 services:
-  # Load Balancer (nginx) - Port 8080
+  # Load Balancer (nginx) - Port 80
   load-balancer:
     image: nginx:alpine
     container_name: cloud-sim-load-balancer
     ports:
-      - "8080:80"
+      - "80:80"
     volumes:
       - ./cloud-sim/nginx-lb.conf:/etc/nginx/nginx.conf:ro
     networks:

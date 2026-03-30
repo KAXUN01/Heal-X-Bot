@@ -28,9 +28,11 @@ class ResourceMonitor:
             Dictionary with CPU usage information
         """
         try:
-            cpu_percent = psutil.cpu_percent(interval=1)
+            # interval=None is non-blocking (returns usage since last call)
+            cpu_percent = psutil.cpu_percent(interval=None)
             cpu_count = psutil.cpu_count()
-            cpu_per_core = psutil.cpu_percent(interval=1, percpu=True)
+            # Also use simple list comprehension for per-core if needed, or avoid interval there too
+            cpu_per_core = psutil.cpu_percent(interval=None, percpu=True)
             
             return {
                 'cpu_percent': round(cpu_percent, 2),

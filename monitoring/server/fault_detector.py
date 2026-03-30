@@ -7,7 +7,9 @@ import logging
 import threading
 import time
 import socket
+import subprocess
 import requests
+import psutil
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Callable
 from container_monitor import ContainerMonitor
@@ -39,13 +41,13 @@ class FaultDetector:
         self.detected_faults = []
         self.max_fault_history = 100
         
-        # Service ports to check
+        # Service ports to check - Actual Heal-X-Bot services
         self.service_ports = {
-            'load-balancer': 8080,
-            'web-server': 8081,
-            'api-server': 8082,
-            'database': 5432,
-            'cache': 6379
+            'healing-dashboard': 5001,    # Healing Dashboard API
+            'monitoring-server': 5000,    # Main Monitoring Server
+            'ddos-model': 8080,           # ML DDoS Detection Model
+            'nginx-container': 80,        # Nginx Web Server Container
+            'mysql-container': 3306       # MySQL Database Container
         }
         
         logger.info("Fault Detector initialized")
@@ -114,11 +116,27 @@ class FaultDetector:
         network_faults = self.detect_network_issues()
         faults.extend(network_faults)
         
+        # 4. Detect failed systemd services (Ubuntu server)
+        service_faults = self.detect_failed_services()
+        faults.extend(service_faults)
+        
+        # 5. Detect disk pressure (partitions >90% full)
+        disk_faults = self.detect_disk_pressure()
+        faults.extend(disk_faults)
+        
+        # 6. Detect memory pressure (high RAM + swap usage)
+        memory_faults = self.detect_memory_pressure()
+        faults.extend(memory_faults)
+        
+        # 7. Detect network interface issues
+        interface_faults = self.detect_network_interface_issues()
+        faults.extend(interface_faults)
+        
         return faults
     
     def detect_container_crashes(self) -> List[Dict[str, Any]]:
         """
-        Detect crashed or stopped containers
+        Detect crashed or stopped containers (excluding cloud-sim containers)
         
         Returns:
             List of container crash faults
@@ -127,14 +145,20 @@ class FaultDetector:
         crashed_containers = self.container_monitor.detect_crashed_containers()
         
         for container_info in crashed_containers:
+            container_name = container_info.get('container', '')
+            
+            # Filter out cloud-sim containers
+            if container_name.startswith('cloud-sim'):
+                continue
+            
             fault = {
                 'type': 'service_crash',
                 'severity': 'critical',
-                'service': container_info['container'],
+                'service': container_name,
                 'status': container_info.get('status', 'unknown'),
                 'state': container_info.get('state', 'unknown'),
                 'restart_count': container_info.get('restart_count', 0),
-                'message': f"Service {container_info['container']} has crashed or stopped",
+                'message': f"Service {container_name} has crashed or stopped",
                 'timestamp': datetime.now().isoformat(),
                 'details': container_info
             }
@@ -153,10 +177,17 @@ class FaultDetector:
         anomalies = self.resource_monitor.detect_resource_anomalies()
         
         for anomaly in anomalies:
+            # Extract resource type from fault type
+            fault_type = anomaly.get('type', 'resource_exhaustion')
+            resource_name = fault_type.replace('_exhaustion', '').replace('_full', '').upper()
+            
             fault = {
-                'type': anomaly['type'],
+                'type': fault_type,
                 'severity': anomaly['severity'],
+                'service': resource_name,  # CPU, MEMORY, or DISK
+                'resource': resource_name,
                 'message': anomaly['message'],
+                'description': anomaly['message'],
                 'value': anomaly['value'],
                 'threshold': anomaly['threshold'],
                 'timestamp': datetime.now().isoformat(),
@@ -165,6 +196,7 @@ class FaultDetector:
             faults.append(fault)
         
         return faults
+
     
     def detect_network_issues(self) -> List[Dict[str, Any]]:
         """
@@ -178,15 +210,278 @@ class FaultDetector:
         # Check each service port
         for service_name, port in self.service_ports.items():
             if not self._check_port_connectivity('localhost', port):
+                message = f"Service {service_name} is not reachable on port {port}"
                 fault = {
                     'type': 'network_issue',
                     'severity': 'high',
                     'service': service_name,
+                    'resource': service_name,
                     'port': port,
-                    'message': f"Service {service_name} is not reachable on port {port}",
+                    'message': message,
+                    'description': message,
                     'timestamp': datetime.now().isoformat()
                 }
                 faults.append(fault)
+        
+        return faults
+    
+    def detect_failed_services(self) -> List[Dict[str, Any]]:
+        """
+        Detect failed systemd services on Ubuntu server
+        
+        Returns:
+            List of failed service faults
+        """
+        faults = []
+        
+        try:
+            # Run systemctl --failed to get failed services
+            result = subprocess.run(
+                ['systemctl', '--failed', '--no-pager', '--plain'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                # Skip header and summary lines
+                for line in lines:
+                    # Parse lines like: nginx.service loaded failed failed NGINX
+                    if '.service' in line and 'failed' in line.lower():
+                        parts = line.split()
+                        if len(parts) >= 1:
+                            service_name = parts[0].replace('.service', '')
+                            
+                            fault = {
+                                'type': 'service_failed',
+                                'severity': 'critical',
+                                'service': service_name,
+                                'resource': 'systemd',
+                                'message': f"Systemd service {service_name} has failed",
+                                'description': f"Service {service_name} is in failed state. Run 'systemctl status {service_name}' for details.",
+                                'timestamp': datetime.now().isoformat(),
+                                'details': {'raw_line': line}
+                            }
+                            faults.append(fault)
+                            
+        except subprocess.TimeoutExpired:
+            logger.warning("Timeout checking failed services")
+        except FileNotFoundError:
+            logger.debug("systemctl not available (not a systemd system)")
+        except Exception as e:
+            logger.error(f"Error detecting failed services: {e}")
+        
+        return faults
+    
+    def detect_disk_pressure(self) -> List[Dict[str, Any]]:
+        """
+        Detect disk partitions with high usage (>90%)
+        
+        Returns:
+            List of disk pressure faults
+        """
+        faults = []
+        
+        try:
+            # Get all disk partitions
+            partitions = psutil.disk_partitions(all=False)
+            
+            for partition in partitions:
+                try:
+                    usage = psutil.disk_usage(partition.mountpoint)
+                    percent_used = usage.percent
+                    
+                    # Critical if >95%, high if >90%
+                    if percent_used >= 95:
+                        severity = 'critical'
+                    elif percent_used >= 90:
+                        severity = 'high'
+                    else:
+                        continue
+                    
+                    free_gb = usage.free / (1024**3)
+                    total_gb = usage.total / (1024**3)
+                    
+                    fault = {
+                        'type': 'disk_pressure',
+                        'severity': severity,
+                        'service': 'DISK',
+                        'resource': partition.mountpoint,
+                        'message': f"Disk {partition.mountpoint} is {percent_used:.1f}% full ({free_gb:.1f}GB free)",
+                        'description': f"Partition {partition.device} mounted at {partition.mountpoint} has low free space.",
+                        'value': percent_used,
+                        'threshold': 90,
+                        'timestamp': datetime.now().isoformat(),
+                        'details': {
+                            'device': partition.device,
+                            'mountpoint': partition.mountpoint,
+                            'fstype': partition.fstype,
+                            'total_gb': round(total_gb, 2),
+                            'free_gb': round(free_gb, 2),
+                            'percent_used': round(percent_used, 1)
+                        }
+                    }
+                    faults.append(fault)
+                    
+                except PermissionError:
+                    continue
+                except Exception as e:
+                    logger.debug(f"Error checking disk {partition.mountpoint}: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error detecting disk pressure: {e}")
+        
+        return faults
+    
+    def detect_memory_pressure(self) -> List[Dict[str, Any]]:
+        """
+        Detect high memory and swap usage
+        
+        Returns:
+            List of memory pressure faults
+        """
+        faults = []
+        
+        try:
+            # Check virtual memory (RAM)
+            mem = psutil.virtual_memory()
+            swap = psutil.swap_memory()
+            
+            # Memory critical if >95%, warning if >90%
+            if mem.percent >= 95:
+                fault = {
+                    'type': 'memory_critical',
+                    'severity': 'critical',
+                    'service': 'MEMORY',
+                    'resource': 'RAM',
+                    'message': f"Memory usage critical: {mem.percent:.1f}% ({mem.available / (1024**3):.1f}GB available)",
+                    'description': "System memory is nearly exhausted. Consider killing processes or adding RAM.",
+                    'value': mem.percent,
+                    'threshold': 95,
+                    'timestamp': datetime.now().isoformat(),
+                    'details': {
+                        'total_gb': round(mem.total / (1024**3), 2),
+                        'available_gb': round(mem.available / (1024**3), 2),
+                        'percent_used': round(mem.percent, 1),
+                        'swap_percent': round(swap.percent, 1)
+                    }
+                }
+                faults.append(fault)
+            elif mem.percent >= 90:
+                fault = {
+                    'type': 'memory_pressure',
+                    'severity': 'high',
+                    'service': 'MEMORY',
+                    'resource': 'RAM',
+                    'message': f"Memory usage high: {mem.percent:.1f}% ({mem.available / (1024**3):.1f}GB available)",
+                    'description': "System memory usage is elevated. Monitor for further increase.",
+                    'value': mem.percent,
+                    'threshold': 90,
+                    'timestamp': datetime.now().isoformat(),
+                    'details': {
+                        'total_gb': round(mem.total / (1024**3), 2),
+                        'available_gb': round(mem.available / (1024**3), 2),
+                        'percent_used': round(mem.percent, 1),
+                        'swap_percent': round(swap.percent, 1)
+                    }
+                }
+                faults.append(fault)
+            
+            # Check swap usage - high swap indicates memory pressure
+            if swap.total > 0 and swap.percent >= 80:
+                fault = {
+                    'type': 'swap_pressure',
+                    'severity': 'warning',
+                    'service': 'MEMORY',
+                    'resource': 'SWAP',
+                    'message': f"Swap usage high: {swap.percent:.1f}% ({swap.used / (1024**3):.2f}GB used)",
+                    'description': "High swap usage indicates memory pressure. System may be slow.",
+                    'value': swap.percent,
+                    'threshold': 80,
+                    'timestamp': datetime.now().isoformat(),
+                    'details': {
+                        'swap_total_gb': round(swap.total / (1024**3), 2),
+                        'swap_used_gb': round(swap.used / (1024**3), 2),
+                        'swap_percent': round(swap.percent, 1)
+                    }
+                }
+                faults.append(fault)
+                
+        except Exception as e:
+            logger.error(f"Error detecting memory pressure: {e}")
+        
+        return faults
+    
+    def detect_network_interface_issues(self) -> List[Dict[str, Any]]:
+        """
+        Detect network interface issues (interfaces down or with errors)
+        
+        Returns:
+            List of network interface faults
+        """
+        faults = []
+        
+        try:
+            # Get network interface stats
+            net_if_stats = psutil.net_if_stats()
+            net_io = psutil.net_io_counters(pernic=True)
+            
+            for iface, stats in net_if_stats.items():
+                # Skip loopback
+                if iface.lower() in ['lo', 'loopback']:
+                    continue
+                
+                # Check if interface is down
+                if not stats.isup:
+                    fault = {
+                        'type': 'network_interface_down',
+                        'severity': 'high',
+                        'service': 'NETWORK',
+                        'resource': iface,
+                        'message': f"Network interface {iface} is DOWN",
+                        'description': f"Interface {iface} is not operational. Check cable or network configuration.",
+                        'timestamp': datetime.now().isoformat(),
+                        'details': {
+                            'interface': iface,
+                            'speed': stats.speed,
+                            'mtu': stats.mtu,
+                            'isup': stats.isup
+                        }
+                    }
+                    faults.append(fault)
+                
+                # Check for high error rates
+                if iface in net_io:
+                    io = net_io[iface]
+                    total_packets = io.packets_sent + io.packets_recv
+                    total_errors = io.errin + io.errout
+                    
+                    if total_packets > 1000 and total_errors > 0:
+                        error_rate = (total_errors / total_packets) * 100
+                        if error_rate > 1:  # More than 1% error rate
+                            fault = {
+                                'type': 'network_interface_errors',
+                                'severity': 'warning',
+                                'service': 'NETWORK',
+                                'resource': iface,
+                                'message': f"Network interface {iface} has high error rate: {error_rate:.2f}%",
+                                'description': f"Interface {iface} is experiencing packet errors. Check for hardware or cable issues.",
+                                'value': error_rate,
+                                'threshold': 1,
+                                'timestamp': datetime.now().isoformat(),
+                                'details': {
+                                    'interface': iface,
+                                    'errors_in': io.errin,
+                                    'errors_out': io.errout,
+                                    'packets_sent': io.packets_sent,
+                                    'packets_recv': io.packets_recv
+                                }
+                            }
+                            faults.append(fault)
+                            
+        except Exception as e:
+            logger.error(f"Error detecting network interface issues: {e}")
         
         return faults
     
@@ -204,7 +499,7 @@ class FaultDetector:
         """
         try:
             # For HTTP services, try HTTP request
-            if port in [8080, 8081, 8082]:
+            if port in [80, 8081, 8082]:
                 try:
                     response = requests.get(f"http://{host}:{port}/health", timeout=timeout)
                     return response.status_code == 200
@@ -262,9 +557,8 @@ class FaultDetector:
         print(f"Time: {fault.get('timestamp', 'unknown')}")
         print(f"{'='*70}\n")
         
-        # Send Discord notification for service crashes
-        if fault['type'] == 'service_crash':
-            self._send_discord_notification(fault)
+        # Send Discord notification for all faults
+        self._send_discord_notification(fault)
         
         # Emit event for dashboard
         if self.event_emitter:
@@ -315,27 +609,45 @@ class FaultDetector:
         
         try:
             service_name = fault.get('service', 'Unknown Service')
-            status = fault.get('status', 'unknown')
-            restart_count = fault.get('restart_count', 0)
+            fault_type = fault.get('type', 'Unknown Fault')
+            message = fault.get('message', 'No details provided')
+            severity = fault.get('severity', 'warning')
+            timestamp = fault.get('timestamp', datetime.now().isoformat())
             
+            # customized title and color based on severity
+            if severity == 'critical':
+                color = 15158332 # Red
+                title = f'🚨 Critical Issue: {service_name}'
+            elif severity == 'high':
+                color = 15105570 # Orange
+                title = f'⚠️ High Priority Issue: {service_name}'
+            else:
+                color = 16776960 # Yellow
+                title = f'⚠️ Issue Detected: {service_name}'
+
             embed_data = {
-                'title': '🚨 Service Crash Detected',
-                'description': f"**Service:** {service_name}\n**Status:** {status}\n**Restart Count:** {restart_count}",
-                'color': 15158332,  # Red
+                'title': title,
+                'description': f"**Type:** {fault_type}\n**Message:** {message}",
+                'color': color,
                 'fields': [
                     {
-                        'name': 'Fault Type',
-                        'value': fault.get('type', 'unknown'),
+                        'name': 'Service',
+                        'value': service_name,
                         'inline': True
                     },
                     {
                         'name': 'Severity',
-                        'value': fault.get('severity', 'unknown'),
+                        'value': severity.upper(),
                         'inline': True
                     },
                     {
+                        'name': 'Details',
+                        'value': str(fault.get('details', 'N/A'))[:200], # Truncate if too long
+                        'inline': False
+                    },
+                    {
                         'name': 'Timestamp',
-                        'value': fault.get('timestamp', 'unknown'),
+                        'value': timestamp,
                         'inline': False
                     }
                 ],
@@ -345,12 +657,12 @@ class FaultDetector:
             }
             
             self.discord_notifier(
-                f"🚨 Service Crash: {service_name}",
-                'critical',
+                f"🚨 Alert: {fault_type} on {service_name}",
+                severity,
                 embed_data
             )
             
-            logger.info(f"Discord notification sent for service crash: {service_name}")
+            logger.info(f"Discord notification sent for fault: {fault_type} on {service_name}")
         except Exception as e:
             logger.error(f"Error sending Discord notification: {e}")
     

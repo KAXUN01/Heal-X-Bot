@@ -15,6 +15,10 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 try:
+    from .alert_manager import get_discord_alert_manager
+except ImportError:
+    from alert_manager import get_discord_alert_manager
+try:
     from .log_monitor import initialize_log_monitoring, log_monitor
 except ImportError:
     from log_monitor import initialize_log_monitoring, log_monitor
@@ -27,9 +31,9 @@ try:
 except ImportError:
     from service_discovery import ServiceDiscovery
 try:
-    from .gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
+    from .groq_log_analyzer import initialize_groq_analyzer, groq_analyzer
 except ImportError:
-    from gemini_log_analyzer import initialize_gemini_analyzer, gemini_analyzer
+    from groq_log_analyzer import initialize_groq_analyzer, groq_analyzer
 try:
     from .system_log_collector import initialize_system_log_collector, get_system_log_collector
 except ImportError:
@@ -57,15 +61,26 @@ except ImportError:
                 sys.path.insert(0, str(Path(__file__).parent))
                 from healing import initialize_auto_healer, get_auto_healer
 
-# Load environment variables from .env file
+            healing_path = Path(__file__).parent / 'healing'
+            if healing_path.exists():
+                sys.path.insert(0, str(Path(__file__).parent))
+                from healing import initialize_auto_healer, get_auto_healer
+
 env_path = Path(__file__).parent.parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
-# Verify critical environment variables
-if not os.getenv('GEMINI_API_KEY') and not os.getenv('GOOGLE_API_KEY'):
-    print("⚠️  WARNING: GEMINI_API_KEY not found in .env file")
-    print("   AI log analysis will not work without this key")
-    print("   Please add GEMINI_API_KEY to your .env file")
+# Verify AI API keys (Gemini or Groq)
+gemini_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+groq_key = os.getenv('GROQ_API_KEY')
+
+if not gemini_key and not groq_key:
+    print("⚠️  WARNING: Neither GEMINI_API_KEY nor GROQ_API_KEY found in .env file")
+    print("   AI log analysis will not work without one of these keys")
+    print("   Please add GEMINI_API_KEY or GROQ_API_KEY to your .env file")
+elif gemini_key:
+    print("✅ GEMINI_API_KEY found - AI analysis will use Google Gemini")
+elif groq_key:
+    print("✅ GROQ_API_KEY found - AI analysis will use Groq")
 
 app = Flask(__name__)
 # Set Flask configuration to avoid KeyError (must be set before Bootstrap)
@@ -81,7 +96,7 @@ bootstrap = Bootstrap(app)
 cors_origins = os.getenv('CORS_ORIGINS', 'http://localhost:5001,http://localhost:3000,http://127.0.0.1:5001,http://127.0.0.1:3000').split(',')
 cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
 # Allow all origins only in development mode
-if os.getenv('FLASK_ENV', '').lower() == 'development' or os.getenv('CORS_ALLOW_ALL', 'false').lower() == 'true':
+if os.getenv('FLASK_ENV', '').lower() == 'development' and os.getenv('CORS_ALLOW_ALL', 'false').lower() == 'true':
     cors_origins = ['*']
 CORS(app, resources={r"/api/*": {"origins": cors_origins}})
 
@@ -90,12 +105,13 @@ log_monitoring_service = None
 centralized_logging_service = None
 centralized_logger = None  # Alias for endpoints
 service_discovery = None
-gemini_log_analyzer_service = None
-gemini_analyzer = None  # Alias for endpoints
+groq_log_analyzer_service = None
+groq_analyzer = None  # Alias for endpoints
 log_monitor = None  # Alias for endpoints
 system_log_collector = None  # System-wide log collector
 critical_services_monitor = None  # Critical services monitor
 auto_healer = None  # AI-powered auto-healing system
+discord_alert_manager = None # Manager for Discord alerts
 
 # Prometheus metrics
 REQUEST_COUNT = Counter("request_count", "Total number of requests", ['endpoint'])
@@ -216,6 +232,10 @@ def cpu_intensive():
     thread.start()
     return "Started CPU load for 60 seconds!"
 
+    thread = threading.Thread(target=burn_cpu)
+    thread.start()
+    return "Started CPU load for 60 seconds!"
+
 # ========== Log Monitoring Endpoints ==========
 
 @app.route("/api/logs/recent")
@@ -230,9 +250,10 @@ def get_recent_log_issues():
             'count': len(issues)
         })
     except Exception as e:
+        app.logger.error(f"Error getting recent logs: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/logs/statistics")
@@ -248,9 +269,10 @@ def get_log_statistics():
             'health_score': health_score
         })
     except Exception as e:
+        app.logger.error(f"Error getting log statistics: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/logs/critical")
@@ -270,9 +292,10 @@ def get_critical_log_issues():
             'count': len(critical_issues)
         })
     except Exception as e:
+        app.logger.error(f"Error getting critical log issues: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/logs/anomalies")
@@ -305,9 +328,10 @@ def get_log_anomalies():
             'count': len(anomalies)
         })
     except Exception as e:
+        app.logger.error(f"Error getting log anomalies: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e),
+            'message': 'An internal error occurred',
             'anomalies': [],
             'count': 0
         }), 200
@@ -339,9 +363,10 @@ def get_system_logs():
             'count': len(logs)
         })
     except Exception as e:
+        app.logger.error(f"Error getting system logs: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e),
+            'message': 'An internal error occurred',
             'logs': []
         }), 500
 
@@ -364,9 +389,10 @@ def get_system_log_statistics():
             'statistics': stats
         })
     except Exception as e:
+        app.logger.error(f"Error getting system log statistics: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/system-logs/sources")
@@ -394,9 +420,10 @@ def get_system_log_sources():
             'sources': sources
         })
     except Exception as e:
+        app.logger.error(f"Error getting system log sources: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 # Critical Services Monitor Endpoints
@@ -420,9 +447,10 @@ def get_critical_services_list():
             'services': service_list
         })
     except Exception as e:
+        app.logger.error(f"Error getting critical services list: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/critical-services/logs")
@@ -457,9 +485,10 @@ def get_critical_services_logs():
             'count': len(logs)
         })
     except Exception as e:
+        app.logger.error(f"Error getting critical services logs: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e),
+            'message': 'An internal error occurred',
             'logs': []
         }), 500
 
@@ -483,9 +512,10 @@ def get_critical_service_issues():
             'count': len(issues)
         })
     except Exception as e:
+        app.logger.error(f"Error getting critical service issues: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e),
+            'message': 'An internal error occurred',
             'issues': []
         }), 500
 
@@ -508,9 +538,10 @@ def get_critical_services_statistics():
             'statistics': stats
         })
     except Exception as e:
+        app.logger.error(f"Error getting critical services statistics: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/logs/health")
@@ -537,9 +568,10 @@ def get_system_health():
             'recent_issues_count': recent_issues
         })
     except Exception as e:
+        app.logger.error(f"Error getting system health: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/logs/resolve/<timestamp>", methods=['POST'])
@@ -552,9 +584,10 @@ def resolve_issue(timestamp):
             'message': 'Issue marked as resolved'
         })
     except Exception as e:
+        app.logger.error(f"Error resolving issue: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/health")
@@ -600,12 +633,17 @@ def get_central_recent_logs():
             }), 503
         
         limit = int(request.args.get('limit', 100))
-        logs = centralized_logger.get_recent_logs(limit=limit)
+        page = int(request.args.get('page', 1))
+        offset = (page - 1) * limit
+        
+        logs = centralized_logger.get_recent_logs(limit=limit, offset=offset)
         
         return jsonify({
             'status': 'success',
             'logs': logs,
-            'count': len(logs)
+            'count': len(logs),
+            'page': page,
+            'limit': limit
         })
     except Exception as e:
         return jsonify({
@@ -637,9 +675,10 @@ def search_central_logs():
             'count': len(logs)
         })
     except Exception as e:
+        app.logger.error(f"Error searching central logs: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/central-logs/by-service/<service>")
@@ -662,9 +701,10 @@ def get_logs_by_service(service):
             'count': len(logs)
         })
     except Exception as e:
+        app.logger.error(f"Error getting logs by service: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/central-logs/services")
@@ -685,9 +725,10 @@ def get_monitored_services():
             'count': len(services)
         })
     except Exception as e:
+        app.logger.error(f"Error getting monitored services: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 # ========== Service Discovery Endpoints ==========
@@ -706,9 +747,10 @@ def discover_services():
             'services': results
         })
     except Exception as e:
+        app.logger.error(f"Error discovering services: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/discovery/log-locations")
@@ -726,9 +768,10 @@ def get_log_locations():
             'total_log_files': sum(len(logs) for logs in log_locations.values())
         })
     except Exception as e:
+        app.logger.error(f"Error getting log locations: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/discovery/summary")
@@ -747,9 +790,10 @@ def get_discovery_summary():
             'summary': summary
         })
     except Exception as e:
+        app.logger.error(f"Error getting discovery summary: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 # ========== Gemini AI Log Analysis Endpoints ==========
@@ -758,10 +802,10 @@ def get_discovery_summary():
 def analyze_single_log():
     """Analyze a single log entry using Gemini AI"""
     try:
-        if not gemini_analyzer:
+        if not groq_analyzer:
             return jsonify({
                 'status': 'error',
-                'message': 'Gemini analyzer not initialized. Check GEMINI_API_KEY'
+                'message': 'Groq analyzer not initialized. Check GROQ_API_KEY'
             }), 503
         
         log_entry = request.json
@@ -773,24 +817,25 @@ def analyze_single_log():
             }), 400
         
         # Analyze the log
-        analysis = gemini_analyzer.analyze_error_log(log_entry)
+        analysis = groq_analyzer.analyze_error_log(log_entry)
         
         return jsonify(analysis)
     
     except Exception as e:
+        app.logger.error(f"Error analyzing log: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/gemini/analyze-pattern", methods=['POST'])
 def analyze_log_pattern():
     """Analyze multiple logs for patterns using Gemini AI"""
     try:
-        if not gemini_analyzer:
+        if not groq_analyzer:
             return jsonify({
                 'status': 'error',
-                'message': 'Gemini analyzer not initialized'
+                'message': 'Groq analyzer not initialized'
             }), 503
         
         data = request.json
@@ -804,24 +849,25 @@ def analyze_log_pattern():
             }), 400
         
         # Analyze patterns
-        analysis = gemini_analyzer.analyze_multiple_logs(log_entries, limit=limit)
+        analysis = groq_analyzer.analyze_multiple_logs(log_entries, limit=limit)
         
         return jsonify(analysis)
     
     except Exception as e:
+        app.logger.error(f"Error analyzing log pattern: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/gemini/analyze-service/<service_name>")
 def analyze_service_health(service_name):
     """Analyze overall health of a service using Gemini AI"""
     try:
-        if not gemini_analyzer:
+        if not groq_analyzer:
             return jsonify({
                 'status': 'error',
-                'message': 'Gemini analyzer not initialized'
+                'message': 'Groq analyzer not initialized'
             }), 503
         
         if not centralized_logger:
@@ -841,21 +887,22 @@ def analyze_service_health(service_name):
             }), 404
         
         # Analyze service health
-        analysis = gemini_analyzer.analyze_service_health(service_name, logs)
+        analysis = groq_analyzer.analyze_service_health(service_name, logs)
         
         return jsonify(analysis)
     
     except Exception as e:
+        app.logger.error(f"Error analyzing service health: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/gemini/quick-analyze")
 def quick_analyze_recent_errors():
     """Quick analysis of recent errors from centralized logs"""
     try:
-        if not gemini_analyzer or not centralized_logger:
+        if not groq_analyzer or not centralized_logger:
             return jsonify({
                 'status': 'error',
                 'message': 'Services not initialized'
@@ -879,21 +926,26 @@ def quick_analyze_recent_errors():
             })
         
         # Analyze top errors
-        analysis = gemini_analyzer.analyze_multiple_logs(error_logs[:10])
+        analysis = groq_analyzer.analyze_multiple_logs(error_logs[:10])
         
         return jsonify(analysis)
     
     except Exception as e:
+        app.logger.error(f"Error in quick analysis: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 def initialize_services():
     """Initialize all monitoring services"""
     global log_monitoring_service, centralized_logging_service, centralized_logger
-    global service_discovery, gemini_log_analyzer_service, gemini_analyzer, log_monitor
+    global service_discovery, groq_log_analyzer_service, groq_analyzer, log_monitor
     global system_log_collector, critical_services_monitor, auto_healer
+    global discord_alert_manager
+
+    # Initialize discord alert manager
+    discord_alert_manager = get_discord_alert_manager(max_alerts=100)
     
     try:
         # DISABLED: Application log monitoring (not needed - only monitoring system services)
@@ -911,10 +963,48 @@ def initialize_services():
         # service_discovery.discover_all_services()
         print("⚠️  Service discovery DISABLED (monitoring system services only)")
         
-        # Initialize Gemini AI log analyzer (for system log analysis)
-        gemini_log_analyzer_service = initialize_gemini_analyzer()
-        gemini_analyzer = gemini_log_analyzer_service  # Set alias for endpoints
-        print("✅ Gemini AI log analyzer initialized")
+        # Initialize AI log analyzer - prefer Gemini if available, fallback to Groq
+        gemini_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+        groq_key = os.getenv('GROQ_API_KEY')
+        ai_analyzer = None
+        ai_analyzer_type = None
+        
+        # Try Groq first (User requested priority)
+        if groq_key:
+            try:
+                groq_log_analyzer_service = initialize_groq_analyzer(api_key=groq_key)
+                ai_analyzer = groq_log_analyzer_service
+                if ai_analyzer and ai_analyzer.client:
+                    ai_analyzer_type = 'groq'
+                    print(f"✅ Groq AI analyzer initialized (model: {ai_analyzer.model_name})")
+                else:
+                    ai_analyzer = None
+            except Exception as e:
+                print(f"⚠️  Failed to initialize Groq analyzer: {e}")
+                ai_analyzer = None
+
+        # Fallback to Gemini if Groq not available
+        if not ai_analyzer and gemini_key:
+            try:
+                from gemini_log_analyzer import GeminiLogAnalyzer
+                ai_analyzer = GeminiLogAnalyzer(api_key=gemini_key)
+                if ai_analyzer and ai_analyzer.model:
+                    ai_analyzer_type = 'gemini'
+                    print(f"✅ Gemini AI analyzer initialized (model: {ai_analyzer.model_name})")
+                else:
+                    ai_analyzer = None
+            except Exception as e:
+                print(f"⚠️  Failed to initialize Gemini analyzer: {e}")
+                ai_analyzer = None
+        
+        # Set groq_analyzer alias for backward compatibility
+        groq_analyzer = ai_analyzer
+        
+        if not ai_analyzer:
+            if not gemini_key and not groq_key:
+                print("⚠️  No AI API keys found. AI analysis disabled")
+            else:
+                print("⚠️  AI analyzers failed to initialize. Check API keys and dependencies")
         
         # Initialize system-wide log collector (monitors Docker, systemd, etc.)
         system_log_collector = initialize_system_log_collector()
@@ -935,6 +1025,10 @@ def initialize_services():
             def discord_notifier(message, severity="info", embed_data=None):
                 # Simple Discord notification - can be enhanced
                 try:
+                    # Record the alert in history
+                    if discord_alert_manager:
+                        discord_alert_manager.record_alert(message, severity, embed_data)
+                    
                     import requests
                     discord_webhook = os.getenv("DISCORD_WEBHOOK") or os.getenv("DISCORD_WEBHOOK_URL", "")
                     if discord_webhook:
@@ -952,7 +1046,7 @@ def initialize_services():
             
             # Initialize root cause analyzer
             root_cause_analyzer = initialize_root_cause_analyzer(
-                gemini_analyzer=gemini_analyzer
+                groq_analyzer=groq_analyzer
             )
             
             # Initialize fault detector
@@ -964,7 +1058,7 @@ def initialize_services():
             
             # Initialize AI-powered auto-healer with cloud capabilities
             auto_healer = initialize_auto_healer(
-                gemini_analyzer=gemini_analyzer,
+                groq_analyzer=groq_analyzer,
                 system_log_collector=system_log_collector,
                 critical_services_monitor=critical_services_monitor,
                 container_healer=container_healer,
@@ -981,7 +1075,7 @@ def initialize_services():
             print(f"⚠️  Cloud simulation components not available: {e}")
             # Fallback to basic auto-healer
             auto_healer = initialize_auto_healer(
-                gemini_analyzer=gemini_analyzer,
+                groq_analyzer=groq_analyzer,
                 system_log_collector=system_log_collector,
                 critical_services_monitor=critical_services_monitor
             )
@@ -989,7 +1083,7 @@ def initialize_services():
             auto_healer.start_monitoring(interval_seconds=60)
         
         print(f"\n📊 Active Services:")
-        print(f"   - gemini_analyzer: {gemini_analyzer is not None} (AI analysis)")
+        print(f"   - groq_analyzer: {groq_analyzer is not None} (AI analysis)")
         print(f"   - system_log_collector: {system_log_collector is not None} (General system monitoring)")
         print(f"   - critical_services_monitor: {critical_services_monitor is not None} (Critical services)")
         print(f"   - auto_healer: {auto_healer is not None} (AI-powered self-healing)")
@@ -1052,10 +1146,10 @@ def inject_test_error():
         })
         
     except Exception as e:
-        logger.error(f"Error injecting test error: {e}")
+        app.logger.error(f"Error injecting test error: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 # Auto-Healing API Endpoints
@@ -1083,9 +1177,10 @@ def get_auto_healer_status():
             }
         })
     except Exception as e:
+        app.logger.error(f"Error getting auto-healer status: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/auto-healer/history")
@@ -1109,9 +1204,10 @@ def get_healing_history():
             'history': history
         })
     except Exception as e:
+        app.logger.error(f"Error getting healing history: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/auto-healer/statistics")
@@ -1133,9 +1229,10 @@ def get_healing_statistics():
             'statistics': stats
         })
     except Exception as e:
+        app.logger.error(f"Error getting healing statistics: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/auto-healer/heal", methods=['POST'])
@@ -1166,9 +1263,10 @@ def manual_heal_error():
             'healing_result': result
         })
     except Exception as e:
+        app.logger.error(f"Error in manual healing: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
         }), 500
 
 @app.route("/api/auto-healer/config", methods=['PUT', 'POST'])
@@ -1210,9 +1308,37 @@ def update_auto_healer_config():
             'message': str(e)
         }), 400
     except Exception as e:
+        app.logger.error(f"Error updating auto-healer config: {str(e)}")
         return jsonify({
             'status': 'error',
-            'message': str(e)
+            'message': 'An internal error occurred'
+        }), 500
+
+# ========== Discord Alerts Endpoints ==========
+
+@app.route("/api/alerts/discord")
+def get_discord_alerts():
+    """Get history of alerts sent to Discord"""
+    try:
+        limit = int(request.args.get('limit', 50))
+        if not discord_alert_manager:
+            return jsonify({
+                'status': 'success',
+                'alerts': [],
+                'count': 0
+            })
+            
+        alerts = discord_alert_manager.get_alerts(limit=limit)
+        return jsonify({
+            'status': 'success',
+            'alerts': alerts,
+            'count': len(alerts)
+        })
+    except Exception as e:
+        app.logger.error(f"Error getting Discord alerts: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'An internal error occurred'
         }), 500
 
 if __name__ == "__main__":

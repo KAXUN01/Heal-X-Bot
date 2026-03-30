@@ -236,13 +236,13 @@ class HealingBotLauncher:
         occupied_ports = []
         
         for port in ports_to_check:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 result = sock.connect_ex(('localhost', port))
                 if result == 0:
                     occupied_ports.append(port)
                 sock.close()
-            except:
+            except Exception:
                 pass
         
         if occupied_ports:
@@ -406,7 +406,8 @@ class HealingBotLauncher:
                             checked_services.add(service_id)
                             print(f"⏳ Waiting for {config['name']}...")
                     except Exception as e:
-                        # Other errors - log but continue
+                        # Other errors - log but continue (verbose only?)
+                        # print(f"   ⚠️  check failed for {config['name']}: {e}")
                         pass
             
             if len(healthy_services) == len(services):
@@ -466,11 +467,12 @@ class HealingBotLauncher:
                 print(f"🛑 Stopping {self.services[service_id]['name']}...")
                 process.terminate()
                 process.wait(timeout=5)
-            except:
+            except Exception as e:
+                print(f"   ⚠️  Graceful stop failed for {service_id}: {e}")
                 try:
                     process.kill()
-                except:
-                    pass
+                except Exception as kille:
+                    print(f"   ❌ Kill failed for {service_id}: {kille}")
         
         # Stop Docker services if they were started
         if hasattr(self, 'docker_started') and self.docker_started:
@@ -486,8 +488,8 @@ class HealingBotLauncher:
                     except:
                         cmd = ["docker-compose", "down"]
                 subprocess.run(cmd, cwd=self.project_root)
-            except:
-                pass
+            except Exception as e:
+                print(f"   ⚠️  Failed to stop Docker services: {e}")
         
         print("✅ All services stopped")
 

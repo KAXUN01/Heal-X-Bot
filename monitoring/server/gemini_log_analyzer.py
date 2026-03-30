@@ -9,6 +9,7 @@ import logging
 from datetime import datetime
 from typing import Dict, List, Any, Optional
 import google.generativeai as genai
+from log_sanitizer import LogSanitizer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,15 +30,17 @@ class GeminiLogAnalyzer:
             try:
                 # Configure the API key
                 genai.configure(api_key=self.api_key)
-                # Try fastest models first: gemini-1.5-flash is the fastest and most reliable
+                # Try fastest models first: gemini-2.5-flash-lite-preview-09-2025 is the user's preferred model
                 # Fallback to other fast models if needed
                 model_priority = [
-                    "gemini-1.5-flash",      # Fastest, most reliable
+                    "gemini-1.5-pro",        # Best for reasoning and detailed analysis
+                    "gemini-1.5-flash",      # Good balance of speed and capability
                     "gemini-2.0-flash-exp",  # Experimental fast model
-                    "gemini-2.0-flash-lite"  # Fallback
+                    "gemini-2.5-flash-lite-preview-09-2025" # Fallback
                 ]
                 
                 model_initialized = False
+                last_error = None
                 for model_name in model_priority:
                     try:
                         self.model = genai.GenerativeModel(model_name)
@@ -46,11 +49,16 @@ class GeminiLogAnalyzer:
                         model_initialized = True
                         break
                     except Exception as model_error:
+                        last_error = model_error
                         logger.debug(f"Failed to initialize {model_name}: {model_error}, trying next...")
                         continue
                 
                 if not model_initialized:
-                    raise Exception(f"Failed to initialize any Gemini model from: {', '.join(model_priority)}")
+                    error_msg = f"Failed to initialize any Gemini model from: {', '.join(model_priority)}"
+                    if last_error:
+                        error_msg += f"\nLast error: {str(last_error)}"
+                    logger.error(error_msg)
+                    raise Exception(error_msg)
                     
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini client: {e}")
@@ -60,15 +68,50 @@ class GeminiLogAnalyzer:
         # Analysis cache to avoid re-analyzing same issues
         self.analysis_cache = {}
         
+        # Privacy sanitizer for removing sensitive data before sending to external AI
+        self.sanitizer = LogSanitizer()
+        
     def analyze_error_log(self, log_entry: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze a single error log entry using Gemini AI
         """
+        # Try to reload API key from environment if not set
         if not self.api_key or self.api_key == "your_gemini_api_key_here" or len(self.api_key) < 20:
+            # Reload from environment in case it was added after initialization
+            self.api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+            
+            # If we now have a valid API key, try to initialize the model
+            if self.api_key and self.api_key != "your_gemini_api_key_here" and len(self.api_key) >= 20:
+                try:
+                    genai.configure(api_key=self.api_key)
+                    model_priority = ["gemini-2.5-flash-lite-preview-09-2025", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash-exp", "gemini-2.0-flash-lite"]
+                    model_initialized = False
+                    last_error = None
+                    for model_name in model_priority:
+                        try:
+                            self.model = genai.GenerativeModel(model_name)
+                            self.model_name = model_name
+                            logger.info(f"Gemini model initialized with {model_name} after reloading API key")
+                            model_initialized = True
+                            break
+                        except Exception as model_error:
+                            last_error = model_error
+                            logger.debug(f"Failed to initialize {model_name} after reload: {model_error}, trying next...")
+                            continue
+                    if not model_initialized:
+                        logger.error(f"Failed to initialize any model after reloading API key. Last error: {last_error}")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Gemini model after reloading API key: {e}")
+        
+        # Check again after reload attempt
+        if not self.api_key or self.api_key == "your_gemini_api_key_here" or len(self.api_key) < 20:
+            api_key_info = f"API key length: {len(self.api_key) if self.api_key else 0} characters"
+            if self.api_key and self.api_key != "your_gemini_api_key_here":
+                api_key_info += f" (starts with: {self.api_key[:10]}...)"
             return {
                 'status': 'error',
                 'message': 'Gemini API key not configured or invalid',
-                'analysis': 'Please set a valid GEMINI_API_KEY in your .env file.\n\n' +
+                'analysis': f'Please set a valid GEMINI_API_KEY in your .env file.\n\n{api_key_info}\n\n' +
                            'Get your FREE API key:\n' +
                            '1. Visit: https://aistudio.google.com/app/apikey\n' +
                            '2. Click "Create API Key"\n' +
@@ -80,17 +123,42 @@ class GeminiLogAnalyzer:
             }
         
         if not self.model:
+            # Provide more helpful error message
+            error_msg = 'Gemini model not initialized. '
+            if self.api_key:
+                error_msg += f'API key is set ({len(self.api_key)} chars), but model initialization failed.\n\n'
+                error_msg += 'Possible causes:\n'
+                error_msg += '1. API key is invalid or expired\n'
+                error_msg += '2. Model name is incorrect (trying: gemini-2.5-flash-lite-preview-09-2025, gemini-2.5-flash, etc.)\n'
+                error_msg += '3. No internet connectivity\n'
+                error_msg += '4. API key doesn\'t have access to the requested models\n\n'
+                error_msg += 'Please check your API key and restart the server.'
+            else:
+                error_msg += 'Please set a valid GEMINI_API_KEY in your .env file and restart the server.'
+            
             return {
                 'status': 'error',
                 'message': 'Gemini model not initialized. Check API key configuration.',
-                'analysis': 'Please set a valid GEMINI_API_KEY in your .env file and restart the server.'
+                'analysis': error_msg
             }
         
         # Check cache first
-        cache_key = f"{log_entry.get('service', '')}_{log_entry.get('message', '')[:100]}"
-        if cache_key in self.analysis_cache:
-            logger.info("Returning cached analysis")
-            return self.analysis_cache[cache_key]
+        # CACHING DISABLED per user request - always get fresh analysis
+        # Create a more specific cache key to avoid collisions
+        # Use MD5 hash of the message to handle long messages while ensuring uniqueness
+        import hashlib
+        msg_hash = hashlib.md5(log_entry.get('message', '').encode()).hexdigest()
+        service_name = log_entry.get('service', 'unknown')
+        cache_key = f"{service_name}_{msg_hash}"
+        
+        logger.info(f"Service: {service_name} - Proceeding to AI analysis (caching disabled)")
+        
+        # Cache check disabled:
+        # if cache_key in self.analysis_cache:
+        #     logger.info(f"⚡ Cache HIT for {service_name}")
+        #     return self.analysis_cache[cache_key]
+        
+        logger.info(f"💨 Fetching fresh analysis for {service_name}")
         
         # Prepare prompt for Gemini
         prompt = self._create_analysis_prompt(log_entry)
@@ -100,19 +168,25 @@ class GeminiLogAnalyzer:
             response = self._call_gemini_api(prompt)
             
             if response.get('status') == 'success':
+                # De-sanitize the response text to restore original values for display
+                response_text = response['text']
+                sanitizer_mapping = response.get('_sanitizer_mapping', {})
+                if sanitizer_mapping:
+                    response_text = self.sanitizer.desanitize(response_text, sanitizer_mapping)
+                
                 # Parse and structure the analysis
                 analysis_result = {
                     'status': 'success',
                     'timestamp': datetime.now().isoformat(),
                     'log_entry': log_entry,
                     'analysis': {
-                        'why': self._extract_why_section(response['text']),
-                        'how': self._extract_how_section(response['text']),
-                        'root_cause': self._extract_root_cause(response['text']),
-                        'solution': self._extract_solution(response['text']),
-                        'prevention': self._extract_prevention(response['text']),
-                        'severity': self._determine_severity(log_entry, response['text']),
-                        'full_analysis': response['text']
+                        'why': self._extract_why_section(response_text),
+                        'how': self._extract_how_section(response_text),
+                        'root_cause': self._extract_root_cause(response_text),
+                        'solution': self._extract_solution(response_text),
+                        'prevention': self._extract_prevention(response_text),
+                        'severity': self._determine_severity(log_entry, response_text),
+                        'full_analysis': response_text
                     }
                 }
                 
@@ -158,16 +232,22 @@ class GeminiLogAnalyzer:
             response = self._call_gemini_api(prompt)
             
             if response.get('status') == 'success':
+                # De-sanitize the response text
+                response_text = response['text']
+                sanitizer_mapping = response.get('_sanitizer_mapping', {})
+                if sanitizer_mapping:
+                    response_text = self.sanitizer.desanitize(response_text, sanitizer_mapping)
+                
                 return {
                     'status': 'success',
                     'timestamp': datetime.now().isoformat(),
                     'logs_analyzed': len(logs_to_analyze),
                     'pattern_analysis': {
-                        'common_issues': self._extract_common_issues(response['text']),
-                        'timeline': self._extract_timeline(response['text']),
-                        'correlation': self._extract_correlation(response['text']),
-                        'recommendations': self._extract_recommendations(response['text']),
-                        'full_analysis': response['text']
+                        'common_issues': self._extract_common_issues(response_text),
+                        'timeline': self._extract_timeline(response_text),
+                        'correlation': self._extract_correlation(response_text),
+                        'recommendations': self._extract_recommendations(response_text),
+                        'full_analysis': response_text
                     }
                 }
             else:
@@ -217,18 +297,24 @@ class GeminiLogAnalyzer:
             response = self._call_gemini_api(prompt)
             
             if response.get('status') == 'success':
+                # De-sanitize the response text
+                response_text = response['text']
+                sanitizer_mapping = response.get('_sanitizer_mapping', {})
+                if sanitizer_mapping:
+                    response_text = self.sanitizer.desanitize(response_text, sanitizer_mapping)
+                
                 return {
                     'status': 'success',
                     'fault_type': fault_type,
                     'service': service,
                     'timestamp': datetime.now().isoformat(),
                     'analysis': {
-                        'root_cause': self._extract_root_cause(response['text']),
-                        'why': self._extract_why_section(response['text']),
-                        'solution': self._extract_solution(response['text']),
-                        'prevention': self._extract_prevention(response['text']),
-                        'confidence': self._estimate_confidence(response['text']),
-                        'full_analysis': response['text']
+                        'root_cause': self._extract_root_cause(response_text),
+                        'why': self._extract_why_section(response_text),
+                        'solution': self._extract_solution(response_text),
+                        'prevention': self._extract_prevention(response_text),
+                        'confidence': self._estimate_confidence(response_text),
+                        'full_analysis': response_text
                     }
                 }
             else:
@@ -442,15 +528,21 @@ Provide a detailed but concise analysis.
             response = self._call_gemini_api(prompt)
             
             if response.get('status') == 'success':
+                # De-sanitize the response text
+                response_text = response['text']
+                sanitizer_mapping = response.get('_sanitizer_mapping', {})
+                if sanitizer_mapping:
+                    response_text = self.sanitizer.desanitize(response_text, sanitizer_mapping)
+                
                 return {
                     'status': 'success',
                     'service': service_name,
                     'logs_analyzed': len(logs),
                     'health_analysis': {
-                        'overall_status': self._extract_health_status(response['text']),
-                        'key_issues': self._extract_key_issues(response['text']),
-                        'recommendations': self._extract_recommendations(response['text']),
-                        'full_analysis': response['text']
+                        'overall_status': self._extract_health_status(response_text),
+                        'key_issues': self._extract_key_issues(response_text),
+                        'recommendations': self._extract_recommendations(response_text),
+                        'full_analysis': response_text
                     }
                 }
             else:
@@ -553,6 +645,11 @@ Log #{i}:
             import threading
             import queue
             
+            # Sanitize the prompt to remove sensitive data before sending to external AI
+            sanitized_prompt, sanitizer_mapping = self.sanitizer.sanitize(prompt)
+            logger.info(f"Privacy: Sanitized {len(sanitizer_mapping)} sensitive items before sending to Gemini")
+            
+            
             # Configure generation for speed: limit tokens and use faster settings
             generation_config = GenerationConfig(
                 max_output_tokens=350,  # Limit response length for faster generation
@@ -567,7 +664,7 @@ Log #{i}:
             def api_call():
                 try:
                     response = self.model.generate_content(
-                        prompt,
+                        sanitized_prompt,
                         generation_config=generation_config
                     )
                     result_queue.put(('success', response))
@@ -603,7 +700,8 @@ Log #{i}:
             if response and response.text:
                 return {
                     'status': 'success',
-                    'text': response.text
+                    'text': response.text,
+                    '_sanitizer_mapping': sanitizer_mapping
                 }
             else:
                 return {
@@ -761,8 +859,22 @@ gemini_analyzer = None
 def initialize_gemini_analyzer(api_key: str = None):
     """Initialize the Gemini log analyzer"""
     global gemini_analyzer
+    
+    # If no API key provided, try to get it from environment
+    if not api_key:
+        api_key = os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')
+    
+    # Create analyzer with API key
     gemini_analyzer = GeminiLogAnalyzer(api_key=api_key)
-    logger.info("Gemini log analyzer initialized")
+    
+    # Log initialization status
+    if gemini_analyzer.api_key and gemini_analyzer.model:
+        logger.info(f"Gemini log analyzer initialized successfully with model: {gemini_analyzer.model_name}")
+    elif gemini_analyzer.api_key:
+        logger.warning(f"Gemini log analyzer initialized with API key but model not available (key length: {len(gemini_analyzer.api_key)})")
+    else:
+        logger.warning("Gemini log analyzer initialized without API key (AI analysis disabled)")
+    
     return gemini_analyzer
 
 

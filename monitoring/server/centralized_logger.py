@@ -246,6 +246,12 @@ class CentralizedLogger:
         # Collect from systemd journal (system-wide logs)
         self._collect_from_journal()
         
+        # Collect from Docker containers
+        self._collect_from_docker()
+        
+        # Collect from Kubernetes pods
+        self._collect_from_kubernetes()
+        
         # Collect from discovered log files
         for log_path, source_info in self.log_sources.items():
             try:
@@ -394,6 +400,217 @@ class CentralizedLogger:
             logger.error("journalctl not available - cannot collect system logs")
         except Exception as e:
             logger.error(f"Error collecting from journal: {e}", exc_info=True)
+    
+    def _collect_from_docker(self):
+        """
+        Collect logs from all running Docker containers automatically
+        """
+        try:
+            # Get list of running containers
+            result = subprocess.run(
+                ['docker', 'ps', '--format', '{{.Names}}'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            if result.returncode != 0:
+                return
+                
+            containers = result.stdout.strip().split('\n')
+            collected_count = 0
+            
+            for container in containers:
+                if not container.strip():
+                    continue
+                    
+                try:
+                    # Get recent logs (last 30 lines from last 15 seconds to catch new entries)
+                    log_result = subprocess.run(
+                        ['docker', 'logs', '--tail', '30', '--timestamps', '--since', '15s', container],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    
+                    if log_result.returncode == 0:
+                        # Process stdout and stderr (docker logs output goes to both)
+                        combined_output = log_result.stdout + log_result.stderr
+                        for line in combined_output.split('\n'):
+                            if line.strip():
+                                parsed = self._parse_docker_log_line(line, container)
+                                if parsed:
+                                    source_info = {
+                                        'service': f'docker-{container}',
+                                        'path': f'docker://{container}'
+                                    }
+                                    self._write_log_entry(parsed, source_info)
+                                    collected_count += 1
+                                    
+                except subprocess.TimeoutExpired:
+                    logger.debug(f"Timeout getting logs from container {container}")
+                    continue
+                except Exception as e:
+                    logger.debug(f"Error getting logs from container {container}: {e}")
+                    continue
+            
+            if collected_count > 0:
+                logger.info(f"Collected {collected_count} logs from Docker containers")
+                    
+        except FileNotFoundError:
+            pass  # Docker not installed - silently skip
+        except Exception as e:
+            logger.debug(f"Error collecting Docker logs: {e}")
+    
+    def _parse_docker_log_line(self, line: str, container: str) -> Dict[str, Any]:
+        """
+        Parse a Docker log line into a structured entry
+        """
+        try:
+            import re
+            # Docker format with timestamps: 2024-10-29T12:00:00.000000000Z log message
+            match = re.match(r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+Z?)\s+(.*)', line)
+            
+            if match:
+                timestamp_str, message = match.groups()
+                
+                # Convert timestamp
+                try:
+                    # Parse Docker timestamp (remove nanoseconds)
+                    ts_clean = timestamp_str.split('.')[0]
+                    timestamp = datetime.strptime(ts_clean, "%Y-%m-%dT%H:%M:%S")
+                    timestamp_iso = timestamp.isoformat()
+                except:
+                    timestamp_iso = datetime.now().isoformat()
+                
+                # Detect log level
+                level = self._detect_log_level(message)
+                
+                return {
+                    'timestamp': timestamp_iso,
+                    'service': f'docker-{container}',
+                    'source_file': f'docker://{container}',
+                    'message': message.strip(),
+                    'level': level
+                }
+            else:
+                # No timestamp, use current time
+                return {
+                    'timestamp': datetime.now().isoformat(),
+                    'service': f'docker-{container}',
+                    'source_file': f'docker://{container}',
+                    'message': line.strip(),
+                    'level': self._detect_log_level(line)
+                }
+        except Exception as e:
+            logger.debug(f"Error parsing Docker log line: {e}")
+            return None
+    
+    def _collect_from_kubernetes(self):
+        """
+        Collect logs from all running Kubernetes pods automatically
+        """
+        try:
+            # Get all pods in all namespaces
+            result = subprocess.run(
+                ['kubectl', 'get', 'pods', '--all-namespaces', '-o', 'json'],
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+            
+            if result.returncode != 0:
+                return
+                
+            pods_data = json.loads(result.stdout)
+            collected_count = 0
+            
+            for pod in pods_data.get('items', []):
+                try:
+                    name = pod['metadata']['name']
+                    namespace = pod['metadata']['namespace']
+                    phase = pod.get('status', {}).get('phase', '')
+                    
+                    # Only collect from Running pods
+                    if phase != 'Running':
+                        continue
+                    
+                    # Get recent logs (last 30 lines from last 15 seconds)
+                    log_result = subprocess.run(
+                        ['kubectl', 'logs', name, '-n', namespace, '--tail=30', '--since=15s'],
+                        capture_output=True,
+                        text=True,
+                        timeout=10
+                    )
+                    
+                    if log_result.returncode == 0:
+                        for line in log_result.stdout.split('\n'):
+                            if line.strip():
+                                parsed = self._parse_kubernetes_log_line(line, name, namespace)
+                                if parsed:
+                                    source_info = {
+                                        'service': f'k8s-{namespace}-{name}',
+                                        'path': f'kubernetes://{namespace}/{name}'
+                                    }
+                                    self._write_log_entry(parsed, source_info)
+                                    collected_count += 1
+                                    
+                except subprocess.TimeoutExpired:
+                    logger.debug(f"Timeout getting logs from pod {name}")
+                    continue
+                except KeyError:
+                    continue
+                except Exception as e:
+                    logger.debug(f"Error getting logs from pod: {e}")
+                    continue
+            
+            if collected_count > 0:
+                logger.info(f"Collected {collected_count} logs from Kubernetes pods")
+                    
+        except FileNotFoundError:
+            pass  # kubectl not installed - silently skip
+        except json.JSONDecodeError:
+            logger.debug("Failed to parse Kubernetes pods output")
+        except Exception as e:
+            logger.debug(f"Error collecting Kubernetes logs: {e}")
+    
+    def _parse_kubernetes_log_line(self, line: str, pod_name: str, namespace: str) -> Dict[str, Any]:
+        """
+        Parse a Kubernetes pod log line into a structured entry
+        """
+        try:
+            import re
+            # Try to parse timestamp if present (format varies by container)
+            # Common formats: ISO8601, or plain message
+            
+            # Try ISO format: 2024-10-29T12:00:00.000Z message
+            match = re.match(r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)\s+(.*)', line)
+            
+            if match:
+                timestamp_str, message = match.groups()
+                try:
+                    ts_clean = timestamp_str.split('.')[0].replace('Z', '')
+                    timestamp = datetime.strptime(ts_clean, "%Y-%m-%dT%H:%M:%S")
+                    timestamp_iso = timestamp.isoformat()
+                except:
+                    timestamp_iso = datetime.now().isoformat()
+            else:
+                timestamp_iso = datetime.now().isoformat()
+                message = line
+            
+            # Detect log level
+            level = self._detect_log_level(message)
+            
+            return {
+                'timestamp': timestamp_iso,
+                'service': f'k8s-{namespace}-{pod_name}',
+                'source_file': f'kubernetes://{namespace}/{pod_name}',
+                'message': message.strip(),
+                'level': level
+            }
+        except Exception as e:
+            logger.debug(f"Error parsing Kubernetes log line: {e}")
+            return None
     
     def _parse_journal_entry(self, entry: Dict) -> Dict[str, Any]:
         """
@@ -673,7 +890,8 @@ class CentralizedLogger:
                             else:
                                 extracted_service = service_part
                         extracted_message = parts[2].strip() if len(parts) > 2 else message_clean
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error parsing log date/message: {e}")
             pass  # Use defaults if parsing fails
         
         service_name = extracted_service if extracted_service else source_info['service']
@@ -809,13 +1027,15 @@ class CentralizedLogger:
         
         return results
     
-    def get_recent_logs(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_recent_logs(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """
-        Get most recent logs, prioritizing journal entries and filtering out user@ services
+        Get recent logs with optional filtering and pagination
         """
-        # Filter out user@ service logs completely
         filtered_logs = []
-        for log in self.log_index:
+        
+        # Helper to check if we should iterate log_index or a filtered view
+        # For now, iterate all and filter
+        for log in reversed(self.log_index):
             service = log.get('service', '').lower()
             message = log.get('message', '').lower()
             source_file = log.get('source_file', '').lower()
@@ -839,9 +1059,11 @@ class CentralizedLogger:
         journal_logs = [log for log in all_logs if log.get('source_file', '').startswith('systemd-journal')]
         other_logs = [log for log in all_logs if not log.get('source_file', '').startswith('systemd-journal')]
         
-        # Combine: journal logs first, then others, then limit
-        combined = journal_logs[:limit] + other_logs[:limit]
-        return combined[:limit]
+        # Combine: journal logs first, then others
+        combined = journal_logs + other_logs
+        
+        # Apply pagination
+        return combined[offset:offset + limit]
     
     def get_statistics(self) -> Dict[str, Any]:
         """

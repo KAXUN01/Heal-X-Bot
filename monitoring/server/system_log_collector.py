@@ -26,7 +26,6 @@ class SystemLogCollector:
             'kern': {'enabled': True, 'parser': self.parse_kern_log},
             'systemd': {'enabled': True, 'parser': self.parse_systemd_journal},
             'apache': {'enabled': True, 'parser': self.parse_apache_logs},
-            'nginx': {'enabled': True, 'parser': self.parse_nginx_logs},
         }
         
         self.collected_logs = []
@@ -510,7 +509,8 @@ class SystemLogCollector:
         try:
             timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
             return timestamp.replace(tzinfo=None) >= since
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Error checking timestamp recency: {e}")
             return True  # Include if we can't parse
     
     def get_recent_logs(self, limit: int = 100, level: Optional[str] = None, 
@@ -618,21 +618,12 @@ if __name__ == "__main__":
     
     collector = SystemLogCollector()
     
-    print("🔍 Collecting system logs...")
-    logs = collector.collect_all_logs()
-    
-    print(f"\n✅ Collected {len(logs)} log entries\n")
+
     
     # Show statistics
     stats = collector.get_log_statistics()
-    print("📊 Statistics:")
-    print(f"   Total logs: {stats['total_logs']}")
-    print(f"   By level: {stats['by_level']}")
-    print(f"   By source: {stats['by_source']}")
+
     
     # Show recent ERROR logs
-    print("\n🚨 Recent ERROR logs:")
-    error_logs = collector.get_recent_logs(limit=5, level='ERROR')
-    for log in error_logs:
-        print(f"   [{log['timestamp']}] {log['service']}: {log['message'][:80]}")
+
 

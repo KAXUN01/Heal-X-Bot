@@ -14,7 +14,12 @@ class SystemHealingActions:
     """System-level healing actions"""
     
     # Safe services that can be restarted
-    SAFE_SERVICES = ['docker', 'apache2', 'nginx', 'systemd-resolved', 'cron', 'ssh']
+    SAFE_SERVICES = [
+        'docker', 'apache2', 'systemd-resolved', 'cron', 'ssh', 'sshd',
+        'nginx', 'redis-server', 'redis', 'postgresql', 'mysql',
+        'networking', 'NetworkManager', 'systemd-networkd',
+        'containerd', 'fail2ban', 'rsyslog'
+    ]
     
     # Safe directories for permission fixes
     SAFE_DIRS = ['/usr/local/bin', '/var/log', '/opt', '/home']
@@ -381,5 +386,154 @@ class SystemHealingActions:
                 timestamp=datetime.now().isoformat(),
                 success=False,
                 error=f"Error checking zombies: {str(e)}"
+            )
+    
+    def start_failed_service(self, cmd_info: Dict[str, Any]) -> HealingActionResult:
+        """Start a failed or stopped systemd service"""
+        service = cmd_info.get('service', '')
+        
+        # Safety check: Only start safe services
+        if not any(safe_svc in service for safe_svc in self.SAFE_SERVICES):
+            return HealingActionResult(
+                action=cmd_info,
+                timestamp=datetime.now().isoformat(),
+                success=False,
+                error=f"Service {service} not in safe start list"
+            )
+        
+        try:
+            # First try to reset the failed state
+            subprocess.run(
+                ['sudo', 'systemctl', 'reset-failed', service],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            # Then start the service
+            result = subprocess.run(
+                ['sudo', 'systemctl', 'start', service],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode == 0:
+                return HealingActionResult(
+                    action=cmd_info,
+                    timestamp=datetime.now().isoformat(),
+                    success=True,
+                    output=f"Service {service} started successfully"
+                )
+            else:
+                return HealingActionResult(
+                    action=cmd_info,
+                    timestamp=datetime.now().isoformat(),
+                    success=False,
+                    error=f"Failed to start {service}: {result.stderr}"
+                )
+        except subprocess.TimeoutExpired:
+            return HealingActionResult(
+                action=cmd_info,
+                timestamp=datetime.now().isoformat(),
+                success=False,
+                error=f"Timeout starting {service}"
+            )
+        except Exception as e:
+            return HealingActionResult(
+                action=cmd_info,
+                timestamp=datetime.now().isoformat(),
+                success=False,
+                error=f"Error starting {service}: {str(e)}"
+            )
+    
+    def fix_network_interface(self, cmd_info: Dict[str, Any]) -> HealingActionResult:
+        """Bring a network interface up"""
+        interface = cmd_info.get('interface', '')
+        
+        if not interface:
+            return HealingActionResult(
+                action=cmd_info,
+                timestamp=datetime.now().isoformat(),
+                success=False,
+                error="No interface specified"
+            )
+        
+        # Safety check: Don't modify loopback
+        if interface.lower() in ['lo', 'loopback']:
+            return HealingActionResult(
+                action=cmd_info,
+                timestamp=datetime.now().isoformat(),
+                success=False,
+                error="Cannot modify loopback interface"
+            )
+        
+        try:
+            result = subprocess.run(
+                ['sudo', 'ip', 'link', 'set', interface, 'up'],
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+            
+            if result.returncode == 0:
+                return HealingActionResult(
+                    action=cmd_info,
+                    timestamp=datetime.now().isoformat(),
+                    success=True,
+                    output=f"Interface {interface} brought up successfully"
+                )
+            else:
+                return HealingActionResult(
+                    action=cmd_info,
+                    timestamp=datetime.now().isoformat(),
+                    success=False,
+                    error=f"Failed to bring up {interface}: {result.stderr}"
+                )
+        except Exception as e:
+            return HealingActionResult(
+                action=cmd_info,
+                timestamp=datetime.now().isoformat(),
+                success=False,
+                error=f"Error fixing interface {interface}: {str(e)}"
+            )
+    
+    def trim_ssd(self, cmd_info: Dict[str, Any]) -> HealingActionResult:
+        """Run fstrim on all mounted filesystems to free SSD space"""
+        try:
+            result = subprocess.run(
+                ['sudo', 'fstrim', '-av'],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+            
+            if result.returncode == 0:
+                return HealingActionResult(
+                    action=cmd_info,
+                    timestamp=datetime.now().isoformat(),
+                    success=True,
+                    output=f"SSD trim completed: {result.stdout.strip()}"
+                )
+            else:
+                return HealingActionResult(
+                    action=cmd_info,
+                    timestamp=datetime.now().isoformat(),
+                    success=False,
+                    error=f"Failed to trim SSD: {result.stderr}"
+                )
+        except subprocess.TimeoutExpired:
+            return HealingActionResult(
+                action=cmd_info,
+                timestamp=datetime.now().isoformat(),
+                success=False,
+                error="SSD trim operation timed out"
+            )
+        except Exception as e:
+            return HealingActionResult(
+                action=cmd_info,
+                timestamp=datetime.now().isoformat(),
+                success=False,
+                error=f"Error running fstrim: {str(e)}"
             )
 

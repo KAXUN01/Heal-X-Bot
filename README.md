@@ -8,7 +8,9 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
 - **Machine Learning Model**: Advanced DDoS detection using TensorFlow
 - **Real-time Analysis**: Continuous monitoring of network traffic
 - **Threat Level Assessment**: Automatic risk scoring (Low/Medium/High/Critical)
-- **Pattern Recognition**: Detects HTTP Flood, SYN Flood, Bot Activity, and more
+- **Pattern Recognition**: Detects HTTP Flood, SYN Flood, Bot Activity, port scans, and more
+- **Model API**: RESTful API for predictions on port 8080
+- **Metrics Export**: Prometheus-compatible metrics
 
 ### 🔮 **Predictive Maintenance & Proactive Intelligence** (NEW)
 - **Failure Prediction**: Predicts system failures 1-24 hours before they occur
@@ -23,20 +25,29 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
 - **Manual Management**: Admin interface for manual IP blocking/unblocking
 - **Statistics Tracking**: Comprehensive analytics on blocking effectiveness
 - **Persistent Storage**: SQLite database for blocked IP management
+- **Historical Data**: Complete block/unblock history with timestamps
+- **Threat Categorization**: Track attack types and threat levels
 
 ### 📊 **Real-time Dashboard**
 - **Live Monitoring**: Real-time system metrics and threat detection
+- **Unified Interface**: Single dashboard for all monitoring and management (Port 5001)
 - **Blocked IP Management**: View, manage, and unblock IPs
 - **Statistics Dashboard**: Detailed analytics and reporting
 - **Interactive Interface**: Modern, responsive web interface
+- **Auto-Healing Controls**: Enable/disable auto-healing, configure actions
+- **Cloud Simulation**: Test fault injection and healing capabilities
+- **Service Discovery**: Automatic Docker/systemd/Kubernetes service detection
+- **CLI Terminal**: Integrated terminal for command execution
 
-### 🤖 **AI Incident Response & Log Analysis**
-- **Smart Suggestions**: Google Gemini AI-powered recommendations
-- **Concise Analysis**: 70% shorter, 3-section format (What Happened, Quick Fix, Prevention)
-- **Modern UI**: Beautiful gradient cards with emoji icons
-- **Self-healing**: Automated response to common security issues
-- **Slack Integration**: Real-time notifications and alerts
-- **Cloud Storage**: Automatic log upload to AWS S3
+### 🤖 **AI-Powered Log Analysis** (UPDATED)
+- **Primary: Google Gemini AI**: Fast analysis with `gemini-2.5-flash-lite-preview-09-2025` model
+- **Fallback: Groq AI**: Using `llama-3.3-70b-versatile` when Gemini unavailable  
+- **Automatic Provider Selection**: Intelligently chooses between Gemini and Groq based on API keys
+- **Concise Analysis**: 3-section format (What Happened, Quick Fix, Prevention)
+- **Pattern Detection**: Analyzes multiple logs to find correlations
+- **Service Health Analysis**: Comprehensive health assessment for services
+- **Discord/Slack Integrations**: Real-time notifications
+- **Self-healing**: Automated response to detected issues
 
 ### 🔍 **System Monitoring & Critical Services**
 - **13 Critical Services**: Docker, systemd, dbus, cron, rsyslog, and more
@@ -44,6 +55,14 @@ A comprehensive cybersecurity system that automatically detects DDoS attacks, bl
 - **Anomaly Detection**: Smart multi-source detection with fallback
 - **Health Scoring**: Overall system health assessment
 - **Log Management**: Automatic rotation and cleanup (10MB limit)
+- **WebSocket Updates**: Live dashboard updates via WebSocket events
+
+### ☁️ **Cloud Simulation & Fault Injection** (NEW)
+- **Fault Injection**: Simulate service crashes, CPU spikes, memory leaks, network issues
+- **Fault Detection**: Automatic detection of injected and real faults
+- **Container Healing**: Automated container restart and recovery
+- **Root Cause Analysis**: AI-powered fault diagnosis
+- **Test Auto-Healing**: Verify healing capabilities in controlled environment
 
 ## 🚀 Quick Start
 
@@ -254,18 +273,30 @@ python run-healing-bot.py --setup-only
 ## 🏗️ System Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Dashboard     │    │  Network        │    │   ML Model      │
-│   (Port 5001)   │◄──►│  Analyzer       │◄──►│   (Port 8080)   │
-│                 │    │  (Port 8000)    │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  Incident Bot   │    │   IP Blocker    │    │   Prometheus    │
-│  (Port 8000)    │    │   (SQLite)      │    │   (Port 9090)   │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│           Healing Dashboard (Primary UI - Port 5001)         │
+│  • Real-time Monitoring  • Auto-Healing  • AI Analysis       │
+│  • IP Blocking  • Service Management  • Cloud Simulation     │
+└──────────────────────────────────────────────────────────────┘
+         │                  │                  │
+         ▼                  ▼                  ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   ML Model API  │  │  Monitoring     │  │  Network        │
+│   (Port 8080)   │  │  Server API     │  │  Analyzer       │
+│                 │  │  (Port 5000)    │  │  (Port 8000)    │
+│ • DDoS Detect   │  │ • Gemini/Groq   │  │ • IP Blocking   │
+│ • Predictive    │  │ • Log Analysis  │  │ • Attack Track  │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+         │                  │                  │
+         └──────────────────┴──────────────────┘
+                            │
+                ┌───────────┴───────────┐
+                ▼                       ▼
+       ┌─────────────────┐    ┌─────────────────┐
+       │  SQLite DBs     │    │  Prometheus     │
+       │  • Blocked IPs  │    │  (Port 9090)    │
+       │  • Statistics   │    │  Metrics        │
+       └─────────────────┘    └─────────────────┘
 ```
 
 ## 🔧 Configuration
@@ -275,19 +306,21 @@ python run-healing-bot.py --setup-only
 Create a `.env` file in the project root:
 
 ```env
-# AI Configuration
-GEMINI_API_KEY=your_gemini_api_key_here
-GOOGLE_API_KEY=your_google_api_key_here
+# AI Log Analysis (Choose ONE or BOTH - Gemini preferred)
+GEMINI_API_KEY=your_gemini_api_key_here    # Primary AI provider (Google Gemini)
+GROQ_API_KEY=your_groq_api_key_here        # Fallback AI provider (Groq)
 
-# Slack Integration
+# Discord Integration (Recommended)
+DISCORD_WEBHOOK=your_discord_webhook_url_here
+
+# Slack Integration (Legacy)
 SLACK_WEBHOOK=your_slack_webhook_url_here
 
-# AWS S3 (Optional)
+# AWS S3 (Optional - for log storage)
 AWS_ACCESS_KEY_ID=your_aws_access_key
 AWS_SECRET_ACCESS_KEY=your_aws_secret_key
 AWS_REGION=us-east-1
 S3_BUCKET_NAME=your_bucket_name
-
 ```
 
 ### Port Configuration

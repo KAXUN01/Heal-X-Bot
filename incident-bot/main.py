@@ -118,8 +118,8 @@ def get_ai_suggestion(alert_info):
         indicating how confident you are in your suggestion.
         """
         
-        # Call Gemini API - using Gemini 2.0 Flash-Lite for explainable AI
-        model = genai.GenerativeModel('gemini-2.0-flash-lite')
+        # Call Gemini API - using Gemini 2.5 Flash for explainable AI
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(prompt)
         
         suggestion = response.text

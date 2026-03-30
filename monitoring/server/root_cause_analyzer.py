@@ -14,16 +14,16 @@ logger = logging.getLogger(__name__)
 class RootCauseAnalyzer:
     """Analyze root causes by correlating multiple data sources"""
     
-    def __init__(self, gemini_analyzer=None):
+    def __init__(self, groq_analyzer=None):
         """
         Initialize root cause analyzer
         
         Args:
-            gemini_analyzer: Optional Gemini AI analyzer for advanced analysis
+            groq_analyzer: Optional Groq AI analyzer for advanced analysis
         """
         self.container_monitor = ContainerMonitor()
         self.resource_monitor = ResourceMonitor()
-        self.gemini_analyzer = gemini_analyzer
+        self.groq_analyzer = groq_analyzer
         
         logger.info("Root Cause Analyzer initialized")
     
@@ -69,7 +69,7 @@ class RootCauseAnalyzer:
             analysis['confidence'] = 0.1
         
         # Use Gemini AI for advanced analysis if available
-        if self.gemini_analyzer and fault.get('details'):
+        if self.groq_analyzer and fault.get('details'):
             ai_analysis = self._get_ai_analysis(fault, analysis)
             if ai_analysis:
                 analysis['ai_insights'] = ai_analysis
@@ -315,7 +315,7 @@ class RootCauseAnalyzer:
     def _get_ai_analysis(self, fault: Dict[str, Any], 
                          current_analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Get AI-powered analysis using Gemini"""
-        if not self.gemini_analyzer:
+        if not self.groq_analyzer:
             return None
         
         try:
@@ -328,7 +328,7 @@ class RootCauseAnalyzer:
             }
             
             # Analyze with Gemini
-            ai_result = self.gemini_analyzer.analyze_error_log(log_entry)
+            ai_result = self.groq_analyzer.analyze_error_log(log_entry)
             
             if ai_result.get('status') == 'success':
                 analysis = ai_result.get('analysis', {})
@@ -367,12 +367,12 @@ class RootCauseAnalyzer:
 # Singleton instance
 _root_cause_analyzer_instance = None
 
-def initialize_root_cause_analyzer(gemini_analyzer=None) -> RootCauseAnalyzer:
+def initialize_root_cause_analyzer(groq_analyzer=None) -> RootCauseAnalyzer:
     """Initialize the root cause analyzer"""
     global _root_cause_analyzer_instance
     
     if _root_cause_analyzer_instance is None:
-        _root_cause_analyzer_instance = RootCauseAnalyzer(gemini_analyzer=gemini_analyzer)
+        _root_cause_analyzer_instance = RootCauseAnalyzer(groq_analyzer=groq_analyzer)
         logger.info("Root cause analyzer initialized")
     
     return _root_cause_analyzer_instance

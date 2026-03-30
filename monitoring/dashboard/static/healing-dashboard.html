@@ -5173,6 +5173,7 @@
 
                 // Check status on load
                 document.addEventListener('DOMContentLoaded', checkDDoSDemoStatus);
+                document.addEventListener('DOMContentLoaded', startDemoMetricsPolling);
 
                 // Fetch and update DDoS detection data
                 async function refreshDDoSData() {
@@ -5360,11 +5361,10 @@
 
                     // Start polling immediately and then every 5 seconds when demo mode is on
                     const pollDemoMetrics = async () => {
-                        // Check if demo mode is still enabled
-                        if (!demoMode) {
-                            stopDemoMetricsPolling();
-                            return;
-                        }
+                        // Demo script may run even when UI demo toggle is off.
+                        // Keep polling to fetch incoming demo metrics, then apply them automatically.
+                        // Stop only when predictive tab is no longer active.
+                        // (No strict demoMode gate here.)
 
                         // Check if predictive tab is active
                         const predictiveTab = document.getElementById('predictive');
@@ -5506,8 +5506,11 @@
                         }
 
                         // Use demo metrics if available AND demo mode is manually enabled
-                        if (demoMode && lastDemoMetrics && Object.keys(lastDemoMetrics).length > 0) {
-                            // Use custom metrics for demo
+                        if (lastDemoMetrics && Object.keys(lastDemoMetrics).length > 0) {
+                            // Use custom metrics from the running demo script (even if demoMode toggle is off).
+                            if (!demoMode) {
+                                console.log('ℹ️ Demo script metrics availed automatically without demo toggle');
+                            }
                             console.log('🎭 Using demo metrics for prediction:', lastDemoMetrics);
                             console.log('📡 POST /api/predict-failure-risk-custom with demo metrics...');
                             riskResponse = await fetch('/api/predict-failure-risk-custom', {

@@ -5269,6 +5269,7 @@
 
                 // Demo mode state
                 let demoMode = false;
+                let predictiveDemoScriptRunning = false;
                 let lastDemoMetrics = null;
                 let currentDemoScenario = null;
 
@@ -5370,6 +5371,40 @@
                         const predictiveTab = document.getElementById('predictive');
                         if (!predictiveTab || !predictiveTab.classList.contains('active')) {
                             return; // Don't poll if tab is not active
+                        }
+
+                        // Check predictive demo script status
+                        try {
+                            const statusResp = await fetch('/api/demo/predictive/status', {
+                                cache: 'no-cache',
+                                headers: { 'Cache-Control': 'no-cache' }
+                            });
+                            if (statusResp.ok) {
+                                const statusData = await statusResp.json();
+                                predictiveDemoScriptRunning = statusData.running || false;
+                            } else {
+                                predictiveDemoScriptRunning = false;
+                            }
+                        } catch (e) {
+                            predictiveDemoScriptRunning = false;
+                        }
+
+                        if (!predictiveDemoScriptRunning) {
+                            if (lastDemoMetrics) {
+                                lastDemoMetrics = null;
+                                console.log('🔴 Predictive demo script stopped -> clearing demo values and using live metrics');
+                                showNotification('🔴 Demo script stopped, dashboard switched to real metrics', 'info');
+                            }
+
+                            if (demoMode) {
+                                demoMode = false;
+                                const toggle = document.getElementById('demoModeToggle');
+                                if (toggle) toggle.checked = false;
+                            }
+
+                            // Continue to fetch live metrics via refreshPredictiveMaintenance()
+                            refreshPredictiveMaintenance();
+                            return;
                         }
 
                         // Stop polling after max attempts if no data received
@@ -5505,8 +5540,8 @@
                             }
                         }
 
-                        // Use demo metrics if available AND demo mode is manually enabled
-                        if (lastDemoMetrics && Object.keys(lastDemoMetrics).length > 0) {
+                        // Use demo script metrics if available and script is still running
+                        if (predictiveDemoScriptRunning && lastDemoMetrics && Object.keys(lastDemoMetrics).length > 0) {
                             // Use custom metrics from the running demo script (even if demoMode toggle is off).
                             if (!demoMode) {
                                 console.log('ℹ️ Demo script metrics availed automatically without demo toggle');
